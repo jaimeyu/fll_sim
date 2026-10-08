@@ -1,0 +1,5 @@
+[tools]
+node = "22"
+python = "3.12"
+uv = "latest"
+"npm:@fission-ai/openspec" = "latest"
