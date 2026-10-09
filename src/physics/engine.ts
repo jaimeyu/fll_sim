@@ -25,6 +25,7 @@ export class SimulationPhysicsEngine {
     z: 0.32,
     yawDegrees: 90, // Facing East toward mission field
   };
+  private isRobotStationary = false;
 
   constructor(options: PhysicsEngineOptions = {}) {
     this.fixedDt = options.fixedTimestepSeconds || 1 / 60;
@@ -74,6 +75,28 @@ export class SimulationPhysicsEngine {
     if (!this.isInitialized) return;
     const targetPose = pose || this.defaultPose;
     this.robot.reset(targetPose);
+    if (this.isRobotStationary) {
+      this.robot.chassisBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+    }
+  }
+
+  /**
+   * Sets whether the robot chassis is locked in place for attachment testing (dyno jig mode)
+   */
+  public setRobotStationary(stationary: boolean): void {
+    this.isRobotStationary = stationary;
+    if (!this.robot || !this.isInitialized) return;
+    if (stationary) {
+      this.robot.chassisBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+      this.robot.chassisBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      this.robot.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    } else {
+      this.robot.chassisBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    }
+  }
+
+  public getIsRobotStationary(): boolean {
+    return this.isRobotStationary;
   }
 
   /**

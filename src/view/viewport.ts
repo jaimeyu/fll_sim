@@ -26,6 +26,10 @@ export class Viewport3D {
   private dropReticle!: THREE.Group;
   private robotVisualRoot: THREE.Object3D | null = null;
 
+  // Sandbox Mode Mouse Tool
+  private interactionTool: any = null;
+  private isDraggingTool = false;
+
   constructor(container: HTMLElement) {
     this.container = container;
 
@@ -296,6 +300,18 @@ export class Viewport3D {
     this.robotHitProxy.position.set(x, y + 0.10, z);
   }
 
+  public setInteractionTool(tool: any): void {
+    this.interactionTool = tool;
+  }
+
+  public focusOnElement(pos: { x: number; y: number; z: number }): void {
+    this.currentView = 'ISO';
+    this.camera.position.set(pos.x, pos.y + 0.32, pos.z + 0.38);
+    this.camera.lookAt(pos.x, pos.y + 0.04, pos.z);
+    this.controls.target.set(pos.x, pos.y + 0.04, pos.z);
+    this.controls.update();
+  }
+
   private setupDragAndDrop(): void {
     const dom = this.renderer.domElement;
 
@@ -305,6 +321,15 @@ export class Viewport3D {
         x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
         y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
       };
+    };
+
+    const isPusherHit = (coords: { x: number; y: number }): boolean => {
+      if (!this.interactionTool || !this.interactionTool.isActive) return false;
+      const mesh = this.interactionTool.getPusherMesh();
+      if (!mesh) return false;
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      return this.raycaster.intersectObject(mesh, true).length > 0;
     };
 
     const isRobotHit = (coords: { x: number; y: number }): boolean => {
@@ -327,6 +352,16 @@ export class Viewport3D {
       // Only handle left mouse click / primary pointer
       if (e.button !== 0) return;
       const coords = getPointerCoords(e);
+
+      // Check if clicking sandbox mouse pusher tool
+      if (isPusherHit(coords)) {
+        this.isDraggingTool = true;
+        this.controls.enabled = false;
+        this.container.style.cursor = 'grabbing';
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
 
       // Check if clicking robot
       if (isRobotHit(coords)) {
@@ -363,7 +398,12 @@ export class Viewport3D {
     window.addEventListener('pointermove', (e: PointerEvent) => {
       const coords = getPointerCoords(e);
 
-      if (this.isDragging) {
+      if (this.isDraggingTool) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          this.interactionTool?.movePusherTo(groundHit.x, groundHit.z);
+        }
+      } else if (this.isDragging) {
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
           const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
@@ -372,8 +412,8 @@ export class Viewport3D {
           this.onRobotDragMove?.(clampedX, clampedZ);
         }
       } else {
-        // Hover indicator over robot
-        if (isRobotHit(coords)) {
+        // Hover indicator over pusher tool or robot
+        if (isPusherHit(coords) || isRobotHit(coords)) {
           this.container.style.cursor = 'grab';
         } else {
           this.container.style.cursor = 'default';
@@ -382,6 +422,11 @@ export class Viewport3D {
     });
 
     const finishDrag = () => {
+      if (this.isDraggingTool) {
+        this.isDraggingTool = false;
+        this.controls.enabled = true;
+        this.container.style.cursor = 'default';
+      }
       if (this.isDragging) {
         this.isDragging = false;
         this.controls.enabled = true;

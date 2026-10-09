@@ -6,6 +6,8 @@ import { VirtualSpikeApi } from './runtime/spike-api';
 import { PythonScriptRunner } from './runtime/python-runner';
 import { SimulatorHud } from './ui/hud';
 import { LDrawImporter } from './cad/ldraw-importer';
+import { MissionManager } from './missions/mission-manager';
+import { SandboxInteractionTool } from './sandbox/interaction-tool';
 
 async function bootstrapSimulator() {
   const viewportContainer = document.getElementById('viewport-container');
@@ -30,7 +32,16 @@ async function bootstrapSimulator() {
   viewport.scene.add(robotRenderer.rootGroup);
   viewport.setRobotVisualRoot(robotRenderer.rootGroup);
 
-  // 5. Initialize Virtual SPIKE Prime API & Python Runner
+  // 5. Initialize Mission Elements Manager & Interactive Sandbox Tool
+  const missionManager = new MissionManager();
+  missionManager.init(engine.world, viewport.scene);
+
+  const interactionTool = new SandboxInteractionTool();
+  interactionTool.init(engine.world, viewport.scene);
+  interactionTool.setActive(false); // Inactive until sandbox mode
+  viewport.setInteractionTool(interactionTool);
+
+  // 6. Initialize Virtual SPIKE Prime API & Python Runner
   let api = new VirtualSpikeApi(engine, sensors);
   let runner = new PythonScriptRunner(api);
 
@@ -111,6 +122,31 @@ async function bootstrapSimulator() {
         hud.logConsole(`CAD Import Failed: ${err.message || err}`);
       }
     },
+    onModeChange: (mode) => {
+      missionManager.setMode(mode);
+      if (mode === 'ARENA') {
+        interactionTool.setActive(false);
+        viewport.setCameraPreset('ISO');
+        hud.logConsole('Switched to Competition Arena (4x8 ft mat).');
+      } else {
+        interactionTool.setActive(true);
+        viewport.focusOnElement({ x: 0, y: 0.05, z: 0 });
+        hud.logConsole(`Switched to Sandbox Mode. Mouse pusher tool active.`);
+      }
+    },
+    onTogglePusherTool: (active) => {
+      interactionTool.setActive(active);
+    },
+    onSpawnTestBlock: () => {
+      interactionTool.spawnTestBlock();
+    },
+    onToggleDynoMode: (active) => {
+      engine.setRobotStationary(active);
+    },
+    onResetMission: () => {
+      missionManager.resetCurrent();
+      interactionTool.resetAll();
+    },
   });
 
   // Initialize HUD spawn inputs with default pose
@@ -163,6 +199,16 @@ async function bootstrapSimulator() {
 
     // Sync visual meshes with physics bodies
     robotRenderer.syncWithPhysics(engine.robot);
+
+    // Sync mission elements & sandbox interaction tool
+    missionManager.update(deltaSeconds);
+    interactionTool.syncVisuals();
+
+    // Update active mission element score chip in HUD
+    const activeElem = missionManager.getActiveElement();
+    if (activeElem) {
+      hud.updateMissionScore(activeElem.getScore(), activeElem.isSolved());
+    }
 
     // Camera follow update and live hit proxy synchronization
     const robotPos = engine.robot.getPosition();

@@ -1,5 +1,6 @@
 import { TelemetryState, ExecutionState, SpawnPose } from '../runtime/types';
 import { CameraViewPreset } from '../view/viewport';
+import { SimulatorAppMode } from '../missions/mission-manager';
 
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
@@ -10,6 +11,11 @@ export interface HudCallbacks {
   onMapChange?: (mapType: 'grid' | 'procedural') => void;
   onSpawnPoseChange?: (pose: SpawnPose) => void;
   onCaptureCurrentPose?: () => void;
+  onModeChange?: (mode: SimulatorAppMode) => void;
+  onTogglePusherTool?: (active: boolean) => void;
+  onSpawnTestBlock?: () => void;
+  onToggleDynoMode?: (active: boolean) => void;
+  onResetMission?: () => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -137,6 +143,18 @@ export class SimulatorHud {
   private spawnInputZ!: HTMLInputElement;
   private spawnInputYaw!: HTMLInputElement;
 
+  // Sandbox Mode UI elements
+  private modeSelect!: HTMLSelectElement;
+  private sandboxToolbar!: HTMLElement;
+  private btnToggleTool!: HTMLButtonElement;
+  private btnSpawnBlock!: HTMLButtonElement;
+  private btnToggleDyno!: HTMLButtonElement;
+  private btnResetMission!: HTMLButtonElement;
+  private missionScoreText!: HTMLElement;
+
+  private isToolActive = true;
+  private isDynoActive = false;
+
   private matchSeconds = 150; // 2:30 match timer
   private matchTimerRunning = false;
 
@@ -174,6 +192,14 @@ export class SimulatorHud {
         </div>
 
         <div class="hud-top-right">
+          <div class="mode-select-container">
+            <label for="mode-select" class="hud-label-inline">🎯 Mode:</label>
+            <select id="mode-select" class="hud-select hud-select-sm">
+              <option value="ARENA" selected>🏟️ Competition Arena</option>
+              <option value="SANDBOX_RISER">🔬 Sandbox: 4-Axle Riser</option>
+              <option value="SANDBOX_DIAL">🔬 Sandbox: Rotary Dial</option>
+            </select>
+          </div>
           <div class="map-select-container">
             <label for="map-select" class="hud-label-inline">🗺️ Mat:</label>
             <select id="map-select" class="hud-select hud-select-sm">
@@ -187,6 +213,19 @@ export class SimulatorHud {
           </label>
         </div>
       </header>
+
+      <!-- Floating Sandbox Action Toolbar -->
+      <div class="hud-sandbox-toolbar" id="sandbox-toolbar" style="display: none;">
+        <span class="sandbox-badge">🔬 SANDBOX WORKBENCH</span>
+        <button class="btn btn-sm btn-outline active" id="btn-toggle-tool">🖐️ Pusher Tool: ON</button>
+        <button class="btn btn-sm btn-outline" id="btn-spawn-block">🧱 Drop Test Block</button>
+        <button class="btn btn-sm btn-outline" id="btn-toggle-dyno">🔒 Robot Dyno: OFF</button>
+        <button class="btn btn-sm btn-outline" id="btn-reset-mission">↺ Reset Mission</button>
+        <div class="mission-status-chip">
+          <span class="chip-label">STATUS:</span>
+          <span class="chip-val" id="mission-score-text">UNSOLVED (0%)</span>
+        </div>
+      </div>
 
       <!-- Main Sidebar Panel (Left: Code & Control) -->
       <aside class="hud-sidebar">
@@ -312,6 +351,14 @@ export class SimulatorHud {
     this.spawnInputZ = this.rootElement.querySelector('#spawn-z')!;
     this.spawnInputYaw = this.rootElement.querySelector('#spawn-yaw')!;
 
+    this.modeSelect = this.rootElement.querySelector('#mode-select')!;
+    this.sandboxToolbar = this.rootElement.querySelector('#sandbox-toolbar')!;
+    this.btnToggleTool = this.rootElement.querySelector('#btn-toggle-tool')!;
+    this.btnSpawnBlock = this.rootElement.querySelector('#btn-spawn-block')!;
+    this.btnToggleDyno = this.rootElement.querySelector('#btn-toggle-dyno')!;
+    this.btnResetMission = this.rootElement.querySelector('#btn-reset-mission')!;
+    this.missionScoreText = this.rootElement.querySelector('#mission-score-text')!;
+
     // Set initial sample code
     this.codeTextarea.value = SAMPLE_MISSIONS.drive_straight.code;
   }
@@ -412,6 +459,42 @@ export class SimulatorHud {
         this.callbacks.onSpawnPoseChange?.(this.getSpawnPose());
       });
     });
+
+    // Mode dropdown change
+    this.modeSelect.addEventListener('change', () => {
+      const mode = this.modeSelect.value as SimulatorAppMode;
+      this.setMode(mode);
+      this.callbacks.onModeChange?.(mode);
+      this.logConsole(`Switched simulator mode to: ${this.modeSelect.options[this.modeSelect.selectedIndex].text}`);
+    });
+
+    // Toggle Pusher Tool
+    this.btnToggleTool.addEventListener('click', () => {
+      this.isToolActive = !this.isToolActive;
+      this.setPusherActive(this.isToolActive);
+      this.callbacks.onTogglePusherTool?.(this.isToolActive);
+      this.logConsole(`Mouse Pusher Tool: ${this.isToolActive ? 'ENABLED' : 'DISABLED'}`);
+    });
+
+    // Spawn Test Block
+    this.btnSpawnBlock.addEventListener('click', () => {
+      this.callbacks.onSpawnTestBlock?.();
+      this.logConsole('Spawned dynamic LEGO test block on workbench.');
+    });
+
+    // Toggle Robot Dyno Mode
+    this.btnToggleDyno.addEventListener('click', () => {
+      this.isDynoActive = !this.isDynoActive;
+      this.setDynoActive(this.isDynoActive);
+      this.callbacks.onToggleDynoMode?.(this.isDynoActive);
+      this.logConsole(`Robot Dyno Jig Mode: ${this.isDynoActive ? 'LOCKED STATIONARY (Chassis Pinned)' : 'RELEASED (Normal Driving)'}`);
+    });
+
+    // Reset Mission Model
+    this.btnResetMission.addEventListener('click', () => {
+      this.callbacks.onResetMission?.();
+      this.logConsole('Mission model reset to starting state.');
+    });
   }
 
   public logConsole(msg: string): void {
@@ -483,5 +566,46 @@ export class SimulatorHud {
     if (pose.x !== undefined) this.spawnInputX.value = pose.x.toFixed(2);
     if (pose.z !== undefined) this.spawnInputZ.value = pose.z.toFixed(2);
     if (pose.yawDegrees !== undefined) this.spawnInputYaw.value = pose.yawDegrees.toFixed(1);
+  }
+
+  public setMode(mode: SimulatorAppMode): void {
+    this.modeSelect.value = mode;
+    if (mode === 'ARENA') {
+      this.sandboxToolbar.style.display = 'none';
+    } else {
+      this.sandboxToolbar.style.display = 'flex';
+    }
+  }
+
+  public setPusherActive(active: boolean): void {
+    this.isToolActive = active;
+    if (active) {
+      this.btnToggleTool.classList.add('active');
+      this.btnToggleTool.textContent = '🖐️ Pusher Tool: ON';
+    } else {
+      this.btnToggleTool.classList.remove('active');
+      this.btnToggleTool.textContent = '🖐️ Pusher Tool: OFF';
+    }
+  }
+
+  public setDynoActive(active: boolean): void {
+    this.isDynoActive = active;
+    if (active) {
+      this.btnToggleDyno.classList.add('active');
+      this.btnToggleDyno.textContent = '🔒 Robot Dyno: ON';
+    } else {
+      this.btnToggleDyno.classList.remove('active');
+      this.btnToggleDyno.textContent = '🔒 Robot Dyno: OFF';
+    }
+  }
+
+  public updateMissionScore(score: number, solved: boolean): void {
+    if (solved) {
+      this.missionScoreText.textContent = `SOLVED (100%)`;
+      this.missionScoreText.className = 'chip-val solved';
+    } else {
+      this.missionScoreText.textContent = `PROGRESS: ${score}%`;
+      this.missionScoreText.className = 'chip-val';
+    }
   }
 }
