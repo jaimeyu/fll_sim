@@ -220,9 +220,11 @@ export class SimulatorHud {
     { id: 'tab-1', title: 'Mission 1', code: SAMPLE_MISSIONS.drive_straight.code },
   ];
   private activeTabIndex: number = 0;
+  private readonly SCRIPT_STORAGE_KEY = 'fll_sim_user_scripts_v1';
 
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
+    this.loadScriptTabsFromStorage();
     this.rootElement = document.createElement('div');
     this.rootElement.className = 'fll-hud-root';
     container.appendChild(this.rootElement);
@@ -614,6 +616,7 @@ export class SimulatorHud {
       if (this.scriptTabs[this.activeTabIndex]) {
         this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
       }
+      this.saveScriptTabsToStorage();
     });
 
     // 2. Camera Focus Dropdown
@@ -638,6 +641,7 @@ export class SimulatorHud {
           this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
         }
         this.renderScriptTabs();
+        this.saveScriptTabsToStorage();
         this.logConsole(`Loaded ${selected.title}`);
       }
     });
@@ -1431,6 +1435,7 @@ export class SimulatorHud {
     this.activeTabIndex = idx;
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    this.saveScriptTabsToStorage();
   }
 
   public addNewScriptTab(title?: string, initialCode?: string): void {
@@ -1466,6 +1471,7 @@ print("Finished!")
     this.activeTabIndex = this.scriptTabs.length - 1;
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    this.saveScriptTabsToStorage();
     this.logConsole(`➕ Created new script page: "${this.scriptTabs[this.activeTabIndex].title}"`);
   }
 
@@ -1477,5 +1483,32 @@ print("Finished!")
     }
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    this.saveScriptTabsToStorage();
+  }
+
+  private loadScriptTabsFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(this.SCRIPT_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.scriptTabs = parsed;
+          this.activeTabIndex = 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not restore script tabs from localStorage:', e);
+    }
+  }
+
+  private saveScriptTabsToStorage(): void {
+    try {
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+      }
+      localStorage.setItem(this.SCRIPT_STORAGE_KEY, JSON.stringify(this.scriptTabs));
+    } catch (e) {
+      console.warn('Could not save script tabs to localStorage:', e);
+    }
   }
 }
