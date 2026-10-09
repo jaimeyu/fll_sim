@@ -6,9 +6,9 @@ export class CompetitionMatTexture implements MatColorSampler {
   public ctx: CanvasRenderingContext2D;
   public texture: THREE.CanvasTexture;
 
-  // Real world dimensions (meters): 2.362m x 1.143m (93" x 45")
-  public worldLength = 2.362;
-  public worldWidth = 1.143;
+  // Real world dimensions (meters): 2.40m x 1.40m (matches official FLL grid mat aspect ratio 1.714)
+  public worldLength = 2.40;
+  public worldWidth = 1.40;
 
   private canvasWidth = 2048;
   private canvasHeight = 1024;

@@ -179,7 +179,14 @@ export class RobotPhysicsBody {
           if (!wb) continue;
 
           if (isIdle) {
-            wb.setAngularDamping(2.0);
+            wb.setAngularDamping(4.0);
+            const wAng = wb.angvel();
+            const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
+            // Active electromagnetic braking torque to stop and hold robot in place
+            if (Math.abs(currentSpin) > 0.05) {
+              const brakeTorque = Math.max(-0.06, Math.min(0.06, (0 - currentSpin) * 0.01));
+              wb.addTorque({ x: brakeTorque * ux, y: brakeTorque * uy, z: brakeTorque * uz }, true);
+            }
           } else {
             this.chassisBody.wakeUp();
             wb.wakeUp();
@@ -196,6 +203,15 @@ export class RobotPhysicsBody {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Immediately stops all virtual drive and auxiliary motors with electromagnetic brake
+   */
+  public stopAllMotors(): void {
+    for (const motor of this.motors.values()) {
+      motor.stop('BRAKE');
     }
   }
 

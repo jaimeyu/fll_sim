@@ -28,6 +28,7 @@ async function bootstrapSimulator() {
   const robotRenderer = new Robot3DRenderer();
   robotRenderer.setSensorManager(sensors);
   viewport.scene.add(robotRenderer.rootGroup);
+  viewport.setRobotVisualRoot(robotRenderer.rootGroup);
 
   // 5. Initialize Virtual SPIKE Prime API & Python Runner
   let api = new VirtualSpikeApi(engine, sensors);
@@ -61,8 +62,25 @@ async function bootstrapSimulator() {
     },
     onResetRobot: () => {
       runner.abort();
-      engine.resetRobot();
+      const spawnPose = hud.getSpawnPose();
+      engine.resetRobot(spawnPose);
       sensors.resetYaw();
+    },
+    onSpawnPoseChange: (pose) => {
+      engine.setDefaultPose(pose);
+    },
+    onCaptureCurrentPose: () => {
+      const pos = engine.robot.getPosition();
+      const yaw = engine.robot.getYawDegrees();
+      const pose = {
+        x: Number(pos.x.toFixed(2)),
+        y: 0.035,
+        z: Number(pos.z.toFixed(2)),
+        yawDegrees: Number(yaw.toFixed(1)),
+      };
+      hud.setSpawnPose(pose);
+      engine.setDefaultPose(pose);
+      hud.logConsole(`📌 Captured current pose: X=${pose.x}m, Z=${pose.z}m, Yaw=${pose.yawDegrees}°`);
     },
     onCameraChange: (preset) => {
       viewport.setCameraPreset(preset);
@@ -95,6 +113,31 @@ async function bootstrapSimulator() {
     },
   });
 
+  // Initialize HUD spawn inputs with default pose
+  hud.setSpawnPose(engine.getDefaultPose());
+
+  // Hook 3D Viewport Interactive Drag-and-Drop Placement
+  viewport.onRobotDrop = (x: number, z: number) => {
+    runner.abort();
+    const currentPose = hud.getSpawnPose();
+    const newPose = {
+      x: Number(x.toFixed(2)),
+      y: 0.035,
+      z: Number(z.toFixed(2)),
+      yawDegrees: currentPose.yawDegrees,
+    };
+    engine.resetRobot(newPose);
+    engine.setDefaultPose(newPose);
+    hud.setSpawnPose(newPose);
+    sensors.resetYaw();
+    hud.logConsole(`📍 Robot placed at (X: ${newPose.x}m, Z: ${newPose.z}m). Spawn pose updated.`);
+  };
+
+  viewport.onRobotDragMove = (x: number, z: number) => {
+    // Reposition visual mesh directly under cursor during interactive dragging
+    robotRenderer.rootGroup.position.set(x, 0.035, z);
+  };
+
   // 7. Main Animation & Physics Loop
   let lastTime = performance.now();
   let frameCount = 0;
@@ -121,10 +164,11 @@ async function bootstrapSimulator() {
     // Sync visual meshes with physics bodies
     robotRenderer.syncWithPhysics(engine.robot);
 
-    // Camera follow update
+    // Camera follow update and live hit proxy synchronization
     const robotPos = engine.robot.getPosition();
     const robotYaw = engine.robot.getYawDegrees();
     viewport.updateCameraFollow(robotPos.x, robotPos.y, robotPos.z, robotYaw);
+    viewport.updateRobotHitProxy(robotPos.x, robotPos.y, robotPos.z);
 
     // Render viewport
     viewport.render();

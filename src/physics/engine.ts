@@ -54,6 +54,20 @@ export class SimulationPhysicsEngine {
   }
 
   /**
+   * Sets default spawn pose used when resetting the robot
+   */
+  public setDefaultPose(pose: SpawnPose): void {
+    this.defaultPose = { ...pose };
+  }
+
+  /**
+   * Gets default spawn pose
+   */
+  public getDefaultPose(): SpawnPose {
+    return { ...this.defaultPose };
+  }
+
+  /**
    * Resets robot to starting launch pose
    */
   public resetRobot(pose?: SpawnPose): void {
@@ -87,7 +101,7 @@ export class SimulationPhysicsEngine {
       const angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
 
       let resetReason: string | null = null;
-      if (pos.y < -0.1 || Math.abs(pos.x) > 1.35 || Math.abs(pos.z) > 0.75) {
+      if (pos.y < -0.1 || Math.abs(pos.x) > 1.45 || Math.abs(pos.z) > 0.85) {
         resetReason = `Robot fell outside competition table boundary (x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}, z=${pos.z.toFixed(2)})`;
       } else if (linearSpeed > 5.0) {
         resetReason = `Safety limit: Runaway linear velocity exceeded maximum allowable speed (${linearSpeed.toFixed(1)} m/s > 5.0 m/s)`;

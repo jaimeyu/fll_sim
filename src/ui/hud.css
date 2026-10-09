@@ -279,6 +279,11 @@ body, html {
   font-size: 12px;
 }
 
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .btn-primary { background: #16a34a; color: white; flex: 1; }
 .btn-primary:hover:not(:disabled) { background: #15803d; }
 
@@ -394,4 +399,71 @@ body, html {
 
 .telem-item .highlight {
   color: var(--accent-yellow);
+}
+
+/* Starting Pose Section in Telemetry Panel */
+.telem-spawn-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.telem-subheading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.5px;
+}
+
+.spawn-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.spawn-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spawn-input-group label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.spawn-input-group input {
+  background: #090d16;
+  border: 1px solid var(--border-color);
+  color: var(--accent-yellow);
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 4px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.spawn-input-group input:focus {
+  border-color: var(--accent-blue);
+}
+
+.spawn-presets-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.spawn-presets-row button {
+  flex: 1;
+  white-space: nowrap;
 }

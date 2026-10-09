@@ -12,8 +12,19 @@ export class Viewport3D {
   public matTexture: CompetitionMatTexture;
   public currentView: CameraViewPreset = 'ISO';
 
+  public onRobotDrop?: (x: number, z: number) => void;
+  public onRobotDragMove?: (x: number, z: number) => void;
+
   private tableMesh!: THREE.Group;
   private container: HTMLElement;
+
+  private raycaster = new THREE.Raycaster();
+  private mouse = new THREE.Vector2();
+  private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private isDragging = false;
+  private robotHitProxy!: THREE.Mesh;
+  private dropReticle!: THREE.Group;
+  private robotVisualRoot: THREE.Object3D | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -52,7 +63,12 @@ export class Viewport3D {
     this.matTexture = new CompetitionMatTexture();
     this.buildTableArena();
 
-    // 7. Responsive Resizing
+    // 7. Interactive Drag-and-Drop Placement Support
+    this.createDropReticle();
+    this.createRobotHitProxy();
+    this.setupDragAndDrop();
+
+    // 8. Responsive Resizing
     window.addEventListener('resize', this.onWindowResize.bind(this));
   }
 
@@ -103,10 +119,12 @@ export class Viewport3D {
     this.tableMesh.add(matMesh);
 
     // Wood Perimeter Boundary Walls (height 77mm, thickness 25mm)
+    // In FLL rules, table walls are allowed to be spaced away from the field mat.
     const wallH = 0.077;
     const wallThick = 0.025;
-    const halfL = this.matTexture.worldLength / 2;
-    const halfW = this.matTexture.worldWidth / 2;
+    const wallMargin = 0.025; // 25mm spacing away from mat edges
+    const wallHalfL = this.matTexture.worldLength / 2 + wallMargin;
+    const wallHalfW = this.matTexture.worldWidth / 2 + wallMargin;
 
     const wallMat = new THREE.MeshStandardMaterial({
       color: 0x475569, // Modern slate border
@@ -116,40 +134,40 @@ export class Viewport3D {
 
     // North wall (+Z)
     const wallN = new THREE.Mesh(
-      new THREE.BoxGeometry(this.matTexture.worldLength + wallThick * 2, wallH, wallThick),
+      new THREE.BoxGeometry(wallHalfL * 2 + wallThick * 2, wallH, wallThick),
       wallMat
     );
-    wallN.position.set(0, wallH / 2, halfW + wallThick / 2);
+    wallN.position.set(0, wallH / 2, wallHalfW + wallThick / 2);
     wallN.castShadow = true;
     wallN.receiveShadow = true;
     this.tableMesh.add(wallN);
 
     // South wall (-Z)
     const wallS = new THREE.Mesh(
-      new THREE.BoxGeometry(this.matTexture.worldLength + wallThick * 2, wallH, wallThick),
+      new THREE.BoxGeometry(wallHalfL * 2 + wallThick * 2, wallH, wallThick),
       wallMat
     );
-    wallS.position.set(0, wallH / 2, -halfW - wallThick / 2);
+    wallS.position.set(0, wallH / 2, -wallHalfW - wallThick / 2);
     wallS.castShadow = true;
     wallS.receiveShadow = true;
     this.tableMesh.add(wallS);
 
     // East wall (+X)
     const wallE = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick, wallH, this.matTexture.worldWidth),
+      new THREE.BoxGeometry(wallThick, wallH, wallHalfW * 2),
       wallMat
     );
-    wallE.position.set(halfL + wallThick / 2, wallH / 2, 0);
+    wallE.position.set(wallHalfL + wallThick / 2, wallH / 2, 0);
     wallE.castShadow = true;
     wallE.receiveShadow = true;
     this.tableMesh.add(wallE);
 
     // West wall (-X)
     const wallW = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick, wallH, this.matTexture.worldWidth),
+      new THREE.BoxGeometry(wallThick, wallH, wallHalfW * 2),
       wallMat
     );
-    wallW.position.set(-halfL - wallThick / 2, wallH / 2, 0);
+    wallW.position.set(-wallHalfL - wallThick / 2, wallH / 2, 0);
     wallW.castShadow = true;
     wallW.receiveShadow = true;
     this.tableMesh.add(wallW);
@@ -200,6 +218,181 @@ export class Viewport3D {
     this.camera.position.set(camX, targetY + height, camZ);
     this.camera.lookAt(targetX, targetY + 0.05, targetZ);
     this.controls.target.set(targetX, targetY, targetZ);
+  }
+
+  private createDropReticle(): void {
+    this.dropReticle = new THREE.Group();
+    this.dropReticle.visible = false;
+
+    // Outer cyan ring (diameter 28cm)
+    const ringGeom = new THREE.RingGeometry(0.12, 0.14, 36);
+    ringGeom.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const outerRing = new THREE.Mesh(ringGeom, ringMat);
+    this.dropReticle.add(outerRing);
+
+    // Inner green target circle (radius 4cm)
+    const innerGeom = new THREE.RingGeometry(0.03, 0.045, 24);
+    innerGeom.rotateX(-Math.PI / 2);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const innerRing = new THREE.Mesh(innerGeom, innerMat);
+    this.dropReticle.add(innerRing);
+
+    // Forward direction indicator arrow
+    const arrowGeom = new THREE.ConeGeometry(0.025, 0.06, 12);
+    arrowGeom.rotateX(Math.PI / 2);
+    arrowGeom.translate(0, 0, 0.16);
+    const arrowMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const arrowMesh = new THREE.Mesh(arrowGeom, arrowMat);
+    this.dropReticle.add(arrowMesh);
+
+    // Translucent floor highlight disc
+    const diskGeom = new THREE.CircleGeometry(0.14, 32);
+    diskGeom.rotateX(-Math.PI / 2);
+    const diskMat = new THREE.MeshBasicMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide,
+    });
+    const diskMesh = new THREE.Mesh(diskGeom, diskMat);
+    this.dropReticle.add(diskMesh);
+
+    this.scene.add(this.dropReticle);
+  }
+
+  private createRobotHitProxy(): void {
+    // Generous bounding hit cylinder around the robot (diameter 32cm, height 20cm)
+    const geom = new THREE.CylinderGeometry(0.16, 0.16, 0.20, 16);
+    const mat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+    });
+    this.robotHitProxy = new THREE.Mesh(geom, mat);
+    this.robotHitProxy.position.set(-0.80, 0.10, 0.32);
+    this.scene.add(this.robotHitProxy);
+  }
+
+  public setRobotVisualRoot(root: THREE.Object3D): void {
+    this.robotVisualRoot = root;
+  }
+
+  public updateRobotHitProxy(x: number, y: number, z: number): void {
+    this.robotHitProxy.position.set(x, y + 0.10, z);
+  }
+
+  private setupDragAndDrop(): void {
+    const dom = this.renderer.domElement;
+
+    const getPointerCoords = (e: PointerEvent): { x: number; y: number } => {
+      const rect = dom.getBoundingClientRect();
+      return {
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      };
+    };
+
+    const isRobotHit = (coords: { x: number; y: number }): boolean => {
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const targets: THREE.Object3D[] = [this.robotHitProxy];
+      if (this.robotVisualRoot) targets.push(this.robotVisualRoot);
+      const hits = this.raycaster.intersectObjects(targets, true);
+      return hits.length > 0;
+    };
+
+    const getGroundIntersection = (coords: { x: number; y: number }): THREE.Vector3 | null => {
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const hit = new THREE.Vector3();
+      return this.raycaster.ray.intersectPlane(this.groundPlane, hit) ? hit : null;
+    };
+
+    dom.addEventListener('pointerdown', (e: PointerEvent) => {
+      // Only handle left mouse click / primary pointer
+      if (e.button !== 0) return;
+      const coords = getPointerCoords(e);
+
+      // Check if clicking robot
+      if (isRobotHit(coords)) {
+        this.isDragging = true;
+        this.controls.enabled = false;
+        this.dropReticle.visible = true;
+        this.container.style.cursor = 'grabbing';
+
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
+          const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
+          this.dropReticle.position.set(clampedX, 0.003, clampedZ);
+          this.onRobotDragMove?.(clampedX, clampedZ);
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+
+      // Quick Shift-Click anywhere on mat to teleport robot
+      if (e.shiftKey) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
+          const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
+          this.onRobotDrop?.(clampedX, clampedZ);
+          e.stopPropagation();
+        }
+      }
+    }, { capture: true });
+
+    window.addEventListener('pointermove', (e: PointerEvent) => {
+      const coords = getPointerCoords(e);
+
+      if (this.isDragging) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
+          const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
+          this.dropReticle.position.set(clampedX, 0.003, clampedZ);
+          this.onRobotDragMove?.(clampedX, clampedZ);
+        }
+      } else {
+        // Hover indicator over robot
+        if (isRobotHit(coords)) {
+          this.container.style.cursor = 'grab';
+        } else {
+          this.container.style.cursor = 'default';
+        }
+      }
+    });
+
+    const finishDrag = () => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        this.controls.enabled = true;
+        this.dropReticle.visible = false;
+        this.container.style.cursor = 'default';
+        this.onRobotDrop?.(this.dropReticle.position.x, this.dropReticle.position.z);
+      }
+    };
+
+    window.addEventListener('pointerup', finishDrag);
+    window.addEventListener('pointercancel', finishDrag);
   }
 
   public onWindowResize(): void {

@@ -27,6 +27,10 @@ export class VirtualSpikeApi {
     }
   }
 
+  public stopAllMotors(): void {
+    this.engine.robot?.stopAllMotors();
+  }
+
   // --- Classes exposed to user scripts ---
 
   public createPrimeHub() {

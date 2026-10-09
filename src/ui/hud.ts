@@ -1,4 +1,4 @@
-import { TelemetryState, ExecutionState } from '../runtime/types';
+import { TelemetryState, ExecutionState, SpawnPose } from '../runtime/types';
 import { CameraViewPreset } from '../view/viewport';
 
 export interface HudCallbacks {
@@ -8,6 +8,8 @@ export interface HudCallbacks {
   onCameraChange: (preset: CameraViewPreset) => void;
   onImportFile: (file: File) => void;
   onMapChange?: (mapType: 'grid' | 'procedural') => void;
+  onSpawnPoseChange?: (pose: SpawnPose) => void;
+  onCaptureCurrentPose?: () => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -129,6 +131,11 @@ export class SimulatorHud {
   private telemColorD!: HTMLElement;
   private telemDist!: HTMLElement;
   private telemFps!: HTMLElement;
+
+  // Spawn pose configuration elements
+  private spawnInputX!: HTMLInputElement;
+  private spawnInputZ!: HTMLInputElement;
+  private spawnInputYaw!: HTMLInputElement;
 
   private matchSeconds = 150; // 2:30 match timer
   private matchTimerRunning = false;
@@ -254,6 +261,33 @@ export class SimulatorHud {
             <span class="value" id="telem-dist">-- cm</span>
           </div>
         </div>
+
+        <!-- Starting Pose Configuration Section -->
+        <div class="telem-spawn-section">
+          <div class="telem-subheading">
+            <span>📍 START / RESET POSITION</span>
+          </div>
+          <div class="spawn-inputs-row">
+            <div class="spawn-input-group">
+              <label for="spawn-x">X (m)</label>
+              <input type="number" id="spawn-x" step="0.05" value="-0.80">
+            </div>
+            <div class="spawn-input-group">
+              <label for="spawn-z">Z (m)</label>
+              <input type="number" id="spawn-z" step="0.05" value="0.32">
+            </div>
+            <div class="spawn-input-group">
+              <label for="spawn-yaw">Yaw (°)</label>
+              <input type="number" id="spawn-yaw" step="5" value="90">
+            </div>
+          </div>
+          <div class="spawn-presets-row">
+            <button class="btn btn-xs btn-outline" id="btn-capture-pose" title="Capture current robot position as spawn point">📌 Capture</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="red" title="Left Home / Red Launch Arc">🚩 Red Arc</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="blue" title="Right Home / Blue Launch Arc">🔷 Blue Arc</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="center" title="Field Center (0, 0)">🎯 Center</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -273,6 +307,10 @@ export class SimulatorHud {
     this.telemColorD = this.rootElement.querySelector('#telem-color-d')!;
     this.telemDist = this.rootElement.querySelector('#telem-dist')!;
     this.telemFps = this.rootElement.querySelector('#telem-fps')!;
+
+    this.spawnInputX = this.rootElement.querySelector('#spawn-x')!;
+    this.spawnInputZ = this.rootElement.querySelector('#spawn-z')!;
+    this.spawnInputYaw = this.rootElement.querySelector('#spawn-yaw')!;
 
     // Set initial sample code
     this.codeTextarea.value = SAMPLE_MISSIONS.drive_straight.code;
@@ -340,6 +378,40 @@ export class SimulatorHud {
         this.callbacks.onImportFile(fileInput.files[0]);
       }
     });
+
+    // Spawn pose inputs change listener
+    const handleSpawnChange = () => {
+      const pose = this.getSpawnPose();
+      this.callbacks.onSpawnPoseChange?.(pose);
+    };
+    this.spawnInputX.addEventListener('input', handleSpawnChange);
+    this.spawnInputZ.addEventListener('input', handleSpawnChange);
+    this.spawnInputYaw.addEventListener('input', handleSpawnChange);
+
+    // Capture current position button
+    const btnCapture = this.rootElement.querySelector('#btn-capture-pose');
+    btnCapture?.addEventListener('click', () => {
+      this.callbacks.onCaptureCurrentPose?.();
+    });
+
+    // Preset spawn buttons
+    const presetBtns = this.rootElement.querySelectorAll('[data-spawn-preset]');
+    presetBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.getAttribute('data-spawn-preset');
+        if (preset === 'red') {
+          this.setSpawnPose({ x: -0.80, z: 0.32, yawDegrees: 90 });
+          this.logConsole('Spawn position set to: Red Launch Arc (Left)');
+        } else if (preset === 'blue') {
+          this.setSpawnPose({ x: 0.80, z: 0.32, yawDegrees: -90 });
+          this.logConsole('Spawn position set to: Blue Launch Arc (Right)');
+        } else if (preset === 'center') {
+          this.setSpawnPose({ x: 0.00, z: 0.00, yawDegrees: 0 });
+          this.logConsole('Spawn position set to: Field Center');
+        }
+        this.callbacks.onSpawnPoseChange?.(this.getSpawnPose());
+      });
+    });
   }
 
   public logConsole(msg: string): void {
@@ -398,5 +470,18 @@ export class SimulatorHud {
 
     this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
     this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz)} Hz`;
+  }
+
+  public getSpawnPose(): SpawnPose {
+    const x = parseFloat(this.spawnInputX.value) || 0;
+    const z = parseFloat(this.spawnInputZ.value) || 0;
+    const yaw = parseFloat(this.spawnInputYaw.value) || 0;
+    return { x, y: 0.035, z, yawDegrees: yaw };
+  }
+
+  public setSpawnPose(pose: Partial<SpawnPose>): void {
+    if (pose.x !== undefined) this.spawnInputX.value = pose.x.toFixed(2);
+    if (pose.z !== undefined) this.spawnInputZ.value = pose.z.toFixed(2);
+    if (pose.yawDegrees !== undefined) this.spawnInputYaw.value = pose.yawDegrees.toFixed(1);
   }
 }

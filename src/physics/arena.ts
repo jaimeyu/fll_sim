@@ -9,8 +9,8 @@ export interface ArenaConfig {
 }
 
 export const DEFAULT_FLL_ARENA_CONFIG: ArenaConfig = {
-  lengthMeters: 2.362,
-  widthMeters: 1.143,
+  lengthMeters: 2.45,  // Table length accommodating 2.40m mat with walls spaced away from field
+  widthMeters: 1.45,   // Table width accommodating 1.40m mat with walls spaced away from field
   wallHeightMeters: 0.077,
   wallThicknessMeters: 0.025,
   matFriction: 0.75, // Standard competition vinyl mat friction

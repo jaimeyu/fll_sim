@@ -100,4 +100,26 @@ describe('SimulationPhysicsEngine Integration', () => {
       expect(Math.hypot(wLinvel.x, wLinvel.y, wLinvel.z)).toBe(0);
     }
   });
+
+  it('configures and persists customized default spawn pose', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    // Custom pose (e.g. Blue launch arc)
+    const customPose = { x: 0.80, y: 0.035, z: 0.32, yawDegrees: -90 };
+    engine.setDefaultPose(customPose);
+
+    const savedPose = engine.getDefaultPose();
+    expect(savedPose.x).toBe(0.80);
+    expect(savedPose.z).toBe(0.32);
+    expect(savedPose.yawDegrees).toBe(-90);
+
+    // Call resetRobot() without arguments - should use defaultPose
+    engine.resetRobot();
+
+    const currentPos = engine.robot.getPosition();
+    expect(currentPos.x).toBeCloseTo(0.80, 2);
+    expect(currentPos.z).toBeCloseTo(0.32, 2);
+    expect(engine.robot.getYawDegrees()).toBeCloseTo(-90, 1);
+  });
 });

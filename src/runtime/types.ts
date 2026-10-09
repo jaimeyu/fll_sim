@@ -39,3 +39,10 @@ export interface TelemetryState {
 }
 
 export type ExecutionState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR' | 'FINISHED';
+
+export interface SpawnPose {
+  x: number;
+  y: number;
+  z: number;
+  yawDegrees: number;
+}

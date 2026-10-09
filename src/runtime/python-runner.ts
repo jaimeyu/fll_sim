@@ -230,6 +230,7 @@ export class PythonScriptRunner {
         throw err;
       }
     } finally {
+      this.api.stopAllMotors();
       this.isRunning = false;
       this.abortController = null;
     }
