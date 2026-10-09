@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import JSZip from 'jszip';
 import { LDrawImporter } from '../cad/ldraw-importer';
-import { RobotAssemblySpec, PlacedPart } from '../cad/types';
-import { createLegoBrickMesh, LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
-import { SEASON_MISSIONS_CONFIG, SeasonMissionSpec } from '../missions/season-config';
+import { RobotAssemblySpec } from '../cad/types';
+import { createLegoBrickMesh, LEGO_COLORS } from '../view/lego-visuals';
+import { SEASON_MISSIONS_CONFIG } from '../missions/season-config';
 
 export interface CadInspectorCallbacks {
   onDeployToField?: (missionId: string) => void;
@@ -36,6 +36,18 @@ export class CadModelInspector {
   private isWireframe: boolean = false;
   private showColliders: boolean = false;
   private isSolidMode: boolean = false;
+
+  public getCurrentSpec(): RobotAssemblySpec | null {
+    return this.currentSpec;
+  }
+
+  public getCurrentThumbnailUrl(): string | null {
+    return this.currentThumbnailUrl;
+  }
+
+  public getSolidMode(): boolean {
+    return this.isSolidMode;
+  }
 
   private callbacks: CadInspectorCallbacks;
 
@@ -411,13 +423,11 @@ export class CadModelInspector {
 
   private async inspectBinaryArchive(buffer: ArrayBuffer, name: string, id: string): Promise<void> {
     const zip = new JSZip();
-    let isZip = false;
     let thumbUrl: string | null = null;
     let spec: RobotAssemblySpec;
 
     try {
       const archive = await zip.loadAsync(buffer);
-      isZip = true;
 
       // Extract official thumbnail
       const thumbFile = archive.file('thumbnail.png');

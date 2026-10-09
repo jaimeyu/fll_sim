@@ -69,6 +69,10 @@ export class CustomImportedMissionElement implements MissionElement {
     }
   }
 
+  public getSolidRigidMode(): boolean {
+    return this.isSolidRigidMode;
+  }
+
   public getSpec(): RobotAssemblySpec {
     return this.spec;
   }
@@ -330,18 +334,6 @@ export class CustomImportedMissionElement implements MissionElement {
 
   public getInteractiveMeshes(): THREE.Object3D[] {
     return this.interactiveMeshes.length > 0 ? this.interactiveMeshes : [this.rootGroup];
-  }
-
-  public setSolidRigidMode(solid: boolean): void {
-    if (this.isSolidRigidMode !== solid) {
-      this.isSolidRigidMode = solid;
-      // Re-initialize physics bodies with updated anchoring
-      this.reset();
-    }
-  }
-
-  public getSolidRigidMode(): boolean {
-    return this.isSolidRigidMode;
   }
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {

@@ -18,7 +18,8 @@ export class CadClusteringPreSolver {
    * Solves an assembly graph into compound bodies and 1-DOF joints
    */
   public static solve(input: PreSolverInput): RobotAssemblySpec {
-    const { name, parts, links } = input;
+    const { name, parts } = input;
+    const links = input.links || (input as any).connections || [];
     const partMap = new Map<string, PlacedPart>();
     for (const part of parts) {
       partMap.set(part.id, part);
@@ -38,6 +39,21 @@ export class CadClusteringPreSolver {
         adjacency.get(link.toPartId)?.add(link.fromPartId);
       } else if (link.connectionType === 'REVOLUTE_AXLE' || link.connectionType === 'FREE_ROTATION') {
         activeLinks.push(link);
+      }
+    }
+
+    // Link parts belonging to the same submodel
+    const bySubmodel = new Map<string, string[]>();
+    for (const part of parts) {
+      if (part.submodel) {
+        if (!bySubmodel.has(part.submodel)) bySubmodel.set(part.submodel, []);
+        bySubmodel.get(part.submodel)!.push(part.id);
+      }
+    }
+    for (const ids of bySubmodel.values()) {
+      for (let k = 0; k < ids.length - 1; k++) {
+        adjacency.get(ids[k])?.add(ids[k + 1]);
+        adjacency.get(ids[k + 1])?.add(ids[k]);
       }
     }
 

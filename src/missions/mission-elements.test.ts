@@ -456,5 +456,73 @@ describe('FLL Mission Elements Physics Integration', () => {
       const clearIds = await manager.applyMissionPreset('clear');
       expect(clearIds).toEqual([]);
     });
+
+    it('anchors non-jointed clusters as fixed bodies when isBaseFixed is true to prevent loose scattering', async () => {
+      const { CustomImportedMissionElement } = await import('./custom-imported-element');
+      const mockSpecMultiCluster = {
+        name: 'Multi-Cluster Mission',
+        clusters: [
+          {
+            clusterId: 'base',
+            name: 'Base Frame',
+            isRootChassis: true,
+            partIds: ['p1'],
+            totalMassKg: 0.5,
+            colliders: [
+              {
+                shape: 'box' as const,
+                halfExtents: [0.1, 0.02, 0.1] as [number, number, number],
+                offset: [0, 0, 0] as [number, number, number],
+                rotation: [0, 0, 0, 1] as [number, number, number, number],
+                friction: 0.8,
+                restitution: 0.0,
+              },
+            ],
+          },
+          {
+            clusterId: 'fixed_accessory',
+            name: 'Stationary Wall',
+            isRootChassis: false,
+            partIds: ['p2'],
+            totalMassKg: 0.1,
+            colliders: [
+              {
+                shape: 'box' as const,
+                halfExtents: [0.05, 0.05, 0.01] as [number, number, number],
+                offset: [0, 0.05, 0] as [number, number, number],
+                rotation: [0, 0, 0, 1] as [number, number, number, number],
+                friction: 0.8,
+                restitution: 0.0,
+              },
+            ],
+          },
+        ],
+        joints: [], // No joints connecting the wall to the base
+        sensors: [],
+      };
+
+      const elem = new CustomImportedMissionElement(mockSpecMultiCluster, {
+        id: 'anchored_elem',
+        name: 'Anchored Elem',
+        isBaseFixed: true,
+      });
+      elem.init(world, { x: 0, y: 0.002, z: 0 });
+
+      // @ts-ignore
+      const bodies = elem['bodies'] as Map<string, RAPIER.RigidBody>;
+      const baseBody = bodies.get('base')!;
+      const wallBody = bodies.get('fixed_accessory')!;
+
+      // Both bodies should be fixed (immovable)
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(wallBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+
+      // Verify toggling solid rigid mode keeps everything fixed
+      elem.setSolidRigidMode(true);
+      expect(elem.getSolidRigidMode()).toBe(true);
+      const solidBodies = elem['bodies'] as Map<string, RAPIER.RigidBody>;
+      expect(solidBodies.get('base')!.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(solidBodies.get('fixed_accessory')!.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+    });
   });
 });

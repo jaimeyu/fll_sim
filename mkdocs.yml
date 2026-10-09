@@ -55,6 +55,11 @@ markdown_extensions:
   - toc:
       permalink: true
 
+extra:
+  analytics:
+    provider: google
+    property: G-VHHKDXD1EC
+
 nav:
   - Home: index.md
   - Architecture: architecture.md

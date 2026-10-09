@@ -31,4 +31,57 @@ describe('CAD Ingestion & Pin Clustering Pre-Solver', () => {
     const gyro = spec.sensors.find((s) => s.type === 'GYRO');
     expect(gyro).toBeDefined();
   });
+
+  it('clusters parts belonging to the same submodel into a single rigid cluster', async () => {
+    const { CadClusteringPreSolver } = await import('./clustering-solver');
+    const mockAssembly = {
+      name: 'SubModel Test',
+      parts: [
+        {
+          id: 'p1',
+          partNumber: '32524',
+          position: [0, 0, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'STRUCTURAL_BEAM' as const,
+          submodel: 'CartAssembly',
+        },
+        {
+          id: 'p2',
+          partNumber: '32524',
+          position: [100, 0, 0] as [number, number, number], // 100mm away (farther than proximity limit)
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'STRUCTURAL_BEAM' as const,
+          submodel: 'CartAssembly',
+        },
+        {
+          id: 'p3',
+          partNumber: '2780', // Pin
+          position: [50, 0, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'FASTENER_PIN' as const,
+          submodel: 'CartAssembly',
+        },
+        {
+          id: 'base1',
+          partNumber: '3020',
+          position: [0, -50, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'GENERIC_RIGID' as const,
+          submodel: 'BaseFrame',
+        },
+      ],
+      links: [],
+    };
+
+    const spec = CadClusteringPreSolver.solve(mockAssembly);
+    // CartAssembly has 3 parts, BaseFrame has 1 part.
+    // They should be in distinct clusters, and CartAssembly should keep all 3 parts together.
+    expect(spec.clusters.length).toBe(2);
+    const cartCluster = spec.clusters.find((c) => c.partIds.includes('p1'));
+    expect(cartCluster).toBeDefined();
+    expect(cartCluster!.partIds).toContain('p2');
+    expect(cartCluster!.partIds).toContain('p3');
+    // Largest cluster (3 parts) is assigned isRootChassis
+    expect(cartCluster!.isRootChassis).toBe(true);
+  });
 });

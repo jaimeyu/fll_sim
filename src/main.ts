@@ -74,6 +74,7 @@ async function bootstrapSimulator() {
   };
 
   // 6. Initialize Simulator HUD & Controls
+  let cadInspector: CadModelInspector;
   const hud = new SimulatorHud(document.body, {
     onRunScript: async (code: string) => {
       hud.logConsole('Executing SPIKE Python script...');
@@ -244,6 +245,9 @@ async function bootstrapSimulator() {
         hud.logConsole(`Failed to apply mission preset: ${err.message || err}`);
       }
     },
+    onOpenInspector: (missionId?: string) => {
+      cadInspector.open(missionId || 'M01');
+    },
     onModeChange: (mode) => {
       missionManager.setMode(mode);
       viewport.setMode(mode);
@@ -310,6 +314,27 @@ async function bootstrapSimulator() {
       if (missionManager.currentMode !== 'ARENA' && hud.isDynoModeActive()) {
         engine.resetRobot({ x: 0.30, y: 0.035, z: 0.0, yawDegrees: -90 });
         viewport.setRobotYaw(-90);
+      }
+    },
+  });
+
+  // 7. Initialize CAD Model Inspector & Diagnostic Validator
+  cadInspector = new CadModelInspector({
+    onDeployToField: async (missionId: string) => {
+      await missionManager.toggleSeasonMission(missionId, true);
+      syncHudMissionElements();
+      viewport.selectMissionElement(missionId);
+      const elem = missionManager.getElement(missionId);
+      if (elem) {
+        viewport.focusOnElement(elem.getPosition());
+      }
+      hud.logConsole(`🚀 Deployed inspected mission "${missionId}" to field mat.`);
+    },
+    onToggleSolidMode: (missionId: string, solid: boolean) => {
+      const elem = missionManager.getElement(missionId);
+      if (elem && elem instanceof CustomImportedMissionElement) {
+        elem.setSolidRigidMode(solid);
+        hud.logConsole(`⚙️ Set mission "${missionId}" physics mode: ${solid ? 'Solid Anchor' : 'Articulated Physics'}`);
       }
     },
   });
