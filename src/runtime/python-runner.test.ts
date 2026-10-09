@@ -31,31 +31,55 @@ while hub.motion_sensor.get_yaw_angle() < 90:
     expect(js).toContain('await wait_for_seconds(0.1)');
   });
 
-  it('executes a Python script driving the simulated robot', async () => {
+  it('transpiles and syntax-validates all SAMPLE_MISSIONS without syntax errors', async () => {
+    const { SAMPLE_MISSIONS } = await import('../ui/hud');
+    for (const [key, mission] of Object.entries(SAMPLE_MISSIONS)) {
+      const js = PythonScriptRunner.transpilePythonToJs(mission.code);
+      try {
+        new Function(
+          'PrimeHub',
+          'Motor',
+          'MotorPair',
+          'ColorSensor',
+          'DistanceSensor',
+          'wait_for_seconds',
+          'time',
+          '__yield',
+          'console',
+          `return (async () => {\n${js}\n})();`
+        );
+      } catch (e) {
+        console.error(`Failed mission: ${key}\nTranspiled JS:\n${js}\nError:`, e);
+        throw e;
+      }
+    }
+  });
+
+  it('correctly transpiles Python ternary expressions', () => {
+    const py = `spd = 15 if light > 30 else 0`;
+    const js = PythonScriptRunner.transpilePythonToJs(py);
+    expect(js).toContain('spd = (light > 30) ? (15) : (0);');
+  });
+
+  it('executes Gyro 90-degree turn mission accurately', async () => {
     const engine = new SimulationPhysicsEngine();
     await engine.init();
     const sensors = new VirtualSensorManager(engine.robot);
     const api = new VirtualSpikeApi(engine, sensors);
     const runner = new PythonScriptRunner(api);
 
-    // Keep physics updating in background
     const timer = setInterval(() => {
       engine.update(1 / 60);
     }, 16);
 
     try {
-      const script = `
-motors = MotorPair('A', 'B')
-motors.start_tank(50, 50)
-wait_for_seconds(0.1)
-motors.stop()
-`;
-      await runner.execute(script);
-
-      const pos = engine.robot.getPosition();
-      expect(pos).toBeDefined();
+      const { SAMPLE_MISSIONS } = await import('../ui/hud');
+      await runner.execute(SAMPLE_MISSIONS.gyro_turn.code);
+      const finalYaw = sensors.getYaw();
+      expect(finalYaw).toBeGreaterThanOrEqual(85);
+      expect(finalYaw).toBeLessThanOrEqual(105);
     } finally {
       clearInterval(timer);
     }
-  });
+  }, 10000);
 });

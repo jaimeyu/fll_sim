@@ -36,6 +36,7 @@ export class VirtualSensorManager {
 
   /**
    * Get calibrated Yaw angle (-180 to 180 degrees)
+   * Follows LEGO SPIKE Prime specification: Clockwise turn is positive (0 to 180), Counter-clockwise is negative
    */
   public getYaw(): number {
     let raw = this.robot.getYawDegrees() - this.yawOffset;

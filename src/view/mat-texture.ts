@@ -13,6 +13,7 @@ export class CompetitionMatTexture implements MatColorSampler {
   private canvasWidth = 2048;
   private canvasHeight = 1024;
   private pixelData: Uint8ClampedArray | null = null;
+  public currentMap: 'grid' | 'procedural' = 'grid';
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -20,6 +21,7 @@ export class CompetitionMatTexture implements MatColorSampler {
     this.canvas.height = this.canvasHeight;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
 
+    // Initial procedural render so canvas is valid immediately
     this.drawCompetitionMat();
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.anisotropy = 8;
@@ -28,6 +30,49 @@ export class CompetitionMatTexture implements MatColorSampler {
 
     // Cache image data for fast CPU sensor sampling
     this.cacheImageData();
+
+    // Default to the official competition grid map
+    this.loadMap('grid').catch(() => {});
+  }
+
+  /**
+   * Switches active competition mat between official grid image and procedural canvas
+   */
+  public async loadMap(mapType: 'grid' | 'procedural'): Promise<void> {
+    this.currentMap = mapType;
+    if (mapType === 'procedural') {
+      this.drawCompetitionMat();
+      this.cacheImageData();
+      this.texture.needsUpdate = true;
+      return;
+    }
+
+    // In environments without Image constructor (e.g. Node tests), remain procedural
+    if (typeof Image === 'undefined') {
+      this.drawCompetitionMat();
+      this.cacheImageData();
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+        this.ctx.drawImage(img, 0, 0, this.canvasWidth, this.canvasHeight);
+        this.cacheImageData();
+        this.texture.needsUpdate = true;
+        resolve();
+      };
+      img.onerror = () => {
+        // Fallback to procedural if image fails to load
+        this.drawCompetitionMat();
+        this.cacheImageData();
+        this.texture.needsUpdate = true;
+        resolve();
+      };
+      img.src = '/maps/playing_field_grid.png';
+    });
   }
 
   private cacheImageData(): void {

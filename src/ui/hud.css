@@ -128,6 +128,35 @@ body, html {
   gap: 6px;
 }
 
+.hud-top-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.map-select-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.hud-label-inline {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-select-sm {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
 /* Left Sidebar: Code Editor & Missions */
 .hud-sidebar {
   position: absolute;

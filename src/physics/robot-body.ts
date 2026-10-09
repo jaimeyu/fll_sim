@@ -55,29 +55,26 @@ export class RobotPhysicsBody {
 
     // Add main chassis frame colliders (elevated slightly above ground)
     for (const c of rootCluster.colliders) {
-      const colDesc = RAPIER.ColliderDesc.cuboid(
-        c.halfExtents ? c.halfExtents[0] : 0.044, // 88mm width leaving clearance to wheels
-        c.halfExtents ? c.halfExtents[1] : 0.015,
-        c.halfExtents ? c.halfExtents[2] : 0.06
-      )
-        // Center of mass shifted to Z = -0.025m (between wheels at Z=0 and rear skid at Z=-0.065)
-        // achieving standard 60/40 differential drive weight distribution for static tripod stability
-        .setTranslation(c.offset[0], c.offset[1], -0.025)
-        .setFriction(c.friction)
-        .setRestitution(0.0) // Completely inelastic to eliminate bouncing
-        .setMass(rootCluster.totalMassKg);
-
-      this.world.createCollider(colDesc, this.chassisBody);
+      if (c.shape === 'sphere') {
+        const sphereDesc = RAPIER.ColliderDesc.ball(c.radius || 0.01)
+          .setTranslation(c.offset[0], c.offset[1], c.offset[2])
+          .setFriction(c.friction ?? 0.0)
+          .setRestitution(0.0)
+          .setDensity(0.0);
+        this.world.createCollider(sphereDesc, this.chassisBody);
+      } else {
+        const colDesc = RAPIER.ColliderDesc.cuboid(
+          c.halfExtents ? c.halfExtents[0] : 0.044,
+          c.halfExtents ? c.halfExtents[1] : 0.012,
+          c.halfExtents ? c.halfExtents[2] : 0.050
+        )
+          .setTranslation(c.offset[0], c.offset[1], c.offset[2])
+          .setFriction(c.friction)
+          .setRestitution(0.0)
+          .setMass(rootCluster.totalMassKg);
+        this.world.createCollider(colDesc, this.chassisBody);
+      }
     }
-
-    // Add rear frictionless caster skid ball directly to chassis
-    // Lowest point: -0.025 - 0.010 = -0.035m, exactly coplanar with wheel bottoms (-0.007 - 0.028 = -0.035m)
-    const skidCollider = RAPIER.ColliderDesc.ball(0.01)
-      .setTranslation(0, -0.025, -0.065)
-      .setFriction(0.005) // Smooth glide
-      .setRestitution(0.0)
-      .setDensity(0.0); // Zero density so mass is determined strictly by the chassis body mass
-    this.world.createCollider(skidCollider, this.chassisBody);
 
     // 2. Drive Wheels & Revolute Joints
     const nonRootClusters = this.spec.clusters.filter((c) => !c.isRootChassis);
@@ -181,24 +178,21 @@ export class RobotPhysicsBody {
           const wb = this.wheelBodies.get(cluster.clusterId);
           if (!wb) continue;
 
-          const wAng = wb.angvel();
-          // Current wheel spin velocity along the axle
-          const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
-
           if (isIdle) {
-            // No torque when idle
+            wb.setAngularDamping(2.0);
           } else {
             this.chassisBody.wakeUp();
             wb.wakeUp();
+            wb.setAngularDamping(0.2);
 
+            const wAng = wb.angvel();
+            const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
             const spinError = targetRadPerSec - currentSpin;
-            const Kp = 0.35; // Proportional velocity governor
-            const maxTorque = 0.45; // 0.45 Nm peak torque (LEGO SPIKE large motor)
+            const Kp = 0.005; // Smooth stable velocity governor for low-inertia wheels
+            const maxTorque = 0.06; // 0.06 Nm max drive torque eliminates slippage and reaction flipping
             const torque = Math.max(-maxTorque, Math.min(maxTorque, spinError * Kp));
 
-            // Apply drive torque to wheel and equal-and-opposite reaction torque to chassis
-            wb.addTorque({ x: -torque * ux, y: -torque * uy, z: -torque * uz }, true);
-            this.chassisBody.addTorque({ x: torque * ux, y: torque * uy, z: torque * uz }, true);
+            wb.addTorque({ x: torque * ux, y: torque * uy, z: torque * uz }, true);
           }
         }
       }

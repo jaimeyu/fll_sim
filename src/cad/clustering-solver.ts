@@ -105,15 +105,24 @@ export class CadClusteringPreSolver {
       const massKg = Math.max(0.01, totalMassGrams / 1000);
 
       if (isRoot) {
-        // Compound box for main chassis frame (88mm wide frame, leaving clean clearance to wheels).
-        // Center of mass shifted to Z = -0.025m (between wheels at Z=0 and rear caster at Z=-0.065m),
-        // giving standard 60/40 differential drive static tripod stability so the robot never tips or rocks.
+        // 1. Compound box for main chassis frame (88mm wide frame, leaving clean clearance to wheels).
+        // Elevated with bottom at Y = 0.005 - 0.012 = -0.007m (28mm clearance above ground at Y = -0.035m, never drags).
         colliders.push({
           shape: 'box',
-          halfExtents: [0.044, 0.015, 0.06],
-          offset: [0, 0.015, -0.025],
+          halfExtents: [0.044, 0.012, 0.050],
+          offset: [0, 0.005, -0.015],
           rotation: [0, 0, 0, 1],
-          friction: 0.5,
+          friction: 0.1,
+          restitution: 0.0,
+        });
+        // 2. Frictionless spherical rear caster skid (Part 49283).
+        // Radius 10mm with center at Y = -0.0245m: bottom touches at Y = -0.0345m (0.5mm clearance, wheels bear primary weight).
+        colliders.push({
+          shape: 'sphere',
+          radius: 0.010,
+          offset: [0, -0.0245, -0.065],
+          rotation: [0, 0, 0, 1],
+          friction: 0.0, // Frictionless glide for tank turns
           restitution: 0.0,
         });
       } else if (clusterName === 'Drive Wheel') {

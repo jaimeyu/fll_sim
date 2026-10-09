@@ -17,10 +17,12 @@ export class SimulationPhysicsEngine {
 
   private fixedDt: number;
   private accumulator: number = 0;
+  public onSanityReset?: (reason: string) => void;
+
   private defaultPose: SpawnPose = {
-    x: -0.8, // Start in Launch Area (Left side)
-    y: 0.035, // Seated directly at resting height (wheels touching mat)
-    z: -0.3,
+    x: -0.8, // Start in Launch Area (Columns A-B, Red Launch Arc)
+    y: 0.035, // Resting height (wheels and rear caster resting on mat)
+    z: 0.32,
     yawDegrees: 90, // Facing East toward mission field
   };
 
@@ -61,7 +63,7 @@ export class SimulationPhysicsEngine {
   }
 
   /**
-   * Step physics by delta time (seconds) with accumulator
+   * Step physics by delta time (seconds) with accumulator and safety limits
    */
   public update(deltaSeconds: number): void {
     if (!this.isInitialized) return;
@@ -76,6 +78,29 @@ export class SimulationPhysicsEngine {
 
       // 2. Step Rapier physics world
       this.world.step();
+
+      // 3. Safety Sanity Checks: auto-restart robot if it falls outside table or enters supersonic/crazy spin
+      const pos = this.robot.getPosition();
+      const linvel = this.robot.chassisBody.linvel();
+      const angvel = this.robot.chassisBody.angvel();
+      const linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
+      const angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
+
+      let resetReason: string | null = null;
+      if (pos.y < -0.1 || Math.abs(pos.x) > 1.35 || Math.abs(pos.z) > 0.75) {
+        resetReason = `Robot fell outside competition table boundary (x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}, z=${pos.z.toFixed(2)})`;
+      } else if (linearSpeed > 5.0) {
+        resetReason = `Safety limit: Runaway linear velocity exceeded maximum allowable speed (${linearSpeed.toFixed(1)} m/s > 5.0 m/s)`;
+      } else if (angularSpeed > 50.0) {
+        resetReason = `Safety limit: Runaway rotational velocity exceeded maximum allowable spin (${angularSpeed.toFixed(1)} rad/s > 50.0 rad/s)`;
+      }
+
+      if (resetReason) {
+        this.resetRobot();
+        if (this.onSanityReset) {
+          this.onSanityReset(resetReason);
+        }
+      }
 
       this.accumulator -= this.fixedDt;
     }

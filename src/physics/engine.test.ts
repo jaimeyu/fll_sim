@@ -35,13 +35,13 @@ describe('SimulationPhysicsEngine Integration', () => {
     motorA?.start(50);
     motorB?.start(50);
 
-    // Step physics for 1 second (60 steps)
-    for (let i = 0; i < 60; i++) {
+    // Step physics for 3 seconds (180 steps)
+    for (let i = 0; i < 180; i++) {
       engine.update(1 / 60);
     }
     const newPos = engine.robot.getPosition();
     const distanceMoved = Math.hypot(newPos.x - initialPos.x, newPos.z - initialPos.z);
-    expect(distanceMoved).toBeGreaterThan(0.02); // Moved at least 2cm
+    expect(distanceMoved).toBeGreaterThan(0.05); // Moved at least 5cm
   });
 
   it('remains perfectly still without bouncing during idle', async () => {

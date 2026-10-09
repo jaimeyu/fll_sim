@@ -7,6 +7,7 @@ export interface HudCallbacks {
   onResetRobot: () => void;
   onCameraChange: (preset: CameraViewPreset) => void;
   onImportFile: (file: File) => void;
+  onMapChange?: (mapType: 'grid' | 'procedural') => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -82,9 +83,10 @@ sensor_d = ColorSensor('D') # Right
 print("Driving toward line at 30% speed...")
 motors.start(0, 30)
 
-# Drive until either sensor detects the black line
-while sensor_c.get_reflected_light() > 30 and sensor_d.get_reflected_light() > 30:
+step_count = 0
+while sensor_c.get_reflected_light() > 30 and sensor_d.get_reflected_light() > 30 and step_count < 250:
     wait_for_seconds(0.01)
+    step_count += 1
 
 motors.stop()
 print("Approached line! Squaring robot perpendicular...")
@@ -165,6 +167,13 @@ export class SimulatorHud {
         </div>
 
         <div class="hud-top-right">
+          <div class="map-select-container">
+            <label for="map-select" class="hud-label-inline">🗺️ Mat:</label>
+            <select id="map-select" class="hud-select hud-select-sm">
+              <option value="grid" selected>Official Grid Mat</option>
+              <option value="procedural">Procedural FLL Mat</option>
+            </select>
+          </div>
           <label class="btn btn-sm btn-secondary file-upload-btn">
             📂 Import Studio .io / .ldr
             <input type="file" id="cad-file-input" accept=".io,.ldr,.mpd" style="display: none;">
@@ -279,6 +288,16 @@ export class SimulatorHud {
         this.logConsole(`Loaded ${selected.title}`);
       }
     });
+
+    // Competition Mat dropdown change
+    const mapSelect = this.rootElement.querySelector('#map-select') as HTMLSelectElement | null;
+    if (mapSelect) {
+      mapSelect.addEventListener('change', () => {
+        const val = mapSelect.value as 'grid' | 'procedural';
+        this.callbacks.onMapChange?.(val);
+        this.logConsole(`Switched competition mat to: ${mapSelect.options[mapSelect.selectedIndex].text}`);
+      });
+    }
 
     // Run button
     this.runBtn.addEventListener('click', () => {

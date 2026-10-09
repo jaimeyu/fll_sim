@@ -33,6 +33,14 @@ async function bootstrapSimulator() {
   let api = new VirtualSpikeApi(engine, sensors);
   let runner = new PythonScriptRunner(api);
 
+  // Setup automatic safety sanity recovery handler
+  engine.onSanityReset = (reason: string) => {
+    runner.abort();
+    sensors.resetYaw();
+    hud.setExecutionState('ERROR');
+    hud.logConsole(`⚠️ [Safety Sanity System] Robot reset to Launch Area: ${reason}`);
+  };
+
   // 6. Initialize Simulator HUD & Controls
   const hud = new SimulatorHud(document.body, {
     onRunScript: async (code: string) => {
@@ -58,6 +66,11 @@ async function bootstrapSimulator() {
     },
     onCameraChange: (preset) => {
       viewport.setCameraPreset(preset);
+    },
+    onMapChange: async (mapType) => {
+      hud.logConsole(`Loading map "${mapType}"...`);
+      await viewport.matTexture.loadMap(mapType);
+      hud.logConsole(`Map updated.`);
     },
     onImportFile: async (file: File) => {
       hud.logConsole(`Loading model "${file.name}"...`);

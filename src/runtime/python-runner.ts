@@ -37,7 +37,25 @@ export class PythonScriptRunner {
 
       // Calculate current indentation
       const indent = rawLine.search(/\S|$/);
-      const line = rawLine.trim();
+      let line = rawLine.trim();
+
+      // Strip comments (respecting string literals)
+      let inQuote: string | null = null;
+      let commentIdx = -1;
+      for (let c = 0; c < line.length; c++) {
+        const char = line[c];
+        if ((char === '"' || char === "'") && (c === 0 || line[c - 1] !== '\\')) {
+          if (!inQuote) inQuote = char;
+          else if (inQuote === char) inQuote = null;
+        } else if (char === '#' && !inQuote) {
+          commentIdx = c;
+          break;
+        }
+      }
+      if (commentIdx !== -1) {
+        line = line.substring(0, commentIdx).trimEnd();
+      }
+      if (!line) continue;
 
       // Handle closing braces when indent decreases
       while (indentStack.length > 1 && indent < indentStack[indentStack.length - 1]) {
@@ -106,6 +124,22 @@ export class PythonScriptRunner {
         continue;
       }
 
+      // Convert Python ternary: var = val1 if cond else val2
+      const ternaryMatch = transformed.match(/^([a-zA-Z0-9_]+)\s*=\s*(.*?)\s+if\s+(.*?)\s+else\s+(.*)$/);
+      if (ternaryMatch) {
+        const varName = ternaryMatch[1];
+        const valTrue = ternaryMatch[2].trim();
+        let cond = ternaryMatch[3].trim().replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
+        const valFalse = ternaryMatch[4].trim();
+        transformed = `${varName} = (${cond}) ? (${valTrue}) : (${valFalse})`;
+      }
+
+      // Convert Python boolean & null literals
+      transformed = transformed
+        .replace(/\bTrue\b/g, 'true')
+        .replace(/\bFalse\b/g, 'false')
+        .replace(/\bNone\b/g, 'null');
+
       // Auto-await asynchronous SPIKE methods
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move\(/g, 'await $1.move(');
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move_tank\(/g, 'await $1.move_tank(');
@@ -157,9 +191,10 @@ export class PythonScriptRunner {
       await new Promise((r) => setTimeout(r, 10)); // Cooperative yield to UI
     };
 
-    const consoleLog = (msg: any) => {
-      if (onLog) onLog(String(msg));
-      console.log(`[Robot Python]:`, msg);
+    const consoleLog = (...args: any[]) => {
+      const msg = args.map((a) => (typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a))).join(' ');
+      if (onLog) onLog(msg);
+      console.log(`[Robot Python]:`, ...args);
     };
 
     const jsCode = PythonScriptRunner.transpilePythonToJs(pyCode);

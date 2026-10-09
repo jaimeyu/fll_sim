@@ -80,7 +80,7 @@ describe('Rapier Physics Engine', () => {
     world.free();
   });
 
-  it('tests RobotPhysicsBody driving on competition floor', async () => {
+  it('tests RobotPhysicsBody driving on competition floor with joint motor', async () => {
     await RAPIER.init();
     const { getFllAdvanceDrivingBaseSpec } = await import('../cad/models/advance-driving-base');
     const { RobotPhysicsBody } = await import('./robot-body');
@@ -95,7 +95,6 @@ describe('Rapier Physics Engine', () => {
 
     // Settle first
     for (let i = 0; i < 30; i++) {
-      robot.updateMotors(1 / 60);
       world.step();
     }
 
