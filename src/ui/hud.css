@@ -644,6 +644,32 @@ body, html {
   text-align: center;
 }
 
+.drawer-preset-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(30, 41, 59, 0.45);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.drawer-preset-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.drawer-preset-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.drawer-preset-controls select {
+  flex: 1;
+}
+
 .drawer-content {
   padding: 12px 16px;
   overflow-y: auto;

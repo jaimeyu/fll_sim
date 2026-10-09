@@ -375,5 +375,86 @@ describe('FLL Mission Elements Physics Integration', () => {
       expect(manager.getAllElements().length).toBe(3);
       expect(manager.getElement('test_gate')).toBeUndefined();
     });
+
+    it('renders authentic LEGO brick meshes and normalizes vertical ground elevation', async () => {
+      const { CustomImportedMissionElement } = await import('./custom-imported-element');
+      const mockSpecWithParts = {
+        name: 'M03 Flip Boulder',
+        clusters: [
+          {
+            clusterId: 'base_frame',
+            name: 'Base Frame',
+            isRootChassis: true,
+            partIds: ['p1', 'p2'],
+            totalMassKg: 0.35,
+            parts: [
+              {
+                id: 'p1',
+                partNumber: '3020', // 2x4 Plate
+                position: [0, -16, 0] as [number, number, number], // -16mm below origin in model
+                rotation: [0, 0, 0, 1] as [number, number, number, number],
+                role: 'GENERIC_RIGID' as const,
+                colorHex: 0xc91a09, // Red
+              },
+              {
+                id: 'p2',
+                partNumber: '32524', // 7L Technic beam
+                position: [0, 0, 0] as [number, number, number],
+                rotation: [0, 0, 0, 1] as [number, number, number, number],
+                role: 'STRUCTURAL_BEAM' as const,
+                colorHex: 0x0055bf, // Blue
+              },
+            ],
+            colliders: [
+              {
+                shape: 'box' as const,
+                halfExtents: [0.03, 0.015, 0.03] as [number, number, number],
+                offset: [0, -0.008, 0] as [number, number, number],
+                rotation: [0, 0, 0, 1] as [number, number, number, number],
+                friction: 0.8,
+                restitution: 0.0,
+              },
+            ],
+          },
+        ],
+        joints: [],
+        sensors: [],
+      };
+
+      const customElem = new CustomImportedMissionElement(mockSpecWithParts, {
+        id: 'detailed_m3',
+        name: 'M03 Test',
+      });
+      customElem.init(world, { x: 0.1, y: 0.002, z: -0.2 });
+
+      // Visuals should contain real LEGO pieces (not coarse collider box)
+      expect(customElem.rootGroup.children.length).toBe(1);
+      const clusterGroup = customElem.rootGroup.children[0] as THREE.Group;
+      // clusterGroup should have the 2 detailed parts
+      expect(clusterGroup.children.length).toBe(2);
+
+      // Verify ground correction: lowest part is at -16mm (-0.016m)
+      // groundCorrectionY should be +0.016m so the lowest part sits exactly at y = 0.002m
+      // @ts-ignore
+      expect(customElem['groundCorrectionY']).toBeCloseTo(0.016, 3);
+    });
+
+    it('applies mission presets (starter, single missions, clear)', async () => {
+      const scene = new THREE.Scene();
+      const manager = new MissionManager();
+      manager.init(world, scene);
+
+      // Apply starter preset (M01, M02, M03)
+      const starterIds = await manager.applyMissionPreset('starter');
+      expect(starterIds).toEqual(['M01', 'M02', 'M03']);
+
+      // Apply single mission preset
+      const m1Ids = await manager.applyMissionPreset('m1_only');
+      expect(m1Ids).toEqual(['M01']);
+
+      // Apply clear preset
+      const clearIds = await manager.applyMissionPreset('clear');
+      expect(clearIds).toEqual([]);
+    });
   });
 });

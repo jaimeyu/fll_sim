@@ -9,6 +9,8 @@ import { LDrawImporter } from './cad/ldraw-importer';
 import { MissionManager } from './missions/mission-manager';
 import { SandboxInteractionTool } from './sandbox/interaction-tool';
 import { CustomImportedMissionElement } from './missions/custom-imported-element';
+import { CadModelInspector } from './ui/cad-inspector';
+import './ui/cad-inspector.css';
 
 async function bootstrapSimulator() {
   const viewportContainer = document.getElementById('viewport-container');
@@ -230,6 +232,16 @@ async function bootstrapSimulator() {
         hud.logConsole(`✅ Season mission ${id} ${enable ? 'loaded onto mat' : 'unloaded'}.`);
       } catch (err: any) {
         hud.logConsole(`Failed to toggle season mission ${id}: ${err.message || err}`);
+      }
+    },
+    onApplyMissionPreset: async (presetKey) => {
+      hud.logConsole(`Applying mission preset "${presetKey}"...`);
+      try {
+        const loadedIds = await missionManager.applyMissionPreset(presetKey);
+        syncHudMissionElements();
+        hud.logConsole(`✅ Applied preset "${presetKey}": ${loadedIds.length > 0 ? loadedIds.join(', ') : 'None (cleared)'} active on mat.`);
+      } catch (err: any) {
+        hud.logConsole(`Failed to apply mission preset: ${err.message || err}`);
       }
     },
     onModeChange: (mode) => {

@@ -28,6 +28,8 @@ export interface PlacedPart {
   position: [number, number, number]; // [x, y, z] in mm or LDU
   rotation: [number, number, number, number]; // Quaternion [x, y, z, w]
   role: PartRole;
+  colorHex?: number;
+  submodel?: string;
   parentClusterId?: string;
   meta?: Record<string, unknown>;
 }
@@ -46,6 +48,7 @@ export interface ClusteredCompoundBody {
   isRootChassis: boolean;
   partIds: string[];
   totalMassKg: number;
+  parts?: PlacedPart[];
   // Bounding or compound colliders
   colliders: Array<{
     shape: 'box' | 'cylinder' | 'sphere';
@@ -77,6 +80,7 @@ export interface RobotAssemblySpec {
   name: string;
   clusters: ClusteredCompoundBody[];
   joints: ExtractedJoint[];
+  parts?: PlacedPart[];
   sensors: Array<{
     id: string;
     type: 'COLOR' | 'DISTANCE' | 'GYRO';

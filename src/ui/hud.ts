@@ -27,6 +27,8 @@ export interface HudCallbacks {
   onElementDelete?: (id: string) => void;
   onElementFocus?: (id: string) => void;
   onToggleSeasonMission?: (id: string, enable: boolean) => void;
+  onApplyMissionPreset?: (presetKey: string) => void;
+  onOpenInspector?: (missionId?: string) => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -246,6 +248,7 @@ export class SimulatorHud {
             </select>
           </div>
           <button class="btn btn-sm btn-outline" id="btn-topbar-reset-elements" title="Reset all mission elements back to starting idle position">🔄 Reset Elements</button>
+          <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
           <button class="btn btn-sm btn-primary" id="btn-toggle-asset-drawer" title="Open Mission Element Asset Drawer & Library">📦 Mission Assets <span class="badge-count" id="asset-count-badge">3</span></button>
           <label class="btn btn-sm btn-secondary file-upload-btn" title="Import robot CAD model (.io / .ldr)">
             🤖 Import Robot (.io)
@@ -269,6 +272,22 @@ export class SimulatorHud {
             ➕ Import Mission Model (.io / .ldr)
             <input type="file" id="mission-cad-file-input" accept=".io,.ldr,.mpd,.dat" style="display: none;">
           </label>
+          <div class="drawer-preset-container">
+            <label for="select-mission-preset" class="drawer-preset-label">🎯 Mission Preset:</label>
+            <div class="drawer-preset-controls">
+              <select id="select-mission-preset" class="hud-select hud-select-sm flex-1">
+                <option value="" disabled selected>Select preset...</option>
+                <option value="starter">⚡ Starter Test (Missions 1, 2, 3)</option>
+                <option value="m1_only">🎯 Mission 1 Only (Drone Survey)</option>
+                <option value="m2_only">🎯 Mission 2 Only (Exploding Seeds)</option>
+                <option value="m3_only">🎯 Mission 3 Only (Flip the Rock)</option>
+                <option value="north">🧭 North Zone (Missions 1 - 4)</option>
+                <option value="all">🌟 All 13 Official Missions</option>
+                <option value="clear">🧹 Clear All Models</option>
+              </select>
+              <button class="btn btn-sm btn-secondary" id="btn-apply-mission-preset" title="Load selected mission preset">Load</button>
+            </div>
+          </div>
           <button class="btn btn-sm btn-outline w-100" id="btn-drawer-reset-all">🔄 Reset All Elements to Idle</button>
         </div>
 
@@ -622,6 +641,12 @@ export class SimulatorHud {
       this.toggleAssetDrawer(false);
     });
 
+    // Open CAD Model Inspector
+    const btnTopbarInspector = this.rootElement.querySelector('#btn-topbar-inspector');
+    btnTopbarInspector?.addEventListener('click', () => {
+      this.callbacks.onOpenInspector?.('M01');
+    });
+
     // Mission Model CAD file importer (.io / .ldr / .dat)
     this.missionCadFileInput?.addEventListener('change', () => {
       if (this.missionCadFileInput.files && this.missionCadFileInput.files[0]) {
@@ -629,6 +654,20 @@ export class SimulatorHud {
         this.missionCadFileInput.value = '';
       }
     });
+
+    // Mission Preset Dropdown
+    const selectPreset = this.rootElement.querySelector('#select-mission-preset') as HTMLSelectElement | null;
+    const btnApplyPreset = this.rootElement.querySelector('#btn-apply-mission-preset') as HTMLButtonElement | null;
+    const triggerPreset = () => {
+      if (selectPreset && selectPreset.value) {
+        const val = selectPreset.value;
+        const text = selectPreset.options[selectPreset.selectedIndex].text;
+        this.callbacks.onApplyMissionPreset?.(val);
+        this.logConsole(`Loading mission preset: ${text}...`);
+      }
+    };
+    btnApplyPreset?.addEventListener('click', triggerPreset);
+    selectPreset?.addEventListener('change', triggerPreset);
 
     // Mode dropdown change
     this.modeSelect.addEventListener('change', () => {
@@ -841,6 +880,9 @@ export class SimulatorHud {
               <button class="btn btn-xs btn-outline" data-action="focus" data-id="${elem.id}">
                 🔍 Focus
               </button>
+              <button class="btn btn-xs btn-outline" data-action="inspect" data-id="${elem.id}" title="Inspect 3D CAD model & diagnostics">
+                🔬 Inspect
+              </button>
               ${elem.isCustom ? `<button class="btn btn-xs btn-outline text-danger" data-action="delete" data-id="${elem.id}" title="Delete element">🗑️</button>` : ''}
             </div>
             ${
@@ -892,6 +934,7 @@ export class SimulatorHud {
                 <div class="season-model-desc">${spec.book} • ${spec.description.slice(0, 48)}...</div>
               </div>
               <div class="season-model-action">
+                <button class="btn btn-xs btn-outline" data-action="inspect-season" data-id="${spec.id}" title="Inspect 3D CAD model & official render">🔬 Inspect</button>
                 ${
                   isLoading
                     ? `<button class="btn btn-xs btn-outline" disabled>⏳ Loading...</button>`
@@ -942,6 +985,20 @@ export class SimulatorHud {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id')!;
         this.callbacks.onElementFocus?.(id);
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="inspect"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onOpenInspector?.(id);
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="inspect-season"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onOpenInspector?.(id);
       });
     });
 

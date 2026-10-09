@@ -184,19 +184,25 @@ export class CadClusteringPreSolver {
         });
       }
 
+      const clusterParts: PlacedPart[] = componentPartIds
+        .map((id) => partMap.get(id))
+        .filter((p): p is PlacedPart => p !== undefined);
+
       clusters.push({
         clusterId,
         name: clusterName,
         isRootChassis: isRoot,
         partIds: componentPartIds,
+        parts: clusterParts,
         totalMassKg: massKg,
         colliders,
       });
     }
 
-    // Ensure root chassis exists
+    // Ensure root chassis exists (pick the largest rigid assembly as root chassis/base)
     if (!clusters.some((c) => c.isRootChassis)) {
       if (clusters.length > 0) {
+        clusters.sort((a, b) => b.partIds.length - a.partIds.length);
         clusters[0].isRootChassis = true;
         clusters[0].clusterId = 'chassis_root';
       }

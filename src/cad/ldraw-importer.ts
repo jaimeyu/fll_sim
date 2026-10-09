@@ -3,6 +3,7 @@ import { PlacedPart, ConnectionLink } from './types';
 import { lookupPartRole } from './part-catalog';
 import { CadClusteringPreSolver } from './clustering-solver';
 import { RobotAssemblySpec } from './types';
+import { LDRAW_COLOR_MAP } from '../view/lego-visuals';
 
 export interface ParsedLDrawModel {
   name: string;
@@ -93,36 +94,28 @@ export class LDrawImporter {
    */
   public static parseLDrawText(text: string, modelName = 'Imported LDraw Robot'): ParsedLDrawModel {
     // 1. Index all submodels in the document (0 FILE <name>)
+    const cleanText = text.replace(/^\uFEFF/, '').trim();
     const submodels = new Map<string, string[]>();
-    const fileChunks = text.split(/\r?\n0\s+FILE\s+/i);
+    const fileChunks = cleanText.split(/(?:^|\r?\n)0\s+FILE\s+/i).filter(Boolean);
     let primaryEntryName = '';
 
-    if (fileChunks.length > 1 || text.trim().startsWith('0 FILE')) {
+    if (fileChunks.length > 0 && cleanText.toUpperCase().includes('0 FILE')) {
       for (let i = 0; i < fileChunks.length; i++) {
         const chunk = fileChunks[i];
         const lines = chunk.split(/\r?\n/);
         if (!lines.length) continue;
 
-        let name = '';
-        let startIdx = 0;
-        if (i === 0 && !chunk.toUpperCase().startsWith('0 FILE')) {
-          name = 'main';
-          startIdx = 0;
-        } else {
-          name = lines[0].trim().toLowerCase();
-          startIdx = 1;
-        }
-
+        const name = lines[0].trim().toLowerCase();
         if (!name) continue;
         if (!primaryEntryName) primaryEntryName = name;
 
         const normKey = name.replace(/\.(ldr|mpd|dat|io)$/, '');
-        submodels.set(normKey, lines.slice(startIdx));
-        submodels.set(name, lines.slice(startIdx));
+        submodels.set(normKey, lines.slice(1));
+        submodels.set(name, lines.slice(1));
       }
     } else {
       // Single flat file
-      const lines = text.split(/\r?\n/);
+      const lines = cleanText.split(/\r?\n/);
       submodels.set('main', lines);
       primaryEntryName = 'main';
     }
@@ -131,6 +124,8 @@ export class LDrawImporter {
     const normModelName = modelName.trim().toLowerCase().replace(/\.(ldr|mpd|io|dat)$/, '');
     if (submodels.has(normModelName)) {
       primaryEntryName = normModelName;
+    } else if (submodels.has(modelName.toLowerCase())) {
+      primaryEntryName = modelName.toLowerCase();
     } else if (!submodels.has(primaryEntryName)) {
       primaryEntryName = submodels.keys().next().value || 'main';
     }
@@ -192,6 +187,8 @@ export class LDrawImporter {
           const posY = -worldTrans[1] * 0.4; // Invert Y (LDraw is Y-down)
           const posZ = worldTrans[2] * 0.4;
 
+          const colorCode = parseInt(tokens[1], 10);
+          const colorHex = LDRAW_COLOR_MAP[colorCode] ?? 0x94a3b8;
           const role = lookupPartRole(cleanPartNumber);
           const partId = `ldraw_${partIndex++}_${cleanPartNumber}`;
           const rotation = matrixToQuaternion(worldMat);
@@ -202,6 +199,8 @@ export class LDrawImporter {
             position: [posX, posY, posZ],
             rotation,
             role,
+            colorHex,
+            submodel: subName,
           });
         }
       }
@@ -210,7 +209,25 @@ export class LDrawImporter {
     const identityMat: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
     expandSubmodel(primaryEntryName, identityMat, [0, 0, 0], 0, new Set([primaryEntryName]));
 
-    // 3. Connect parts based on proximity or mechanical role
+    // 3. Connect parts:
+    // A. Parts belonging to the same Studio SubModel are rigidly linked (subassemblies stay together)
+    const bySubmodel = new Map<string, string[]>();
+    for (const p of parts) {
+      const sub = p.submodel || 'main';
+      if (!bySubmodel.has(sub)) bySubmodel.set(sub, []);
+      bySubmodel.get(sub)!.push(p.id);
+    }
+    for (const partIds of bySubmodel.values()) {
+      for (let k = 0; k < partIds.length - 1; k++) {
+        links.push({
+          fromPartId: partIds[k],
+          toPartId: partIds[k + 1],
+          connectionType: 'RIGID_PIN',
+        });
+      }
+    }
+
+    // B. Proximity connections across submodels (within 32mm / 4 studs)
     for (let i = 0; i < parts.length; i++) {
       for (let j = i + 1; j < parts.length; j++) {
         const p1 = parts[i];
@@ -220,8 +237,7 @@ export class LDrawImporter {
         const dz = p1.position[2] - p2.position[2];
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        // Within 16mm (2 studs pitch), form physical link
-        if (dist <= 16.0) {
+        if (dist <= 32.0) {
           if (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM') {
             links.push({
               fromPartId: p1.role === 'WHEEL_RIM' ? p2.id : p1.id,

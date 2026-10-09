@@ -150,6 +150,79 @@ export class MissionManager {
   }
 
   /**
+   * Applies a mission subset preset, loading desired missions and stowing others.
+   * Special presets:
+   *  - 'starter': Loads Missions 1, 2, and 3
+   *  - 'm1_only': Loads Mission 1
+   *  - 'm2_only': Loads Mission 2
+   *  - 'm3_only': Loads Mission 3
+   *  - 'north': Loads Missions 1, 2, 3, 4
+   *  - 'all': Loads all 13 official missions
+   *  - 'clear': Unloads/stows all official missions
+   */
+  public async applyMissionPreset(presetKey: string): Promise<string[]> {
+    let targetIds: string[] = [];
+
+    switch (presetKey) {
+      case 'starter':
+        targetIds = ['M01', 'M02', 'M03'];
+        break;
+      case 'm1_only':
+        targetIds = ['M01'];
+        break;
+      case 'm2_only':
+        targetIds = ['M02'];
+        break;
+      case 'm3_only':
+        targetIds = ['M03'];
+        break;
+      case 'north':
+        targetIds = ['M01', 'M02', 'M03', 'M04'];
+        break;
+      case 'all':
+        targetIds = SEASON_MISSIONS_CONFIG.map((s) => s.id);
+        break;
+      case 'clear':
+        targetIds = [];
+        break;
+      default:
+        targetIds = ['M01', 'M02', 'M03'];
+        break;
+    }
+
+    const targetSet = new Set(targetIds);
+
+    // 1. Unload/stow any official season mission not in targetSet
+    for (const spec of SEASON_MISSIONS_CONFIG) {
+      if (!targetSet.has(spec.id)) {
+        saveStoredSeasonMissionOverride(spec.id, false);
+        if (this.elements.has(spec.id)) {
+          this.removeElement(spec.id);
+        }
+      }
+    }
+
+    // 2. Load missions in targetSet
+    for (const spec of SEASON_MISSIONS_CONFIG) {
+      if (targetSet.has(spec.id)) {
+        saveStoredSeasonMissionOverride(spec.id, true);
+        if (!this.elements.has(spec.id)) {
+          await this.loadSeasonMission(spec);
+        } else {
+          const el = this.elements.get(spec.id);
+          if (el) {
+            el.isPlacedOnField = true;
+            el.rootGroup.visible = true;
+          }
+        }
+      }
+    }
+
+    this.onMissionListChanged?.();
+    return targetIds;
+  }
+
+  /**
    * Returns current status of all 13 official season missions
    */
   public getSeasonMissionsStatus(): Array<{

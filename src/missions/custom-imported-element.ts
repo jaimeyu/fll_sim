@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { MissionElement } from './types';
 import { RobotAssemblySpec } from '../cad/types';
-import { LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
+import { LEGO_COLORS, getLegoMaterial, createLegoBrickMesh } from '../view/lego-visuals';
 
 export interface CustomElementOptions {
   id: string;
@@ -10,6 +10,7 @@ export interface CustomElementOptions {
   description?: string;
   sourceFile?: string;
   isBaseFixed?: boolean;
+  isSolidRigidMode?: boolean;
 }
 
 /**
@@ -32,6 +33,8 @@ export class CustomImportedMissionElement implements MissionElement {
   private basePos: { x: number; y: number; z: number } = { x: 0, y: 0.002, z: 0 };
   private yawDegrees: number = 0;
   private isBaseFixed: boolean;
+  private isSolidRigidMode: boolean;
+  private groundCorrectionY: number = 0;
 
   // Physics Bodies
   private bodies: Map<string, RAPIER.RigidBody> = new Map();
@@ -52,7 +55,22 @@ export class CustomImportedMissionElement implements MissionElement {
     this.description = options.description || `Imported mission model: ${options.name}`;
     this.sourceFile = options.sourceFile;
     this.isBaseFixed = options.isBaseFixed ?? true;
+    this.isSolidRigidMode = options.isSolidRigidMode ?? false;
     this.rootGroup = new THREE.Group();
+  }
+
+  public setSolidRigidMode(enabled: boolean): void {
+    if (this.isSolidRigidMode === enabled) return;
+    this.isSolidRigidMode = enabled;
+    if (this.world) {
+      this.destroy();
+      this.createPhysicsAndVisuals();
+      this.reset();
+    }
+  }
+
+  public getSpec(): RobotAssemblySpec {
+    return this.spec;
   }
 
   public init(world: RAPIER.World, basePosition: { x: number; y: number; z: number }, yawDegrees = 0): void {
@@ -69,6 +87,26 @@ export class CustomImportedMissionElement implements MissionElement {
     const halfYaw = yawRad / 2;
     const qy = Math.sin(halfYaw);
     const qw = Math.cos(halfYaw);
+
+    // Calculate vertical normalization offset so lowest part rests exactly at ground level (this.basePos.y)
+    let lowestPartY = Infinity;
+    for (const cluster of this.spec.clusters) {
+      if (cluster.parts && cluster.parts.length > 0) {
+        for (const p of cluster.parts) {
+          const py = p.position[1] / 1000;
+          if (py < lowestPartY) lowestPartY = py;
+        }
+      } else {
+        for (const col of cluster.colliders) {
+          const cy = col.offset[1];
+          const hy = col.halfExtents ? col.halfExtents[1] : 0.015;
+          const bottomY = cy - hy;
+          if (bottomY < lowestPartY) lowestPartY = bottomY;
+        }
+      }
+    }
+    this.groundCorrectionY = lowestPartY !== Infinity ? -lowestPartY : 0;
+    const initialY = this.basePos.y + this.groundCorrectionY;
 
     // Color palette cycling for imported clusters
     const clusterPalette = [
@@ -88,15 +126,20 @@ export class CustomImportedMissionElement implements MissionElement {
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
       colorIdx++;
 
+      // Check if this cluster is connected to an active joint
+      const isConnectedToJoint = this.spec.joints.some(
+        (j) => j.parentClusterId === cluster.clusterId || j.childClusterId === cluster.clusterId
+      );
+
       // Create Rapier RigidBody
       let bodyDesc: RAPIER.RigidBodyDesc;
-      if (isBase && this.isBaseFixed) {
+      if (this.isSolidRigidMode || (this.isBaseFixed && (isBase || !isConnectedToJoint))) {
         bodyDesc = RAPIER.RigidBodyDesc.fixed()
-          .setTranslation(this.basePos.x, this.basePos.y, this.basePos.z)
+          .setTranslation(this.basePos.x, initialY, this.basePos.z)
           .setRotation({ x: 0, y: qy, z: 0, w: qw });
       } else {
         bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-          .setTranslation(this.basePos.x, this.basePos.y + 0.02, this.basePos.z)
+          .setTranslation(this.basePos.x, initialY, this.basePos.z)
           .setRotation({ x: 0, y: qy, z: 0, w: qw })
           .setLinearDamping(3.0)
           .setAngularDamping(4.0)
@@ -111,27 +154,23 @@ export class CustomImportedMissionElement implements MissionElement {
       this.rootGroup.add(clusterGroup);
       this.clusterMeshes.set(cluster.clusterId, clusterGroup);
 
-      // Create colliders and visual representations
+      // Create physical colliders in Rapier
       for (const col of cluster.colliders) {
         let colDesc: RAPIER.ColliderDesc;
-        let meshGeom: THREE.BufferGeometry;
 
         if (col.shape === 'sphere') {
           const r = col.radius || 0.015;
           colDesc = RAPIER.ColliderDesc.ball(r);
-          meshGeom = new THREE.SphereGeometry(r, 16, 16);
         } else if (col.shape === 'cylinder') {
           const r = col.radius || 0.015;
           const hh = col.halfHeight || 0.02;
           colDesc = RAPIER.ColliderDesc.cylinder(hh, r);
-          meshGeom = new THREE.CylinderGeometry(r, r, hh * 2, 16);
         } else {
           // Default: Box collider
           const hx = col.halfExtents ? col.halfExtents[0] : 0.03;
           const hy = col.halfExtents ? col.halfExtents[1] : 0.015;
           const hz = col.halfExtents ? col.halfExtents[2] : 0.03;
           colDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
-          meshGeom = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
         }
 
         colDesc
@@ -139,16 +178,39 @@ export class CustomImportedMissionElement implements MissionElement {
           .setFriction(col.friction || 0.6)
           .setRestitution(col.restitution || 0.0);
         this.world.createCollider(colDesc, body);
+      }
 
-        const meshMat = getLegoMaterial(clusterColor, 0.35, 0.05);
-        const colMesh = new THREE.Mesh(meshGeom, meshMat);
-        colMesh.position.set(col.offset[0], col.offset[1], col.offset[2]);
-        colMesh.castShadow = true;
-        colMesh.receiveShadow = true;
-        clusterGroup.add(colMesh);
+      // Render authentic LEGO bricks, plates, beams, pins, axles!
+      const hasDetailedParts = cluster.parts && cluster.parts.length > 0;
+      if (hasDetailedParts) {
+        for (const part of cluster.parts!) {
+          const partColor = part.colorHex ?? clusterColor;
+          const partMesh = createLegoBrickMesh(part.partNumber, partColor, part.role);
+          partMesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
+          partMesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
+          clusterGroup.add(partMesh);
 
-        if (!isBase || !this.isBaseFixed) {
-          this.interactiveMeshes.push(colMesh);
+          if (!isBase || !this.isBaseFixed) {
+            this.interactiveMeshes.push(partMesh);
+          }
+        }
+      } else {
+        // Fallback: render collider bounding box if parts list is empty
+        for (const col of cluster.colliders) {
+          const hx = col.halfExtents ? col.halfExtents[0] : 0.03;
+          const hy = col.halfExtents ? col.halfExtents[1] : 0.015;
+          const hz = col.halfExtents ? col.halfExtents[2] : 0.03;
+          const meshGeom = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
+          const meshMat = getLegoMaterial(clusterColor, 0.35, 0.05);
+          const colMesh = new THREE.Mesh(meshGeom, meshMat);
+          colMesh.position.set(col.offset[0], col.offset[1], col.offset[2]);
+          colMesh.castShadow = true;
+          colMesh.receiveShadow = true;
+          clusterGroup.add(colMesh);
+
+          if (!isBase || !this.isBaseFixed) {
+            this.interactiveMeshes.push(colMesh);
+          }
         }
       }
     }
@@ -161,7 +223,7 @@ export class CustomImportedMissionElement implements MissionElement {
         const rapierJoint = this.world.createImpulseJoint(
           RAPIER.JointData.revolute(
             { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
-            { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
+            { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
             { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
           ),
           parentBody,
@@ -223,12 +285,10 @@ export class CustomImportedMissionElement implements MissionElement {
     const qw = Math.cos(halfYaw);
     const zeroVel = { x: 0, y: 0, z: 0 };
 
-    for (const [id, body] of this.bodies.entries()) {
-      const cluster = this.spec.clusters.find((c) => c.clusterId === id);
-      const isBase = cluster?.isRootChassis ?? false;
+    const initialY = this.basePos.y + this.groundCorrectionY;
 
-      let posY = isBase && this.isBaseFixed ? this.basePos.y : this.basePos.y + 0.02;
-      body.setTranslation({ x: this.basePos.x, y: posY, z: this.basePos.z }, true);
+    for (const body of this.bodies.values()) {
+      body.setTranslation({ x: this.basePos.x, y: initialY, z: this.basePos.z }, true);
       body.setRotation({ x: 0, y: qy, z: 0, w: qw }, true);
       body.setLinvel(zeroVel, true);
       body.setAngvel(zeroVel, true);
@@ -270,6 +330,18 @@ export class CustomImportedMissionElement implements MissionElement {
 
   public getInteractiveMeshes(): THREE.Object3D[] {
     return this.interactiveMeshes.length > 0 ? this.interactiveMeshes : [this.rootGroup];
+  }
+
+  public setSolidRigidMode(solid: boolean): void {
+    if (this.isSolidRigidMode !== solid) {
+      this.isSolidRigidMode = solid;
+      // Re-initialize physics bodies with updated anchoring
+      this.reset();
+    }
+  }
+
+  public getSolidRigidMode(): boolean {
+    return this.isSolidRigidMode;
   }
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {
