@@ -19,6 +19,15 @@ setup:
 	mise install
 	@if [ -f package.json ]; then npm install; fi
 
+dev:
+	npm run dev
+
+build:
+	npm run build
+
+test:
+	npm run test
+
 spec-status:
 	openspec status --all
 

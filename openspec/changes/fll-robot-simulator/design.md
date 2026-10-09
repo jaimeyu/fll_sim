@@ -11,13 +11,17 @@ Current FLL simulation tools suffer from two extremes: either proprietary deskto
 * Real-time 60fps WebGL rendering and 60–120Hz physics stepping on standard laptops and Chromebooks.
 * Direct ingestion of BrickLink Studio (`.io`) and LDraw (`.ldr`, `.mpd`) CAD files.
 * Intelligent pin and fastener clustering: bake 90%+ of static pins and beams into compound rigid bodies, simulating only true degrees of freedom (wheels, motor shafts, attachment arms).
-* Sandboxed SPIKE Prime Python API execution in a Web Worker synchronized with the physics loop.
+* Sandboxed SPIKE Prime Python API execution synchronized with the physics loop.
 * Off-the-shelf, open-source foundation with clean desktop-to-web migration path.
+* **Extensive Testing & Reviewability**: Automated unit, integration, and E2E test suites with zero broken tests. Clear, readable code with in-depth architectural comments and mathematical documentation.
+* **Multi-Agent Coordination Model**: Modular boundary contracts allowing specialized autonomous agents to collaborate without collision.
 
 **Non-Goals:**
 * In-simulator CAD authoring or 3D brick building (users model in Studio/LeoCAD).
 * Microscopic finite-element stress analysis of bending LEGO plastic.
 * Direct physical gear-tooth meshing (gears are modeled as kinematic constraints/gear ratios).
+
+---
 
 ## Decisions
 
@@ -47,16 +51,92 @@ Current FLL simulation tools suffer from two extremes: either proprietary deskto
      * Body 4 & 5: Motor-actuated attachment arms.
 
 ### 3. SPIKE Prime Virtual Runtime & Sandboxing
-* **Decision**: Run user scripts inside a dedicated Web Worker using a WebAssembly Python interpreter (Pyodide or MicroPython-Wasm) communicating via asynchronous message passing.
+* **Decision**: Run user scripts inside an asynchronous execution runtime exposing the standard SPIKE Prime API (`PrimeHub`, `Motor`, `MotorPair`, `ColorSensor`, `DistanceSensor`).
 * **Architecture**:
-  * `User Script (Worker)` $\rightarrow$ calls `hub.port.A.motor.run_for_degrees(360)`
-  * `RPC Message Channel` $\rightarrow$ sends `{ cmd: "motor_step", port: "A", degrees: 360, speed: 500 }`
-  * `Physics Controller (Main Thread)` $\rightarrow$ sets Rapier joint motor target velocity.
-  * `Sensor Loop` $\rightarrow$ every physics tick, sample mat texture at sensor raycast UV coordinates, update heading from chassis quaternion, and post telemetry back to the worker.
+  * `User Script` $\rightarrow$ calls `motors.move(20, 'cm')` or `color_sensor.get_reflected_light()`.
+  * `Virtual SPIKE API` $\rightarrow$ translates centimeters into motor target degrees: $\Delta \theta = \frac{d}{\pi \cdot D} \times 360^\circ$ and configures motor controllers.
+  * `Physics Controller` $\rightarrow$ sets Rapier joint motor target velocity and steps physics at 60Hz.
+  * `Sensor Loop` $\rightarrow$ samples mat texture at sensor raycast UV coordinates, updates heading from chassis quaternion, and updates live telemetry.
+  * `Cooperative Cancellation` $\rightarrow$ cooperative abort checking ensures user code can be stopped at any time without hanging the browser.
 
 ### 4. Competition Mat & Field Modeling
 * **Decision**: Model the FLL competition mat as a high-resolution 4x8 ft plane with vinyl friction properties, bounded by 4 rigid perimeter wall colliders.
 * **Color Sensor Simulation**: Use direct texture sampling at the raycast intersection point. Ambient lighting and sensor ground clearance (8–10 mm) are incorporated using an empirical Gaussian spot filter to mimic real color sensor reflection thresholds.
+
+---
+
+### 5. Architectural Quality, Code Documentation & Reviewability
+* **Strict Layer Decoupling**:
+  * `src/cad/`: Pure graph and metadata processing. Zero dependency on WebGL or physics engine. Fully runnable in test runners and headless environments.
+  * `src/physics/`: Headless Rapier3D simulation. Exposes physics state and motors; knows nothing about DOM or UI.
+  * `src/sensors/`: Geometric and color sampling bridge between physics position and field texture.
+  * `src/runtime/`: Script sandbox and SPIKE Prime virtual APIs with cooperative abort controls.
+  * `src/view/`: Three.js rendering layer; synchronizes visual node transforms to Rapier rigid bodies.
+  * `src/ui/`: Presentation layer (DOM HUD, code editor, telemetry cards, mission library).
+* **Code Documentation & Math Standard**:
+  * Every exported class, interface, and method must have comprehensive TSDoc docstrings.
+  * Coordinate transformations (LDraw coordinates $\leftrightarrow$ Three.js $\leftrightarrow$ Rapier3D) must explicitly explain axis mappings and units ($1\text{ LDU} = 0.4\text{mm}$, Three.js $= \text{meters}$).
+  * Rotations and quaternions must document Euler axis conventions ($Y$-up, $+Z$-forward, $+X$-right).
+  * Robotics formulas (wheel circumference $C = \pi D$, steering differentials, PID error formulas) must be documented in code comments to ensure student and mentor reviewability.
+
+---
+
+### 6. Rigorous Automated Test Strategy
+* **Three-Tier Test Suite**:
+  1. **Unit Tests (`*.test.ts`)**:
+     * Pre-solver clustering tests: Verify that a 130+ part assembly (including 120 pins) reduces to $\le 5$ rigid bodies with valid revolute joints.
+     * Parser tests: Verify LDraw parsing and Studio `.io` unzipping.
+     * Python transpiler tests: Verify that Python loops (`while`, `for i in range`), conditionals, and async SPIKE calls are correctly translated.
+  2. **Physics Integration Tests**:
+     * Gravity settling test: Verify robot dropped from height settles stably on the vinyl mat without jitter.
+     * Drive test: Verify that actuating motors rolls the wheels and translates the chassis across the floor.
+  3. **End-to-End Mission Verification (`src/e2e/`)**:
+     * Line-following mission: Headless simulation running a closed-loop P-controller against a simulated navigation line.
+     * Gyro-turn mission: Verifies that a 90-degree turn script stops when yaw reaches $90^\circ \pm 3^\circ$.
+* **Quality Gate**: `make test` must pass 100% of tests prior to any commit.
+
+---
+
+### 7. Multi-Agent Coordination System
+To enable efficient multi-agent collaboration, the system defines 5 specialized agent roles with strict module ownership and interface contracts:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Lead Architect & Coordinator                         │
+│       (OpenSpec verification, system integration, quality gates)       │
+└───────┬───────────────────┬───────────────────┬──────────────────┬─────┘
+        │                   │                   │                  │
+┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐ ┌───────▼─────────┐
+│ CAD / Kinematic│  │  Physics & Sim │  │  SPIKE Runtime │ │   WebGL & UI    │
+│   Specialist   │  │   Specialist   │  │  VM Specialist │ │   Specialist    │
+├────────────────┤  ├────────────────┤  ├────────────────┤ ├─────────────────┤
+│ src/cad/*      │  │ src/physics/*  │  │ src/runtime/*  │ │ src/view/*      │
+│ LDraw, Studio, │  │ Rapier3D Wasm, │  │ SPIKE API,     │ │ Three.js, HUD,  │
+│ Clustering Pre-│  │ Arena, Joints, │  │ Sensors, VM,   │ │ Mat Texture,    │
+│ solver, Graph  │  │ Motor Controls │  │ Cooperative    │ │ Telemetry, Code │
+│                │  │                │  │ Cancellation   │ │ Editor Panels   │
+└────────────────┘  └────────────────┘  └────────────────┘ └─────────────────┘
+        │                   │                   │                  │
+        └───────────────────┴───────────────────┴──────────────────┘
+                                    │
+                            ┌───────▼─────────┐
+                            │ Testing & Code  │
+                            │ Reviewer Agent  │
+                            ├─────────────────┤
+                            │ src/e2e/*,      │
+                            │ Vitest Suites,  │
+                            │ Math & TSDoc    │
+                            │ Doc Integrity   │
+                            └─────────────────┘
+```
+
+* **Interface Contracts**:
+  * CAD $\to$ Physics: Passes immutable `RobotAssemblySpec` (clusters, colliders, joints, sensors).
+  * Physics $\to$ Sensors / Runtime: Exposes `getPosition()`, `getYawDegrees()`, `motors.get(port)`.
+  * Physics $\to$ Renderer: Read-only access to rigid body translation and quaternion for frame synchronization.
+  * Runtime $\to$ UI: Emits `TelemetryState` and `ExecutionState`, accepts user script string.
+
+---
 
 ## Risks / Trade-offs
 
