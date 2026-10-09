@@ -226,7 +226,10 @@ export class GearDialMission implements MissionElement {
       const targetQuadrant = Math.round(this.currentAngle / (Math.PI / 2)) * (Math.PI / 2);
       const err = targetQuadrant - this.currentAngle;
       if (Math.abs(err) < 0.25) {
-        this.rotorBody.applyTorqueImpulse({ x: 0, y: err * 0.0008, z: 0 }, true);
+        this.rotorBody.applyTorqueImpulse({ x: 0, y: err * 0.0006 - angVel.y * 0.0012, z: 0 }, true);
+      }
+      if (Math.abs(err) < 0.02 && Math.abs(angVel.y) < 0.05) {
+        this.rotorBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
       }
     }
   }
@@ -338,6 +341,12 @@ export class GearDialMission implements MissionElement {
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
     this.rotorBody.setAngvel({ x: 0, y: diff * 12.0, z: 0 }, true);
+  }
+
+  public stopUserDrag(): void {
+    if (this.rotorBody) {
+      this.rotorBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
   }
 
   public destroy(): void {

@@ -281,6 +281,8 @@ async function bootstrapSimulator() {
         interactionTool.setPusherInitialPose({ x: -0.22, y: 0.02, z: 0.0 });
       } else if (missionManager.currentMode === 'SANDBOX_DIAL') {
         interactionTool.setPusherInitialPose({ x: 0.12, y: 0.02, z: 0.08 });
+      } else if (missionManager.currentMode === 'SANDBOX_CASCADE') {
+        interactionTool.setPusherInitialPose({ x: -0.15, y: 0.02, z: 0.15 });
       }
       if (missionManager.currentMode !== 'ARENA' && hud.isDynoModeActive()) {
         engine.resetRobot({ x: 0.30, y: 0.035, z: 0.0, yawDegrees: -90 });

@@ -63,9 +63,8 @@ export class CascadeGearDialMission implements MissionElement {
   private readonly ratioG2 = -1.5;
   private readonly ratioG3 = 1.5;
   private readonly ratioG4 = -2.0;
-
-  private currentAngle = 0;
-  private initialAngle = 0;
+  private continuousAngle = 0;
+  private lastRawAngle = 0;
 
   constructor() {
     this.rootGroup = new THREE.Group();
@@ -101,7 +100,7 @@ export class CascadeGearDialMission implements MissionElement {
 
     const rotorDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(worldAxle1X, y + 0.035, worldAxle1Z)
-      .setAngularDamping(2.8)
+      .setAngularDamping(6.0)
       .setLinearDamping(10.0)
       .lockTranslations();
     this.rotorBody = this.world.createRigidBody(rotorDesc);
@@ -122,8 +121,8 @@ export class CascadeGearDialMission implements MissionElement {
     this.world.createCollider(arm1, this.rotorBody);
     this.world.createCollider(arm2, this.rotorBody);
 
-    this.initialAngle = this.getRotationAngle();
-    this.currentAngle = this.initialAngle;
+    this.lastRawAngle = this.getRotationAngle();
+    this.continuousAngle = 0;
   }
 
   private createLegoVisuals(): void {
@@ -319,16 +318,27 @@ export class CascadeGearDialMission implements MissionElement {
       this.rotorBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
     }
 
-    // 2. Sample Angle
-    this.currentAngle = this.getRotationAngle();
+    // 2. Sample Angle with continuous unwrap tracking (no wrap-around jumps at +/- PI)
+    const raw = this.getRotationAngle();
+    let diff = raw - this.lastRawAngle;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    this.continuousAngle += diff;
+    this.lastRawAngle = raw;
 
-    // 3. LEGO Detent Resistance Torque (gentle ratchet resistance at 90 deg quadrants)
+    // 3. Authentic LEGO Multi-Gear Mechanical Friction
+    // In real LEGO assemblies, 4 meshed gears and 4 axle bushings generate significant
+    // rotational resistance. When not actively driven by a robot or user, the train
+    // arrests smoothly and comes to a complete rest rather than spinning indefinitely.
     const angVel = this.rotorBody.angvel();
-    if (Math.abs(angVel.y) < 1.5) {
-      const targetQuadrant = Math.round(this.currentAngle / (Math.PI / 2)) * (Math.PI / 2);
-      const err = targetQuadrant - this.currentAngle;
-      if (Math.abs(err) < 0.25) {
-        this.rotorBody.applyTorqueImpulse({ x: 0, y: err * 0.0008, z: 0 }, true);
+    if (Math.abs(angVel.y) > 0.0005) {
+      if (Math.abs(angVel.y) < 1.2) {
+        // Smooth exponential damping to bring spinning gears to a clean stop
+        this.rotorBody.setAngvel({ x: 0, y: angVel.y * 0.82, z: 0 }, true);
+      }
+      if (Math.abs(angVel.y) < 0.04) {
+        // Snap to dead stop when below threshold
+        this.rotorBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
       }
     }
   }
@@ -352,8 +362,8 @@ export class CascadeGearDialMission implements MissionElement {
     this.rotorMesh.position.set(rP.x, rP.y, rP.z);
     this.rotorMesh.quaternion.set(rR.x, rR.y, rR.z, rR.w);
 
-    // Delta rotation of Gear 1 from initial state
-    const deltaTheta = this.currentAngle - this.initialAngle;
+    // Continuous delta rotation of Gear 1 from initial state (smooth, never flips)
+    const deltaTheta = this.continuousAngle;
 
     // Sync all 4 cascading gears with exact mechanical gear ratios and counter-rotations
     this.gear1Mesh.rotation.y = deltaTheta;
@@ -401,8 +411,8 @@ export class CascadeGearDialMission implements MissionElement {
     this.rotorBody.setAngvel(zeroVel, true);
     this.rotorBody.setEnabledRotations(false, true, false, true);
 
-    this.initialAngle = this.getRotationAngle();
-    this.currentAngle = this.initialAngle;
+    this.lastRawAngle = this.getRotationAngle();
+    this.continuousAngle = 0;
     this.syncVisuals();
   }
 
@@ -428,16 +438,12 @@ export class CascadeGearDialMission implements MissionElement {
   }
 
   public isSolved(): boolean {
-    this.currentAngle = this.getRotationAngle();
-    let angleDeltaDeg = (Math.abs(this.currentAngle - this.initialAngle) * 180) / Math.PI;
-    if (angleDeltaDeg > 180) angleDeltaDeg = 360 - angleDeltaDeg;
+    const angleDeltaDeg = (Math.abs(this.continuousAngle) * 180) / Math.PI;
     return angleDeltaDeg >= 65; // Solved when turned past 65 degrees
   }
 
   public getScore(): number {
-    this.currentAngle = this.getRotationAngle();
-    let angleDeltaDeg = (Math.abs(this.currentAngle - this.initialAngle) * 180) / Math.PI;
-    if (angleDeltaDeg > 180) angleDeltaDeg = 360 - angleDeltaDeg;
+    const angleDeltaDeg = (Math.abs(this.continuousAngle) * 180) / Math.PI;
     return Math.min(100, Math.max(0, Math.round((angleDeltaDeg / 90) * 100)));
   }
 
@@ -454,10 +460,16 @@ export class CascadeGearDialMission implements MissionElement {
     const dx = groundTarget.x - worldAxle1X;
     const dz = groundTarget.z - worldAxle1Z;
     const targetAngle = Math.atan2(dx, dz);
-    let diff = targetAngle - this.currentAngle;
+    let diff = targetAngle - this.lastRawAngle;
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
-    this.rotorBody.setAngvel({ x: 0, y: diff * 12.0, z: 0 }, true);
+    this.rotorBody.setAngvel({ x: 0, y: diff * 8.0, z: 0 }, true);
+  }
+
+  public stopUserDrag(): void {
+    if (this.rotorBody) {
+      this.rotorBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
   }
 
   public destroy(): void {

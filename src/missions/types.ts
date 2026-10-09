@@ -84,4 +84,9 @@ export interface MissionElement {
    * Applies user mouse drag on the mechanism's interactive component
    */
   applyUserDrag?(groundTarget: THREE.Vector3): void;
+
+  /**
+   * Called when user finishes/releases mouse drag on the mechanism
+   */
+  stopUserDrag?(): void;
 }

@@ -912,6 +912,7 @@ export class Viewport3D {
         this.container.style.cursor = 'default';
       }
       if (this.draggedMissionMechanism) {
+        this.draggedMissionMechanism.stopUserDrag?.();
         this.draggedMissionMechanism = null;
         this.controls.enabled = true;
         this.container.style.cursor = 'default';
