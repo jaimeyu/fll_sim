@@ -40,6 +40,7 @@ async function bootstrapSimulator() {
   interactionTool.init(engine.world, viewport.scene);
   interactionTool.setActive(false); // Inactive until sandbox mode
   viewport.setInteractionTool(interactionTool);
+  viewport.setMissionManager(missionManager);
 
   // 6. Initialize Virtual SPIKE Prime API & Python Runner
   let api = new VirtualSpikeApi(engine, sensors);
@@ -140,13 +141,29 @@ async function bootstrapSimulator() {
     },
     onModeChange: (mode) => {
       missionManager.setMode(mode);
+      viewport.setMode(mode);
       if (mode === 'ARENA') {
         interactionTool.setActive(false);
         viewport.setCameraPreset('ISO');
+        engine.setRobotStationary(false);
+        const spawnPose = hud.getSpawnPose();
+        engine.resetRobot(spawnPose);
         hud.logConsole('Switched to Competition Arena (4x8 ft mat).');
       } else {
         interactionTool.setActive(true);
+        hud.setPusherActive(true);
+        if (mode === 'SANDBOX_RISER') {
+          interactionTool.setPusherInitialPose({ x: -0.22, y: 0.02, z: 0.0 });
+        } else if (mode === 'SANDBOX_DIAL') {
+          interactionTool.setPusherInitialPose({ x: 0.12, y: 0.02, z: 0.08 });
+        }
         viewport.focusOnElement({ x: 0, y: 0.05, z: 0 });
+        if (hud.isDynoModeActive()) {
+          engine.setRobotStationary(true);
+          engine.resetRobot({ x: 0.30, y: 0.035, z: 0.0, yawDegrees: -90 });
+        } else {
+          engine.resetRobot({ x: 0, y: -20, z: 0, yawDegrees: 0 });
+        }
         hud.logConsole(`Switched to Sandbox Mode. Mouse pusher tool active.`);
       }
     },
@@ -158,10 +175,27 @@ async function bootstrapSimulator() {
     },
     onToggleDynoMode: (active) => {
       engine.setRobotStationary(active);
+      if (missionManager.currentMode !== 'ARENA') {
+        if (active) {
+          engine.resetRobot({ x: 0.30, y: 0.035, z: 0.0, yawDegrees: -90 });
+          hud.logConsole('Robot mounted on Workbench Dyno Jig (facing mechanism, pinned in place).');
+        } else {
+          engine.resetRobot({ x: 0, y: -20, z: 0, yawDegrees: 0 });
+          hud.logConsole('Robot parked off-stage (workbench cleared).');
+        }
+      }
     },
     onResetMission: () => {
       missionManager.resetCurrent();
       interactionTool.resetAll();
+      if (missionManager.currentMode === 'SANDBOX_RISER') {
+        interactionTool.setPusherInitialPose({ x: -0.22, y: 0.02, z: 0.0 });
+      } else if (missionManager.currentMode === 'SANDBOX_DIAL') {
+        interactionTool.setPusherInitialPose({ x: 0.12, y: 0.02, z: 0.08 });
+      }
+      if (missionManager.currentMode !== 'ARENA' && hud.isDynoModeActive()) {
+        engine.resetRobot({ x: 0.30, y: 0.035, z: 0.0, yawDegrees: -90 });
+      }
     },
   });
 

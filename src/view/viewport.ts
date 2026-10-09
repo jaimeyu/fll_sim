@@ -28,9 +28,14 @@ export class Viewport3D {
   private dropReticle!: THREE.Group;
   private robotVisualRoot: THREE.Object3D | null = null;
 
-  // Sandbox Mode Mouse Tool
+  // Sandbox Mode Mouse Tool & Workbench
   private interactionTool: any = null;
   private isDraggingTool = false;
+  private workbenchMesh!: THREE.Group;
+  private workbenchSpotlight!: THREE.SpotLight;
+  private missionManager: any = null;
+  private draggedBlock: any = null;
+  private draggedMissionElement: any = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -65,9 +70,10 @@ export class Viewport3D {
     // 5. Lighting
     this.setupLighting();
 
-    // 6. 4x8 ft Competition Table Arena
+    // 6. 4x8 ft Competition Table Arena & Dedicated Sandbox Workbench
     this.matTexture = new CompetitionMatTexture();
     this.buildTableArena();
+    this.buildWorkbench();
 
     // 7. Interactive Drag-and-Drop Placement Support
     this.createDropReticle();
@@ -191,6 +197,101 @@ export class Viewport3D {
     this.scene.add(this.tableMesh);
   }
 
+  private buildWorkbench(): void {
+    this.workbenchMesh = new THREE.Group();
+    this.workbenchMesh.visible = false; // Initially hidden in ARENA mode
+
+    // 1. Workbench Table Top: 1.20m x 1.20m, 0.04m thick
+    // Placed at Y = -0.018m so top surface is at Y = 0.002m
+    const topGeom = new THREE.BoxGeometry(1.20, 0.04, 1.20);
+    const topMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b, // Dark slate laboratory finish
+      roughness: 0.45,
+      metalness: 0.15,
+    });
+    const topMesh = new THREE.Mesh(topGeom, topMat);
+    topMesh.position.set(0, -0.018, 0);
+    topMesh.receiveShadow = true;
+    this.workbenchMesh.add(topMesh);
+
+    // 2. High-precision engineering calibration grid on top
+    const gridHelper = new THREE.GridHelper(1.10, 22, 0x38bdf8, 0x334155);
+    gridHelper.position.set(0, 0.0025, 0);
+    this.workbenchMesh.add(gridHelper);
+
+    // 3. Warm Walnut Wood Chamfered Trim
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: 0x854d0e, // Rich walnut wood
+      roughness: 0.35,
+    });
+    const trimThick = 0.025;
+    const trimH = 0.045;
+    const trimL = 1.20 + trimThick * 2;
+
+    const trimN = new THREE.Mesh(new THREE.BoxGeometry(trimL, trimH, trimThick), trimMat);
+    trimN.position.set(0, -0.018, 0.60 + trimThick / 2);
+    trimN.castShadow = true;
+    this.workbenchMesh.add(trimN);
+
+    const trimS = new THREE.Mesh(new THREE.BoxGeometry(trimL, trimH, trimThick), trimMat);
+    trimS.position.set(0, -0.018, -0.60 - trimThick / 2);
+    trimS.castShadow = true;
+    this.workbenchMesh.add(trimS);
+
+    const trimE = new THREE.Mesh(new THREE.BoxGeometry(trimThick, trimH, 1.20), trimMat);
+    trimE.position.set(0.60 + trimThick / 2, -0.018, 0);
+    trimE.castShadow = true;
+    this.workbenchMesh.add(trimE);
+
+    const trimW = new THREE.Mesh(new THREE.BoxGeometry(trimThick, trimH, 1.20), trimMat);
+    trimW.position.set(-0.60 - trimThick / 2, -0.018, 0);
+    trimW.castShadow = true;
+    this.workbenchMesh.add(trimW);
+
+    // 4. Heavy Steel Legs Underneath
+    const legGeom = new THREE.CylinderGeometry(0.028, 0.028, 0.75, 16);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.8 });
+    const legPositions = [
+      [-0.52, 0.52],
+      [0.52, 0.52],
+      [-0.52, -0.52],
+      [0.52, -0.52],
+    ];
+    for (const [lx, lz] of legPositions) {
+      const leg = new THREE.Mesh(legGeom, legMat);
+      leg.position.set(lx, -0.40, lz);
+      this.workbenchMesh.add(leg);
+    }
+
+    this.scene.add(this.workbenchMesh);
+
+    // 5. Overhead Workbench Inspection SpotLight
+    this.workbenchSpotlight = new THREE.SpotLight(0xfff7ed, 2.5);
+    this.workbenchSpotlight.position.set(0, 1.4, 0.2);
+    this.workbenchSpotlight.target.position.set(0, 0.04, 0);
+    this.workbenchSpotlight.angle = Math.PI / 3.5;
+    this.workbenchSpotlight.penumbra = 0.4;
+    this.workbenchSpotlight.castShadow = true;
+    this.workbenchSpotlight.shadow.mapSize.width = 1024;
+    this.workbenchSpotlight.shadow.mapSize.height = 1024;
+    this.workbenchSpotlight.shadow.bias = -0.0005;
+    this.workbenchSpotlight.visible = false;
+    this.scene.add(this.workbenchSpotlight);
+    this.scene.add(this.workbenchSpotlight.target);
+  }
+
+  public setMode(mode: string): void {
+    if (mode === 'ARENA') {
+      this.tableMesh.visible = true;
+      this.workbenchMesh.visible = false;
+      this.workbenchSpotlight.visible = false;
+    } else {
+      this.tableMesh.visible = false;
+      this.workbenchMesh.visible = true;
+      this.workbenchSpotlight.visible = true;
+    }
+  }
+
   public setCameraPreset(preset: CameraViewPreset): void {
     this.currentView = preset;
     if (preset === 'ISO') {
@@ -306,6 +407,10 @@ export class Viewport3D {
     this.interactionTool = tool;
   }
 
+  public setMissionManager(manager: any): void {
+    this.missionManager = manager;
+  }
+
   public focusOnElement(pos: { x: number; y: number; z: number }): void {
     this.currentView = 'ISO';
     this.camera.position.set(pos.x, pos.y + 0.32, pos.z + 0.38);
@@ -340,6 +445,51 @@ export class Viewport3D {
       return this.raycaster.intersectObject(mesh, true).length > 0;
     };
 
+    const getSpawnedBlockHit = (coords: { x: number; y: number }): any => {
+      if (!this.interactionTool || !this.interactionTool.isActive) return null;
+      const blocks = this.interactionTool.getSpawnedBlocks ? this.interactionTool.getSpawnedBlocks() : [];
+      if (!blocks || blocks.length === 0) return null;
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const meshes = blocks.map((b: any) => b.mesh);
+      const hits = this.raycaster.intersectObjects(meshes, true);
+      if (hits.length > 0) {
+        const hitMesh = hits[0].object;
+        for (const item of blocks) {
+          if (item.mesh === hitMesh || item.mesh.getObjectById(hitMesh.id)) {
+            return item;
+          }
+        }
+      }
+      return null;
+    };
+
+    const getMissionElementHit = (coords: { x: number; y: number }): any => {
+      if (!this.missionManager) return null;
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const candidates: Array<{ element: any; mesh: THREE.Object3D }> = [];
+      for (const elem of this.missionManager.elements.values()) {
+        if (!elem.rootGroup.visible) continue;
+        const interactive = elem.getInteractiveMeshes ? elem.getInteractiveMeshes() : [];
+        for (const mesh of interactive) {
+          candidates.push({ element: elem, mesh });
+        }
+      }
+      if (candidates.length === 0) return null;
+      const meshes = candidates.map(c => c.mesh);
+      const hits = this.raycaster.intersectObjects(meshes, true);
+      if (hits.length > 0) {
+        const hitMesh = hits[0].object;
+        for (const cand of candidates) {
+          if (cand.mesh === hitMesh || cand.mesh.getObjectById(hitMesh.id)) {
+            return cand.element;
+          }
+        }
+      }
+      return null;
+    };
+
     const isRobotHit = (coords: { x: number; y: number }): boolean => {
       this.mouse.set(coords.x, coords.y);
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -361,7 +511,7 @@ export class Viewport3D {
       if (e.button !== 0) return;
       const coords = getPointerCoords(e);
 
-      // Check if clicking sandbox mouse pusher tool
+      // 1. Check if clicking sandbox mouse pusher tool
       if (isPusherHit(coords)) {
         this.isDraggingTool = true;
         this.controls.enabled = false;
@@ -371,7 +521,33 @@ export class Viewport3D {
         return;
       }
 
-      // Check if clicking robot
+      // 2. Check if clicking spawned LEGO test block
+      const blockHit = getSpawnedBlockHit(coords);
+      if (blockHit) {
+        this.draggedBlock = blockHit;
+        this.controls.enabled = false;
+        this.container.style.cursor = 'grabbing';
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+
+      // 3. Check if clicking interactive mission mechanism element (slider, rotor)
+      const missionHit = getMissionElementHit(coords);
+      if (missionHit) {
+        this.draggedMissionElement = missionHit;
+        this.controls.enabled = false;
+        this.container.style.cursor = 'grabbing';
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          this.draggedMissionElement.applyUserDrag?.(groundHit);
+        }
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+
+      // 4. Check if clicking robot
       if (isRobotHit(coords)) {
         this.isDragging = true;
         this.controls.enabled = false;
@@ -418,6 +594,16 @@ export class Viewport3D {
         if (groundHit) {
           this.interactionTool?.movePusherTo(groundHit.x, groundHit.z);
         }
+      } else if (this.draggedBlock) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          this.interactionTool?.dragBlock(this.draggedBlock, groundHit.x, groundHit.z);
+        }
+      } else if (this.draggedMissionElement) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          this.draggedMissionElement.applyUserDrag?.(groundHit);
+        }
       } else if (this.isDragging) {
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
@@ -427,8 +613,13 @@ export class Viewport3D {
           this.onRobotDragMove?.(targetX, targetZ);
         }
       } else {
-        // Hover indicator over pusher tool or robot
-        if (isPusherHit(coords) || isRobotHit(coords)) {
+        // Hover indicator over draggable items
+        if (
+          isPusherHit(coords) ||
+          getSpawnedBlockHit(coords) ||
+          getMissionElementHit(coords) ||
+          isRobotHit(coords)
+        ) {
           this.container.style.cursor = 'grab';
         } else {
           this.container.style.cursor = 'default';
@@ -439,6 +630,16 @@ export class Viewport3D {
     const finishDrag = () => {
       if (this.isDraggingTool) {
         this.isDraggingTool = false;
+        this.controls.enabled = true;
+        this.container.style.cursor = 'default';
+      }
+      if (this.draggedBlock) {
+        this.draggedBlock = null;
+        this.controls.enabled = true;
+        this.container.style.cursor = 'default';
+      }
+      if (this.draggedMissionElement) {
+        this.draggedMissionElement = null;
         this.controls.enabled = true;
         this.container.style.cursor = 'default';
       }

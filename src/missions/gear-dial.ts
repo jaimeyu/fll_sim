@@ -189,6 +189,22 @@ export class GearDialMission implements MissionElement {
     return Math.min(100, Math.max(0, Math.round((angleDeltaDeg / 90) * 100)));
   }
 
+  public getInteractiveMeshes(): THREE.Object3D[] {
+    return this.rotorMesh ? [this.rotorMesh] : [];
+  }
+
+  public applyUserDrag(groundTarget: THREE.Vector3): void {
+    if (!this.rotorBody) return;
+    const dx = groundTarget.x - this.basePos.x;
+    const dz = groundTarget.z - this.basePos.z;
+    const targetAngle = Math.atan2(dz, dx);
+    const currentAngle = this.getRotationAngle();
+    let diff = targetAngle - currentAngle;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    this.rotorBody.setAngvel({ x: 0, y: diff * 8.0, z: 0 }, true);
+  }
+
   public destroy(): void {
     if (this.joint) this.world.removeImpulseJoint(this.joint, true);
     if (this.pedestalBody) this.world.removeRigidBody(this.pedestalBody);

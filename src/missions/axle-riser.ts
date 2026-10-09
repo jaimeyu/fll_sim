@@ -298,6 +298,18 @@ export class AxleRiserMission implements MissionElement {
     return Math.min(100, Math.max(0, Math.round(progress * 100)));
   }
 
+  public getInteractiveMeshes(): THREE.Object3D[] {
+    return this.sliderMesh ? [this.sliderMesh] : [];
+  }
+
+  public applyUserDrag(groundTarget: THREE.Vector3): void {
+    if (!this.sliderBody) return;
+    const currX = this.sliderBody.translation().x;
+    const targetX = THREE.MathUtils.clamp(groundTarget.x, this.basePos.x - 0.08, this.basePos.x + 0.14);
+    const velX = (targetX - currX) * 12.0;
+    this.sliderBody.setLinvel({ x: velX, y: this.sliderBody.linvel().y, z: 0 }, true);
+  }
+
   public destroy(): void {
     for (const j of this.joints) {
       this.world.removeImpulseJoint(j, true);

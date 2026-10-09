@@ -35,13 +35,14 @@ export class SandboxInteractionTool {
   }
 
   private createPusherTool(): void {
-    // Kinematic position-based rigid body so it exerts physical contact forces on mechanisms
+    // Kinematic position-based rigid body for physical contact forces
     const desc = RAPIER.RigidBodyDesc.kinematicPositionBased()
       .setTranslation(this.currentTargetPos.x, this.currentTargetPos.y, this.currentTargetPos.z);
     this.pusherBody = this.world.createRigidBody(desc);
 
-    // Pusher probe collider: 10cm wide x 3.5cm high x 5cm deep
-    const colliderDesc = RAPIER.ColliderDesc.cuboid(0.05, 0.018, 0.025)
+    // Omni-directional cylindrical bumper: radius 4cm, half-height 2cm
+    // Glides effortlessly against flat or curved surfaces without snagging corners
+    const colliderDesc = RAPIER.ColliderDesc.cylinder(0.02, 0.04)
       .setFriction(0.8)
       .setRestitution(0.1);
     this.world.createCollider(colliderDesc, this.pusherBody);
@@ -49,42 +50,49 @@ export class SandboxInteractionTool {
     // Three.js visual mesh
     this.pusherMesh = new THREE.Group();
 
-    // Main orange beam
-    const beamGeom = new THREE.BoxGeometry(0.10, 0.036, 0.05);
-    const beamMat = new THREE.MeshStandardMaterial({
-      color: 0xf97316, // Vibrant orange
+    // 1. High-visibility orange bumper body
+    const cylinderGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.038, 32);
+    const cylinderMat = new THREE.MeshStandardMaterial({
+      color: 0xf97316, // Vibrant safety orange
       roughness: 0.3,
       metalness: 0.2,
     });
-    const beamMesh = new THREE.Mesh(beamGeom, beamMat);
-    beamMesh.castShadow = true;
-    this.pusherMesh.add(beamMesh);
+    const cylinderMesh = new THREE.Mesh(cylinderGeom, cylinderMat);
+    cylinderMesh.castShadow = true;
+    this.pusherMesh.add(cylinderMesh);
 
-    // Handle / Grip knob on top
-    const knobGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.025, 16);
-    const knobMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
-    const knobMesh = new THREE.Mesh(knobGeom, knobMat);
-    knobMesh.position.set(0, 0.025, 0);
-    this.pusherMesh.add(knobMesh);
+    // 2. Heavy-duty rubber bumper ring
+    const ringGeom = new THREE.TorusGeometry(0.04, 0.005, 12, 32);
+    ringGeom.rotateX(Math.PI / 2);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+    const ringMesh = new THREE.Mesh(ringGeom, ringMat);
+    this.pusherMesh.add(ringMesh);
 
-    // Front contact face highlight
-    const contactGeom = new THREE.BoxGeometry(0.095, 0.03, 0.005);
-    const contactMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
-    const contactMesh = new THREE.Mesh(contactGeom, contactMat);
-    contactMesh.position.set(0, 0, -0.026);
-    this.pusherMesh.add(contactMesh);
+    // 3. Ergonomic grip handle on top
+    const handleGeom = new THREE.CylinderGeometry(0.014, 0.016, 0.035, 16);
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.3 });
+    const handleMesh = new THREE.Mesh(handleGeom, handleMat);
+    handleMesh.position.set(0, 0.032, 0);
+    this.pusherMesh.add(handleMesh);
+
+    // 4. Grip cap
+    const capGeom = new THREE.SphereGeometry(0.018, 16, 12);
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2 });
+    const capMesh = new THREE.Mesh(capGeom, capMat);
+    capMesh.position.set(0, 0.05, 0);
+    this.pusherMesh.add(capMesh);
 
     this.rootGroup.add(this.pusherMesh);
     this.syncVisuals();
   }
 
   /**
-   * Drops a dynamic 2x4 LEGO-style test brick onto the table
+   * Drops a dynamic 2x4 LEGO-style test brick onto the table near the mechanism
    */
   public spawnTestBlock(spawnPos?: { x: number; y: number; z: number }): void {
     const x = spawnPos?.x ?? (Math.random() * 0.1 - 0.05);
     const y = spawnPos?.y ?? 0.12; // Drop from above
-    const z = spawnPos?.z ?? (0.15 + Math.random() * 0.05);
+    const z = spawnPos?.z ?? (0.08 + Math.random() * 0.06);
 
     const desc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(x, y, z)
@@ -112,6 +120,28 @@ export class SandboxInteractionTool {
     this.spawnedBlocks.push({ body, mesh });
   }
 
+  public getSpawnedBlocks(): Array<{ body: RAPIER.RigidBody; mesh: THREE.Mesh }> {
+    return this.spawnedBlocks;
+  }
+
+  public dragBlock(item: { body: RAPIER.RigidBody; mesh: THREE.Mesh }, x: number, z: number): void {
+    const clampedX = THREE.MathUtils.clamp(x, -0.45, 0.45);
+    const clampedZ = THREE.MathUtils.clamp(z, -0.45, 0.45);
+    item.body.setTranslation({ x: clampedX, y: 0.02, z: clampedZ }, true);
+    item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    item.mesh.position.set(clampedX, 0.02, clampedZ);
+  }
+
+  public setPusherInitialPose(pos: { x: number; y: number; z: number }): void {
+    this.currentTargetPos.set(pos.x, pos.y, pos.z);
+    if (this.pusherBody) {
+      this.pusherBody.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
+    }
+    if (this.pusherMesh) {
+      this.pusherMesh.position.set(pos.x, pos.y, pos.z);
+    }
+  }
+
   /**
    * Updates target position of pusher tool based on mouse raycast coordinates
    */
@@ -119,8 +149,8 @@ export class SandboxInteractionTool {
     if (!this.pusherBody || !this.isActive) return;
 
     // Constrain tool to reasonable test bench boundaries
-    const clampedX = THREE.MathUtils.clamp(x, -0.60, 0.60);
-    const clampedZ = THREE.MathUtils.clamp(z, -0.40, 0.40);
+    const clampedX = THREE.MathUtils.clamp(x, -0.48, 0.48);
+    const clampedZ = THREE.MathUtils.clamp(z, -0.48, 0.48);
     this.currentTargetPos.set(clampedX, 0.035, clampedZ);
 
     this.pusherBody.setNextKinematicTranslation({
@@ -128,6 +158,11 @@ export class SandboxInteractionTool {
       y: this.currentTargetPos.y,
       z: this.currentTargetPos.z,
     });
+
+    // Immediate visual update for ultra-smooth responsiveness
+    if (this.pusherMesh) {
+      this.pusherMesh.position.set(clampedX, 0.035, clampedZ);
+    }
   }
 
   public setActive(active: boolean): void {
@@ -135,7 +170,11 @@ export class SandboxInteractionTool {
     this.rootGroup.visible = active;
     if (this.pusherBody) {
       if (active) {
-        this.pusherBody.setTranslation({ x: 0, y: 0.035, z: 0.20 }, true);
+        this.pusherBody.setTranslation({
+          x: this.currentTargetPos.x,
+          y: this.currentTargetPos.y,
+          z: this.currentTargetPos.z,
+        }, true);
       } else {
         // Move off-stage when inactive
         this.pusherBody.setTranslation({ x: 0, y: -50, z: 0 }, true);

@@ -627,6 +627,10 @@ export class SimulatorHud {
     }
   }
 
+  public isDynoModeActive(): boolean {
+    return this.isDynoActive;
+  }
+
   public updateMissionScore(score: number, solved: boolean): void {
     if (solved) {
       this.missionScoreText.textContent = `SOLVED (100%)`;

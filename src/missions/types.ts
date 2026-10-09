@@ -54,4 +54,14 @@ export interface MissionElement {
    * Cleans up physics bodies and visual meshes
    */
   destroy(): void;
+
+  /**
+   * Returns interactive visual meshes that can be clicked/dragged directly by user
+   */
+  getInteractiveMeshes?(): THREE.Object3D[];
+
+  /**
+   * Applies user mouse drag on the mechanism's interactive component
+   */
+  applyUserDrag?(groundTarget: THREE.Vector3): void;
 }
