@@ -512,12 +512,14 @@ body, html {
   border-color: var(--accent-blue);
 }
 
+.spawn-actions-row,
 .spawn-presets-row {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
 }
 
+.spawn-actions-row button,
 .spawn-presets-row button {
   flex: 1;
   white-space: nowrap;

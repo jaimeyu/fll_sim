@@ -70,15 +70,31 @@ async function bootstrapSimulator() {
       runner.abort();
       engine.robot.motors.get('A')?.stop();
       engine.robot.motors.get('B')?.stop();
+      hud.setExecutionState('IDLE');
     },
     onResetRobot: () => {
       runner.abort();
+      engine.robot.motors.get('A')?.stop();
+      engine.robot.motors.get('B')?.stop();
       const spawnPose = hud.getSpawnPose();
       engine.resetRobot(spawnPose);
       sensors.resetYaw();
+      hud.setExecutionState('IDLE');
     },
     onSpawnPoseChange: (pose) => {
       engine.setDefaultPose(pose);
+    },
+    onMoveRobotToPose: (pose, label) => {
+      runner.abort();
+      engine.robot.motors.get('A')?.stop();
+      engine.robot.motors.get('B')?.stop();
+      engine.resetRobot(pose);
+      engine.setDefaultPose(pose);
+      sensors.resetYaw();
+      hud.setExecutionState('IDLE');
+      hud.setSpawnPose(pose);
+      const targetName = label || `(X=${pose.x.toFixed(2)}m, Z=${pose.z.toFixed(2)}m, Yaw=${pose.yawDegrees.toFixed(1)}°)`;
+      hud.logConsole(`⏹ Stopped run and relocated robot to: ${targetName}`);
     },
     onCaptureCurrentPose: () => {
       const pos = engine.robot.getPosition();
@@ -153,8 +169,32 @@ async function bootstrapSimulator() {
   hud.setSpawnPose(engine.getDefaultPose());
 
   // Hook 3D Viewport Interactive Drag-and-Drop Placement
+  viewport.onRobotDragStart = () => {
+    runner.abort();
+    engine.robot.motors.get('A')?.stop();
+    engine.robot.motors.get('B')?.stop();
+    hud.setExecutionState('IDLE');
+  };
+
+  viewport.onRobotDragMove = (x: number, z: number) => {
+    const currentPose = hud.getSpawnPose();
+    const livePose = {
+      x: Number(x.toFixed(2)),
+      y: 0.035,
+      z: Number(z.toFixed(2)),
+      yawDegrees: currentPose.yawDegrees,
+    };
+    // Direct physics body update under cursor: syncs meshes, wheels, proxy, and sensors accurately
+    engine.resetRobot(livePose);
+    viewport.updateReticleYaw(livePose.yawDegrees);
+    hud.setSpawnPose(livePose);
+  };
+
   viewport.onRobotDrop = (x: number, z: number) => {
     runner.abort();
+    engine.robot.motors.get('A')?.stop();
+    engine.robot.motors.get('B')?.stop();
+    hud.setExecutionState('IDLE');
     const currentPose = hud.getSpawnPose();
     const newPose = {
       x: Number(x.toFixed(2)),
@@ -167,11 +207,6 @@ async function bootstrapSimulator() {
     hud.setSpawnPose(newPose);
     sensors.resetYaw();
     hud.logConsole(`📍 Robot placed at (X: ${newPose.x}m, Z: ${newPose.z}m). Spawn pose updated.`);
-  };
-
-  viewport.onRobotDragMove = (x: number, z: number) => {
-    // Reposition visual mesh directly under cursor during interactive dragging
-    robotRenderer.rootGroup.position.set(x, 0.035, z);
   };
 
   // 7. Main Animation & Physics Loop

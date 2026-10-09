@@ -14,6 +14,7 @@ export class Viewport3D {
 
   public onRobotDrop?: (x: number, z: number) => void;
   public onRobotDragMove?: (x: number, z: number) => void;
+  public onRobotDragStart?: () => void;
 
   private tableMesh!: THREE.Group;
   private container: HTMLElement;
@@ -22,6 +23,7 @@ export class Viewport3D {
   private mouse = new THREE.Vector2();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private isDragging = false;
+  private dragOffset = new THREE.Vector2(0, 0);
   private robotHitProxy!: THREE.Mesh;
   private dropReticle!: THREE.Group;
   private robotVisualRoot: THREE.Object3D | null = null;
@@ -312,6 +314,12 @@ export class Viewport3D {
     this.controls.update();
   }
 
+  public updateReticleYaw(yawDegrees: number): void {
+    if (this.dropReticle) {
+      this.dropReticle.rotation.y = (yawDegrees * Math.PI) / 180;
+    }
+  }
+
   private setupDragAndDrop(): void {
     const dom = this.renderer.domElement;
 
@@ -369,13 +377,19 @@ export class Viewport3D {
         this.controls.enabled = false;
         this.dropReticle.visible = true;
         this.container.style.cursor = 'grabbing';
+        this.onRobotDragStart?.();
 
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
-          const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
-          const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
-          this.dropReticle.position.set(clampedX, 0.003, clampedZ);
-          this.onRobotDragMove?.(clampedX, clampedZ);
+          // Store offset from robot center to initial ground intersection
+          this.dragOffset.set(
+            this.robotHitProxy.position.x - groundHit.x,
+            this.robotHitProxy.position.z - groundHit.z
+          );
+          const targetX = THREE.MathUtils.clamp(groundHit.x + this.dragOffset.x, -1.15, 1.15);
+          const targetZ = THREE.MathUtils.clamp(groundHit.z + this.dragOffset.y, -0.65, 0.65);
+          this.dropReticle.position.set(targetX, 0.003, targetZ);
+          this.onRobotDragMove?.(targetX, targetZ);
         }
 
         e.stopPropagation();
@@ -389,6 +403,7 @@ export class Viewport3D {
         if (groundHit) {
           const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
           const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
+          this.onRobotDragStart?.();
           this.onRobotDrop?.(clampedX, clampedZ);
           e.stopPropagation();
         }
@@ -406,10 +421,10 @@ export class Viewport3D {
       } else if (this.isDragging) {
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
-          const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
-          const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
-          this.dropReticle.position.set(clampedX, 0.003, clampedZ);
-          this.onRobotDragMove?.(clampedX, clampedZ);
+          const targetX = THREE.MathUtils.clamp(groundHit.x + this.dragOffset.x, -1.15, 1.15);
+          const targetZ = THREE.MathUtils.clamp(groundHit.z + this.dragOffset.y, -0.65, 0.65);
+          this.dropReticle.position.set(targetX, 0.003, targetZ);
+          this.onRobotDragMove?.(targetX, targetZ);
         }
       } else {
         // Hover indicator over pusher tool or robot

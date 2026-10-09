@@ -10,6 +10,7 @@ export interface HudCallbacks {
   onImportFile: (file: File) => void;
   onMapChange?: (mapType: 'grid' | 'procedural') => void;
   onSpawnPoseChange?: (pose: SpawnPose) => void;
+  onMoveRobotToPose?: (pose: SpawnPose, label?: string) => void;
   onCaptureCurrentPose?: () => void;
   onModeChange?: (mode: SimulatorAppMode) => void;
   onTogglePusherTool?: (active: boolean) => void;
@@ -304,7 +305,7 @@ export class SimulatorHud {
         <!-- Starting Pose Configuration Section -->
         <div class="telem-spawn-section">
           <div class="telem-subheading">
-            <span>📍 START / RESET POSITION</span>
+            <span>📍 ROBOT POSITION & PRESETS</span>
           </div>
           <div class="spawn-inputs-row">
             <div class="spawn-input-group">
@@ -320,11 +321,14 @@ export class SimulatorHud {
               <input type="number" id="spawn-yaw" step="5" value="90">
             </div>
           </div>
+          <div class="spawn-actions-row">
+            <button class="btn btn-xs btn-primary" id="btn-move-pose" title="Stop running code and immediately move robot to entered (X, Z, Yaw) coordinates">🚀 Move Robot</button>
+            <button class="btn btn-xs btn-outline" id="btn-capture-pose" title="Capture current robot position on field as default start pose">📌 Set as Start</button>
+          </div>
           <div class="spawn-presets-row">
-            <button class="btn btn-xs btn-outline" id="btn-capture-pose" title="Capture current robot position as spawn point">📌 Capture</button>
-            <button class="btn btn-xs btn-outline" data-spawn-preset="red" title="Left Home / Red Launch Arc">🚩 Red Arc</button>
-            <button class="btn btn-xs btn-outline" data-spawn-preset="blue" title="Right Home / Blue Launch Arc">🔷 Blue Arc</button>
-            <button class="btn btn-xs btn-outline" data-spawn-preset="center" title="Field Center (0, 0)">🎯 Center</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="red" title="Stop run and move to Red Launch Arc (Left)">🚩 Red Arc</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="blue" title="Stop run and move to Blue Launch Arc (Right)">🔷 Blue Arc</button>
+            <button class="btn btn-xs btn-outline" data-spawn-preset="center" title="Stop run and move to Field Center (0, 0)">🎯 Center</button>
           </div>
         </div>
       </div>
@@ -435,28 +439,52 @@ export class SimulatorHud {
     this.spawnInputZ.addEventListener('input', handleSpawnChange);
     this.spawnInputYaw.addEventListener('input', handleSpawnChange);
 
+    // Enter key inside inputs moves robot immediately
+    const handleMoveToInputs = () => {
+      const pose = this.getSpawnPose();
+      this.setExecutionState('IDLE');
+      this.callbacks.onMoveRobotToPose?.(pose, `Position (X=${pose.x.toFixed(2)}m, Z=${pose.z.toFixed(2)}m, Yaw=${pose.yawDegrees.toFixed(1)}°)`);
+    };
+
+    [this.spawnInputX, this.spawnInputZ, this.spawnInputYaw].forEach((input) => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          handleMoveToInputs();
+        }
+      });
+    });
+
+    const btnMovePose = this.rootElement.querySelector('#btn-move-pose');
+    btnMovePose?.addEventListener('click', handleMoveToInputs);
+
     // Capture current position button
     const btnCapture = this.rootElement.querySelector('#btn-capture-pose');
     btnCapture?.addEventListener('click', () => {
       this.callbacks.onCaptureCurrentPose?.();
     });
 
-    // Preset spawn buttons
+    // Preset spawn buttons: immediately stop running program and relocate robot
     const presetBtns = this.rootElement.querySelectorAll('[data-spawn-preset]');
     presetBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
         const preset = btn.getAttribute('data-spawn-preset');
+        let pose: SpawnPose;
+        let label = '';
         if (preset === 'red') {
-          this.setSpawnPose({ x: -0.80, z: 0.32, yawDegrees: 90 });
-          this.logConsole('Spawn position set to: Red Launch Arc (Left)');
+          pose = { x: -0.80, y: 0.035, z: 0.32, yawDegrees: 90 };
+          label = 'Red Launch Arc (Left)';
         } else if (preset === 'blue') {
-          this.setSpawnPose({ x: 0.80, z: 0.32, yawDegrees: -90 });
-          this.logConsole('Spawn position set to: Blue Launch Arc (Right)');
+          pose = { x: 0.80, y: 0.035, z: 0.32, yawDegrees: -90 };
+          label = 'Blue Launch Arc (Right)';
         } else if (preset === 'center') {
-          this.setSpawnPose({ x: 0.00, z: 0.00, yawDegrees: 0 });
-          this.logConsole('Spawn position set to: Field Center');
+          pose = { x: 0.00, y: 0.035, z: 0.00, yawDegrees: 0 };
+          label = 'Field Center';
+        } else {
+          return;
         }
-        this.callbacks.onSpawnPoseChange?.(this.getSpawnPose());
+        this.setSpawnPose(pose);
+        this.setExecutionState('IDLE');
+        this.callbacks.onMoveRobotToPose?.(pose, label);
       });
     });
 
