@@ -44,6 +44,7 @@ describe('FLL Mission Elements Physics Integration', () => {
       for (let i = 0; i < 60; i++) {
         slider.applyImpulse({ x: -0.06, y: 0, z: 0 }, true);
         world.step();
+        riser.update(1 / 60);
       }
 
       // Middle riser should be elevated
@@ -55,6 +56,7 @@ describe('FLL Mission Elements Physics Integration', () => {
       // Remove pushing force and step for 60 more frames (1 full second under gravity)
       for (let i = 0; i < 60; i++) {
         world.step();
+        riser.update(1 / 60);
       }
 
       // Joint friction must hold the riser aloft!
@@ -73,6 +75,7 @@ describe('FLL Mission Elements Physics Integration', () => {
       for (let i = 0; i < 30; i++) {
         slider.applyImpulse({ x: -0.08, y: 0, z: 0 }, true);
         world.step();
+        riser.update(1 / 60);
       }
 
       // Reset
@@ -99,6 +102,7 @@ describe('FLL Mission Elements Physics Integration', () => {
       for (let i = 0; i < 40; i++) {
         rotor.applyTorqueImpulse({ x: 0, y: 0.08, z: 0 }, true);
         world.step();
+        dial.update(1 / 60);
       }
 
       expect(dial.isSolved()).toBe(true);

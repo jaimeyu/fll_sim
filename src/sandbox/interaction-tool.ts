@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { LEGO_COLORS, createLegoPlateGroup } from '../view/lego-visuals';
 
 /**
  * Interactive Mouse Testing Tool & Dynamic Test Blocks
@@ -18,7 +19,7 @@ export class SandboxInteractionTool {
   // Dynamic test blocks spawned by user
   private spawnedBlocks: Array<{
     body: RAPIER.RigidBody;
-    mesh: THREE.Mesh;
+    mesh: THREE.Object3D;
   }> = [];
 
   private currentTargetPos = new THREE.Vector3(0, 0.035, 0.20);
@@ -40,9 +41,9 @@ export class SandboxInteractionTool {
       .setTranslation(this.currentTargetPos.x, this.currentTargetPos.y, this.currentTargetPos.z);
     this.pusherBody = this.world.createRigidBody(desc);
 
-    // Omni-directional cylindrical bumper: radius 4cm, half-height 2cm
-    // Glides effortlessly against flat or curved surfaces without snagging corners
-    const colliderDesc = RAPIER.ColliderDesc.cylinder(0.02, 0.04)
+    // Omni-directional cylindrical bumper: radius 4.2cm, half-height 2.5cm (spans Y = 0.010m to 0.060m)
+    // Perfectly covers robot bumper, mission sliders, and turnstile blades
+    const colliderDesc = RAPIER.ColliderDesc.cylinder(0.025, 0.042)
       .setFriction(0.8)
       .setRestitution(0.1);
     this.world.createCollider(colliderDesc, this.pusherBody);
@@ -51,7 +52,7 @@ export class SandboxInteractionTool {
     this.pusherMesh = new THREE.Group();
 
     // 1. High-visibility orange bumper body
-    const cylinderGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.038, 32);
+    const cylinderGeom = new THREE.CylinderGeometry(0.042, 0.042, 0.046, 32);
     const cylinderMat = new THREE.MeshStandardMaterial({
       color: 0xf97316, // Vibrant safety orange
       roughness: 0.3,
@@ -62,7 +63,7 @@ export class SandboxInteractionTool {
     this.pusherMesh.add(cylinderMesh);
 
     // 2. Heavy-duty rubber bumper ring
-    const ringGeom = new THREE.TorusGeometry(0.04, 0.005, 12, 32);
+    const ringGeom = new THREE.TorusGeometry(0.042, 0.006, 12, 32);
     ringGeom.rotateX(Math.PI / 2);
     const ringMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
     const ringMesh = new THREE.Mesh(ringGeom, ringMat);
@@ -72,14 +73,14 @@ export class SandboxInteractionTool {
     const handleGeom = new THREE.CylinderGeometry(0.014, 0.016, 0.035, 16);
     const handleMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.3 });
     const handleMesh = new THREE.Mesh(handleGeom, handleMat);
-    handleMesh.position.set(0, 0.032, 0);
+    handleMesh.position.set(0, 0.036, 0);
     this.pusherMesh.add(handleMesh);
 
     // 4. Grip cap
     const capGeom = new THREE.SphereGeometry(0.018, 16, 12);
     const capMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2 });
     const capMesh = new THREE.Mesh(capGeom, capMat);
-    capMesh.position.set(0, 0.05, 0);
+    capMesh.position.set(0, 0.054, 0);
     this.pusherMesh.add(capMesh);
 
     this.rootGroup.add(this.pusherMesh);
@@ -87,11 +88,11 @@ export class SandboxInteractionTool {
   }
 
   /**
-   * Drops a dynamic 2x4 LEGO-style test brick onto the table near the mechanism
+   * Drops an authentic dynamic 2x4 LEGO brick with 8 studs onto the workbench
    */
   public spawnTestBlock(spawnPos?: { x: number; y: number; z: number }): void {
     const x = spawnPos?.x ?? (Math.random() * 0.1 - 0.05);
-    const y = spawnPos?.y ?? 0.12; // Drop from above
+    const y = spawnPos?.y ?? 0.10; // Drop from above
     const z = spawnPos?.z ?? (0.08 + Math.random() * 0.06);
 
     const desc = RAPIER.RigidBodyDesc.dynamic()
@@ -100,19 +101,25 @@ export class SandboxInteractionTool {
       .setAngularDamping(1.5);
     const body = this.world.createRigidBody(desc);
 
-    // LEGO 2x4 block dimensions: ~6.4cm x 2cm x 3.2cm
-    const collider = RAPIER.ColliderDesc.cuboid(0.032, 0.01, 0.016)
+    // Authentic LEGO 2x4 brick dimensions: 32mm x 16mm x 9.6mm
+    const collider = RAPIER.ColliderDesc.cuboid(0.016, 0.0048, 0.008)
       .setDensity(1.2)
-      .setFriction(0.6);
+      .setFriction(0.65)
+      .setRestitution(0.05);
     this.world.createCollider(collider, body);
 
     // Palette of vibrant LEGO colors
-    const colors = [0x0284c7, 0xef4444, 0x10b981, 0xfacc15, 0x8b5cf6];
+    const colors = [
+      LEGO_COLORS.AZURE,
+      LEGO_COLORS.RED,
+      LEGO_COLORS.GREEN,
+      LEGO_COLORS.YELLOW,
+      LEGO_COLORS.ORANGE,
+    ];
     const color = colors[this.spawnedBlocks.length % colors.length];
 
-    const geom = new THREE.BoxGeometry(0.064, 0.02, 0.032);
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
-    const mesh = new THREE.Mesh(geom, mat);
+    // Real LEGO 2x4 brick with 8 embossed cylindrical studs
+    const mesh = createLegoPlateGroup(4, 2, color, 3);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.rootGroup.add(mesh);
@@ -120,16 +127,16 @@ export class SandboxInteractionTool {
     this.spawnedBlocks.push({ body, mesh });
   }
 
-  public getSpawnedBlocks(): Array<{ body: RAPIER.RigidBody; mesh: THREE.Mesh }> {
+  public getSpawnedBlocks(): Array<{ body: RAPIER.RigidBody; mesh: THREE.Object3D }> {
     return this.spawnedBlocks;
   }
 
-  public dragBlock(item: { body: RAPIER.RigidBody; mesh: THREE.Mesh }, x: number, z: number): void {
+  public dragBlock(item: { body: RAPIER.RigidBody; mesh: THREE.Object3D }, x: number, z: number): void {
     const clampedX = THREE.MathUtils.clamp(x, -0.45, 0.45);
     const clampedZ = THREE.MathUtils.clamp(z, -0.45, 0.45);
-    item.body.setTranslation({ x: clampedX, y: 0.02, z: clampedZ }, true);
+    item.body.setTranslation({ x: clampedX, y: 0.012, z: clampedZ }, true);
     item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    item.mesh.position.set(clampedX, 0.02, clampedZ);
+    item.mesh.position.set(clampedX, 0.012, clampedZ);
   }
 
   public setPusherInitialPose(pos: { x: number; y: number; z: number }): void {

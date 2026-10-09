@@ -1,18 +1,28 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { MissionElement } from './types';
+import {
+  LEGO_COLORS,
+  getLegoMaterial,
+  createTechnicBeamGroup,
+  createLegoPlateGroup,
+  createTechnicGearGroup,
+} from '../view/lego-visuals';
 
 /**
  * Rotary Gear Turnstile Mission Mechanism
  *
- * Implements a rotating 4-spoke gear turnstile with an indicator dial.
- * When the robot bumper or attachment pushes against any of the paddle arms,
- * the vertical shaft turns 90 degrees, latching into the scored position and raising a flag.
+ * Implements an authentic FIRST LEGO League gear turnstile built from
+ * official LEGO Technic 24T and 12T gears, 9L liftarms, axle shafts, and a dial face.
+ *
+ * Driving the robot into any of the 4 cross paddle blades rotates the vertical shaft.
+ * The 24T gear drives a 12T gear, rotating a dial indicator needle.
+ * An authentic LEGO spring-loaded friction detent latches the dial into the 90-degree scored position.
  */
 export class GearDialMission implements MissionElement {
   public readonly id = 'gear-dial';
   public readonly name = 'Mission 2: Rotary Gear Turnstile';
-  public readonly description = 'Drive into the blue paddle arms to rotate the turnstile 90 degrees and activate the green indicator flag.';
+  public readonly description = 'Drive into the paddle arms to rotate the turnstile 90 degrees and activate the green indicator.';
   public readonly rootGroup: THREE.Group;
 
   private world!: RAPIER.World;
@@ -22,14 +32,14 @@ export class GearDialMission implements MissionElement {
   private pedestalBody!: RAPIER.RigidBody;
   private rotorBody!: RAPIER.RigidBody;
 
-  // Joint
-  private joint!: RAPIER.RevoluteImpulseJoint;
-
-  // Visual Meshes
-  private pedestalMesh!: THREE.Mesh;
+  // Visual Groups
+  private baseplateGroup!: THREE.Group;
   private rotorMesh!: THREE.Group;
+  private gearTrainGroup!: THREE.Group;
+  private dialNeedleMesh!: THREE.Mesh;
   private flagMesh!: THREE.Mesh;
 
+  private currentAngle = 0;
   private initialAngle = 0;
 
   constructor() {
@@ -41,107 +51,205 @@ export class GearDialMission implements MissionElement {
     this.basePos = { ...basePosition };
 
     this.createPhysicsBodies();
-    this.createVisualMeshes();
+    this.createLegoVisuals();
     this.syncVisuals();
   }
 
   private createPhysicsBodies(): void {
     const { x, y, z } = this.basePos;
-    const yAxis = { x: 0, y: 1, z: 0 };
 
-    // 1. Pedestal Base (Fixed)
-    const baseDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 0.03, z);
+    // 1. Fixed Low-Profile Baseplate Anchor Body (Firmly anchored, low clearance)
+    const baseDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 0.008, z);
     this.pedestalBody = this.world.createRigidBody(baseDesc);
-    this.world.createCollider(RAPIER.ColliderDesc.cylinder(0.03, 0.045), this.pedestalBody);
+    this.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(0.065, 0.008, 0.065).setFriction(0.8),
+      this.pedestalBody
+    );
 
-    // 2. Rotor with 4 Paddle Blades (Dynamic revolute body around Y)
+    // 2. Dynamic 4-Spoke Turnstile Rotor (Revolves around Y axis)
+    // Centered at robot bumper height: Y = 0.035m (Spans Y = 0.021m to 0.049m)
     const rotorDesc = RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(x, y + 0.075, z)
-      .setAngularDamping(2.0)
-      .setLinearDamping(4.0);
+      .setTranslation(x, y + 0.035, z)
+      .setAngularDamping(2.8)
+      .setLinearDamping(10.0) // Resist translation; shaft holds it in place
+      .lockTranslations(); // Rotate only around Y
     this.rotorBody = this.world.createRigidBody(rotorDesc);
 
-    // Cross paddle colliders (Arm 1 along X, Arm 2 along Z)
-    const arm1Collider = RAPIER.ColliderDesc.cuboid(0.075, 0.015, 0.012).setDensity(1.5).setFriction(0.7);
-    const arm2Collider = RAPIER.ColliderDesc.cuboid(0.012, 0.015, 0.075).setDensity(1.5).setFriction(0.7);
-    this.world.createCollider(arm1Collider, this.rotorBody);
-    this.world.createCollider(arm2Collider, this.rotorBody);
+    // 4 Cross-Paddle Colliders (Arm 1 along X, Arm 2 along Z, 160mm total span)
+    const arm1 = RAPIER.ColliderDesc.cuboid(0.080, 0.014, 0.008)
+      .setDensity(1.8)
+      .setFriction(0.6)
+      .setRestitution(0.0);
+    const arm2 = RAPIER.ColliderDesc.cuboid(0.008, 0.014, 0.080)
+      .setDensity(1.8)
+      .setFriction(0.6)
+      .setRestitution(0.0);
 
-    // Revolute Joint around Y axis with 90-degree scoring stop limit
-    this.joint = this.world.createImpulseJoint(
-      RAPIER.JointData.revolute({ x: 0, y: 0.045, z: 0 }, { x: 0, y: 0, z: 0 }, yAxis),
-      this.pedestalBody,
-      this.rotorBody,
-      true
-    ) as RAPIER.RevoluteImpulseJoint;
-    this.joint.setContactsEnabled(false);
-    this.joint.setLimits(0.0, Math.PI / 2);
-
-    // Configure joint friction to resist rotation and latch position
-    this.joint.configureMotorVelocity(0.0, 2.5);
-    this.joint.setMotorMaxForce(0.02);
+    this.world.createCollider(arm1, this.rotorBody);
+    this.world.createCollider(arm2, this.rotorBody);
 
     this.initialAngle = this.getRotationAngle();
+    this.currentAngle = this.initialAngle;
   }
 
-  private createVisualMeshes(): void {
-    // 1. Pedestal Mesh (Dark slate cylinder)
-    const pedGeom = new THREE.CylinderGeometry(0.045, 0.055, 0.07, 24);
-    const pedMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
-    this.pedestalMesh = new THREE.Mesh(pedGeom, pedMat);
-    this.pedestalMesh.castShadow = true;
-    this.pedestalMesh.receiveShadow = true;
-    this.rootGroup.add(this.pedestalMesh);
+  private createLegoVisuals(): void {
+    // 1. LEGO Dark Bluish Gray Baseplate (14 x 14 studs with authentic studs on top)
+    this.baseplateGroup = createLegoPlateGroup(14, 14, LEGO_COLORS.DARK_GRAY, 1);
+    this.rootGroup.add(this.baseplateGroup);
 
-    // 2. Rotor Mesh (4 cross paddle blades)
+    // 2. Center Technic Turntable Base & Shaft Tower
+    const towerGeom = new THREE.CylinderGeometry(0.018, 0.022, 0.028, 24);
+    const towerMat = getLegoMaterial(LEGO_COLORS.DARK_GRAY, 0.4);
+    const towerMesh = new THREE.Mesh(towerGeom, towerMat);
+    towerMesh.position.set(0, 0.014, 0);
+    towerMesh.castShadow = true;
+    this.rootGroup.add(towerMesh);
+
+    // 3. Rotating 4-Spoke Turnstile Assembly
     this.rotorMesh = new THREE.Group();
 
-    // Central hub
-    const hubGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.045, 16);
-    const hubMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3 });
+    // Central LEGO Technic Hub Bushing
+    const hubGeom = new THREE.CylinderGeometry(0.014, 0.014, 0.032, 24);
+    const hubMat = getLegoMaterial(LEGO_COLORS.BLACK, 0.4);
     const hubMesh = new THREE.Mesh(hubGeom, hubMat);
+    hubMesh.castShadow = true;
     this.rotorMesh.add(hubMesh);
 
-    // Paddle Arms (Cross blades)
-    const bladeGeom = new THREE.BoxGeometry(0.15, 0.035, 0.015);
-    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3 });
-    const blade1 = new THREE.Mesh(bladeGeom, bladeMat);
-    blade1.castShadow = true;
+    // 4 Cross-Paddle Arms built from Medium Azure 9L Technic Liftarms with holes
+    const blade1 = createTechnicBeamGroup(9, LEGO_COLORS.AZURE, {
+      width: 0.008,
+      thickness: 0.022,
+      withPinsAt: [0, 4, 8],
+    });
+    blade1.position.set(0, 0, 0);
     this.rotorMesh.add(blade1);
 
-    const blade2 = new THREE.Mesh(bladeGeom, bladeMat);
+    const blade2 = createTechnicBeamGroup(9, LEGO_COLORS.AZURE, {
+      width: 0.008,
+      thickness: 0.022,
+      withPinsAt: [0, 4, 8],
+    });
     blade2.rotation.y = Math.PI / 2;
-    blade2.castShadow = true;
     this.rotorMesh.add(blade2);
 
-    // Indicator Flag on Top
-    const flagGeom = new THREE.BoxGeometry(0.04, 0.025, 0.005);
-    const flagMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.2 });
-    this.flagMesh = new THREE.Mesh(flagGeom, flagMat);
-    this.flagMesh.position.set(0.02, 0.035, 0);
-    this.rotorMesh.add(this.flagMesh);
+    // Contact Target Strips on each blade tip (Bright Yellow LEGO accents)
+    for (const [bx, bz, rotY] of [
+      [0.034, 0, 0],
+      [-0.034, 0, 0],
+      [0, 0.034, Math.PI / 2],
+      [0, -0.034, Math.PI / 2],
+    ] as const) {
+      const tipMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.020, 0.009),
+        getLegoMaterial(LEGO_COLORS.YELLOW, 0.3)
+      );
+      tipMesh.position.set(bx, 0, bz);
+      tipMesh.rotation.y = rotY;
+      tipMesh.castShadow = true;
+      this.rotorMesh.add(tipMesh);
+    }
+
+    // 4. Authentic LEGO Technic 24-Tooth Spur Gear mounted on the central shaft
+    const gear24 = createTechnicGearGroup(24, 0.024, LEGO_COLORS.LIGHT_GRAY, 0.007);
+    gear24.position.set(0, 0.018, 0);
+    this.rotorMesh.add(gear24);
 
     this.rootGroup.add(this.rotorMesh);
+
+    // 5. Gear Train & Dial Indicator Assembly on Base
+    this.gearTrainGroup = new THREE.Group();
+
+    // Meshing 12-Tooth Bevel Gear (2:1 gear ratio driving the dial)
+    const gear12 = createTechnicGearGroup(12, 0.012, LEGO_COLORS.DARK_GRAY, 0.005);
+    gear12.position.set(0.032, 0.018, 0);
+    this.gearTrainGroup.add(gear12);
+
+    // Circular Printed Dial Face Tile
+    const dialFaceGeom = new THREE.CylinderGeometry(0.018, 0.018, 0.003, 32);
+    const dialFaceMat = getLegoMaterial(LEGO_COLORS.WHITE, 0.3);
+    const dialFace = new THREE.Mesh(dialFaceGeom, dialFaceMat);
+    dialFace.position.set(0.032, 0.023, 0);
+    dialFace.castShadow = true;
+    this.gearTrainGroup.add(dialFace);
+
+    // Red Needle Pointer on Dial Face
+    const needleGeom = new THREE.BoxGeometry(0.015, 0.0015, 0.003);
+    needleGeom.translate(0.007, 0, 0); // Pivot at center
+    const needleMat = getLegoMaterial(LEGO_COLORS.RED, 0.2);
+    this.dialNeedleMesh = new THREE.Mesh(needleGeom, needleMat);
+    this.dialNeedleMesh.position.set(0.032, 0.025, 0);
+    this.gearTrainGroup.add(this.dialNeedleMesh);
+
+    // Green Indicator Flag that pops up upon completing 90 degrees
+    const flagPole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.002, 0.002, 0.030, 12),
+      getLegoMaterial(LEGO_COLORS.LIGHT_GRAY)
+    );
+    flagPole.position.set(0, 0.032, 0);
+    this.rotorMesh.add(flagPole);
+
+    this.flagMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.022, 0.014, 0.002),
+      getLegoMaterial(LEGO_COLORS.GREEN, 0.2)
+    );
+    this.flagMesh.position.set(0.011, 0.040, 0);
+    this.flagMesh.castShadow = true;
+    this.rotorMesh.add(this.flagMesh);
+
+    this.rootGroup.add(this.gearTrainGroup);
   }
 
   public update(_dt: number): void {
-    // Handled by physics step
+    if (!this.rotorBody) return;
+
+    // 1. Keep rotor body firmly centered at base
+    const p = this.rotorBody.translation();
+    const targetY = this.basePos.y + 0.035;
+    if (Math.abs(p.x - this.basePos.x) > 0.001 || Math.abs(p.z - this.basePos.z) > 0.001) {
+      this.rotorBody.setTranslation({ x: this.basePos.x, y: targetY, z: this.basePos.z }, true);
+      this.rotorBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    }
+
+    // 2. Sample Angle
+    this.currentAngle = this.getRotationAngle();
+    let angleDelta = Math.abs(this.currentAngle - this.initialAngle);
+    if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
+
+    // 3. LEGO Spring-Loaded Ratchet Detent Torque (Snap to 90-degree quadrant)
+    const angVel = this.rotorBody.angvel();
+    if (Math.abs(angVel.y) < 1.5) {
+      // Gentle spring detent torque at every 90 degrees
+      const targetQuadrant = Math.round(this.currentAngle / (Math.PI / 2)) * (Math.PI / 2);
+      const err = targetQuadrant - this.currentAngle;
+      if (Math.abs(err) < 0.25) {
+        this.rotorBody.applyTorqueImpulse({ x: 0, y: err * 0.0008, z: 0 }, true);
+      }
+    }
   }
 
   public syncVisuals(): void {
-    if (!this.pedestalBody) return;
+    if (!this.rotorBody) return;
 
-    // Pedestal
-    const pP = this.pedestalBody.translation();
-    const pR = this.pedestalBody.rotation();
-    this.pedestalMesh.position.set(pP.x, pP.y, pP.z);
-    this.pedestalMesh.quaternion.set(pR.x, pR.y, pR.z, pR.w);
+    const { x, y, z } = this.basePos;
+    this.baseplateGroup.position.set(x, y + 0.002, z);
+    this.gearTrainGroup.position.set(x, y + 0.002, z);
 
-    // Rotor
+    // Rotor transform
     const rP = this.rotorBody.translation();
     const rR = this.rotorBody.rotation();
     this.rotorMesh.position.set(rP.x, rP.y, rP.z);
     this.rotorMesh.quaternion.set(rR.x, rR.y, rR.z, rR.w);
+
+    // 2:1 Gear Ratio Needle Pointer Rotation
+    const angleDelta = this.currentAngle - this.initialAngle;
+    this.dialNeedleMesh.rotation.y = -angleDelta * 2.0;
+
+    // Flag elevation glow on solve
+    if (this.isSolved()) {
+      this.flagMesh.position.y = 0.044;
+    } else {
+      this.flagMesh.position.y = 0.038;
+    }
   }
 
   private getRotationAngle(): number {
@@ -158,15 +266,16 @@ export class GearDialMission implements MissionElement {
     const zeroVel = { x: 0, y: 0, z: 0 };
     const identQuat = { x: 0, y: 0, z: 0, w: 1 };
 
-    this.pedestalBody.setTranslation({ x, y: y + 0.03, z }, true);
+    this.pedestalBody.setTranslation({ x, y: y + 0.008, z }, true);
     this.pedestalBody.setRotation(identQuat, true);
 
-    this.rotorBody.setTranslation({ x, y: y + 0.075, z }, true);
+    this.rotorBody.setTranslation({ x, y: y + 0.035, z }, true);
     this.rotorBody.setRotation(identQuat, true);
     this.rotorBody.setLinvel(zeroVel, true);
     this.rotorBody.setAngvel(zeroVel, true);
 
     this.initialAngle = 0;
+    this.currentAngle = 0;
     this.syncVisuals();
   }
 
@@ -180,12 +289,16 @@ export class GearDialMission implements MissionElement {
   }
 
   public isSolved(): boolean {
-    const angleDeltaDeg = (Math.abs(this.getRotationAngle() - this.initialAngle) * 180) / Math.PI;
-    return angleDeltaDeg >= 75;
+    this.currentAngle = this.getRotationAngle();
+    let angleDeltaDeg = (Math.abs(this.currentAngle - this.initialAngle) * 180) / Math.PI;
+    if (angleDeltaDeg > 180) angleDeltaDeg = 360 - angleDeltaDeg;
+    return angleDeltaDeg >= 70; // Rotated past 70 degrees
   }
 
   public getScore(): number {
-    const angleDeltaDeg = (Math.abs(this.getRotationAngle() - this.initialAngle) * 180) / Math.PI;
+    this.currentAngle = this.getRotationAngle();
+    let angleDeltaDeg = (Math.abs(this.currentAngle - this.initialAngle) * 180) / Math.PI;
+    if (angleDeltaDeg > 180) angleDeltaDeg = 360 - angleDeltaDeg;
     return Math.min(100, Math.max(0, Math.round((angleDeltaDeg / 90) * 100)));
   }
 
@@ -197,16 +310,14 @@ export class GearDialMission implements MissionElement {
     if (!this.rotorBody) return;
     const dx = groundTarget.x - this.basePos.x;
     const dz = groundTarget.z - this.basePos.z;
-    const targetAngle = Math.atan2(dz, dx);
-    const currentAngle = this.getRotationAngle();
-    let diff = targetAngle - currentAngle;
+    const targetAngle = Math.atan2(dx, dz);
+    let diff = targetAngle - this.currentAngle;
     while (diff > Math.PI) diff -= 2 * Math.PI;
     while (diff < -Math.PI) diff += 2 * Math.PI;
-    this.rotorBody.setAngvel({ x: 0, y: diff * 8.0, z: 0 }, true);
+    this.rotorBody.setAngvel({ x: 0, y: diff * 12.0, z: 0 }, true);
   }
 
   public destroy(): void {
-    if (this.joint) this.world.removeImpulseJoint(this.joint, true);
     if (this.pedestalBody) this.world.removeRigidBody(this.pedestalBody);
     if (this.rotorBody) this.world.removeRigidBody(this.rotorBody);
     this.rootGroup.clear();
