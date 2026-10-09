@@ -38,3 +38,13 @@ To ensure your CAD model clusters cleanly into the proper kinematic bodies:
 * **Friction Pins vs. Axles**: Use standard friction pins (`2780`, `6558`) to connect beams rigidly to the chassis.
 * **Motor Mounting**: Ensure motor stators (`45601`, `45602`) are rigidly pinned to the frame.
 * **Wheel Axles**: Ensure wheel rims (`56145`) are connected to motor output shafts with cross-axles. The clustering solver will automatically detect the 1-DOF rotational freedom and configure a revolute joint.
+
+---
+
+## 4. Official Season Mission Models & Community Attribution
+
+The official FLL competition mission models available in the simulator (Bioglow, Unearthed, Submerged, Masterpiece, Superpowered) were converted and modeled in BrickLink Studio format by **Komurobo**.
+
+* **Model Source:** [Komurobo FLL 3D Models](https://komurobo.com/fll/3d-models/)
+* **Contact & Project:** [Komurobo.com](https://komurobo.com/) (`info@komurobo.com`)
+* **Community Notice:** We gratefully credit the independent creators at Komurobo for making these digital assets available to the global robotics education community. Komurobo is an independent initiative not affiliated with FIRST® or Robotique FIRST Québec. All LEGO®, Technic™, and SPIKE™ trademarks belong to the LEGO Group, used here for non-commercial educational robotics practice.

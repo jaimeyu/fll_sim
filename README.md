@@ -109,6 +109,18 @@ The codebase is organized into strict, decoupled layers to facilitate collaborat
 
 ---
 
+## 🙏 Acknowledgements & Attribution
+
+### 3D Mission Models (BrickLink Studio `.io` Files)
+* **Source:** [Komurobo FLL 3D Models](https://komurobo.com/fll/3d-models/)
+* **Project:** [Komurobo.com](https://komurobo.com/)
+* **Contact:** `info@komurobo.com`
+* **Description:** 3D digital CAD models (`.io`) and rendered previews of FIRST LEGO League challenge missions across multiple seasons (Bioglow, Unearthed, Submerged, Masterpiece, Superpowered) were created by the independent community initiative **Komurobo**.
+* **Attribution Notice:** We gratefully acknowledge the creators and community at Komurobo for meticulously modeling and sharing these 3D BrickLink Studio assets with the robotics education community. Komurobo is an independent initiative and is not affiliated with, sponsored by, or endorsed by FIRST® or Robotique FIRST Québec.
+* **Fair Use & Non-Commercial Notice:** These models are used strictly for non-commercial educational robotics simulation, strategy planning, and student learning. LEGO®, Technic™, and SPIKE™ are trademarks of the LEGO Group. FIRST® and FIRST® LEGO® League are trademarks of FIRST and the LEGO Group.
+
+---
+
 ## 📜 License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.
