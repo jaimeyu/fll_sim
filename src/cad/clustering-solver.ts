@@ -42,12 +42,13 @@ export class CadClusteringPreSolver {
       }
     }
 
-    // Link parts belonging to the same submodel
+    // Link parts belonging to the same submodel instance (rigid subassembly)
     const bySubmodel = new Map<string, string[]>();
     for (const part of parts) {
-      if (part.submodel) {
-        if (!bySubmodel.has(part.submodel)) bySubmodel.set(part.submodel, []);
-        bySubmodel.get(part.submodel)!.push(part.id);
+      const sub = part.submodelInstance || part.submodel;
+      if (sub) {
+        if (!bySubmodel.has(sub)) bySubmodel.set(sub, []);
+        bySubmodel.get(sub)!.push(part.id);
       }
     }
     for (const ids of bySubmodel.values()) {

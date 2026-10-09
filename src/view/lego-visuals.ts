@@ -125,21 +125,23 @@ export function createLegoPlateGroup(
 ): THREE.Group {
   const group = new THREE.Group();
   const pitch = 0.008; // 8mm per stud
-  const totalW = widthStuds * pitch;
-  const totalL = lengthStuds * pitch;
-  const totalH = heightPlates * 0.0032; // 3.2mm per plate
+  // In LDraw, length (L) is along X axis, width (W) is along Z axis
+  const totalX = lengthStuds * pitch;
+  const totalZ = widthStuds * pitch;
+  const totalH = heightPlates * 0.0032; // 3.2mm per plate (9.6mm for brick)
 
   const bodyMat = getLegoMaterial(color);
 
-  // Base Plate body
-  const bodyGeom = new THREE.BoxGeometry(totalW, totalH, totalL);
+  // In LDraw convention, origin (0,0,0) is at the top face where studs connect.
+  // The plate/brick body extends downwards from Y = 0 to Y = -totalH.
+  const bodyGeom = new THREE.BoxGeometry(totalX, totalH, totalZ);
   const bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
-  bodyMesh.position.set(0, totalH / 2, 0);
+  bodyMesh.position.set(0, -totalH / 2, 0);
   bodyMesh.castShadow = true;
   bodyMesh.receiveShadow = true;
   group.add(bodyMesh);
 
-  // Array of LEGO Studs on top face
+  // Array of LEGO Studs on top face (Y = 0)
   const totalStuds = widthStuds * lengthStuds;
   if (hasStuds && totalStuds > 0) {
     const studMat = getLegoMaterial(color, 0.28);
@@ -148,12 +150,12 @@ export function createLegoPlateGroup(
 
     const dummy = new THREE.Object3D();
     let idx = 0;
-    const startX = -totalW / 2 + pitch / 2;
-    const startZ = -totalL / 2 + pitch / 2;
+    const startX = -totalX / 2 + pitch / 2;
+    const startZ = -totalZ / 2 + pitch / 2;
 
-    for (let wx = 0; wx < widthStuds; wx++) {
-      for (let lz = 0; lz < lengthStuds; lz++) {
-        dummy.position.set(startX + wx * pitch, totalH, startZ + lz * pitch);
+    for (let lx = 0; lx < lengthStuds; lx++) {
+      for (let wz = 0; wz < widthStuds; wz++) {
+        dummy.position.set(startX + lx * pitch, 0, startZ + wz * pitch);
         dummy.updateMatrix();
         instancedStuds.setMatrixAt(idx++, dummy.matrix);
       }
@@ -241,7 +243,9 @@ export const LDRAW_COLOR_MAP: Record<number, number> = {
   10: 0x86efac,  // Bright Green
   14: 0xfacc15,  // Yellow
   15: 0xf8fafc,  // White
+  16: 0x94a3b8,  // Main Colour (Default Fallback)
   19: 0xd4b996,  // Tan
+  24: 0x18181b,  // Edge Colour
   27: 0x84cc16,  // Lime
   28: 0xd97706,  // Dark Tan
   33: 0x0284c7,  // Trans-Dark Blue
@@ -251,20 +255,22 @@ export const LDRAW_COLOR_MAP: Record<number, number> = {
   41: 0x38bdf8,  // Trans-Medium Blue
   42: 0xa3e635,  // Trans-Neon Green
   47: 0xf1f5f9,  // Trans-Clear
-  70: 0xa855f7,  // Reddish Lilac
-  71: 0xc084fc,  // Magenta
-  72: 0x334155,  // Dark Bluish Gray
+  70: 0x94a3b8,  // Medium Bluish Gray
+  71: 0x94a3b8,  // Light Bluish Gray (Official LDraw 71)
+  72: 0x334155,  // Dark Bluish Gray (Official LDraw 72)
   78: 0x86efac,  // Light Green
   84: 0xec4899,  // Medium Dark Pink
   85: 0x475569,  // Dark Bluish Gray
   86: 0x94a3b8,  // Light Bluish Gray
   212: 0x67e8f9, // Bright Light Blue
   288: 0x14532d, // Dark Green
+  297: 0xdf9b00, // Warm Gold / Pearl Gold
   320: 0x991b1b, // Dark Red
   321: 0x0284c7, // Dark Azure
   322: 0x06b6d4, // Medium Azure
   323: 0x6ee7b7, // Light Aqua
   326: 0xd9f99d, // Yellowish Green
+  484: 0xb45309, // Dark Orange
 };
 
 /**
@@ -370,8 +376,8 @@ export function createLegoBrickMesh(
     return createTechnicBeamGroup(holes, colorHex);
   }
 
-  // 6. Connectors (e.g. 32013, 32014, 50450, 89678, 32034, 32184, 62462, 25214)
-  if (/^(32013|32014|32015|32016|50450|89678|32034|32184|62462|25214)$/.test(clean)) {
+  // 6. Connectors (e.g. 32013, 32014, 89678, 32034, 32184, 62462, 25214)
+  if (/^(32013|32014|32015|32016|89678|32034|32184|62462|25214)$/.test(clean)) {
     const group = new THREE.Group();
     const c1 = new THREE.CylinderGeometry(0.0036, 0.0036, 0.012, 12);
     const m1 = new THREE.Mesh(c1, mat);
@@ -384,6 +390,17 @@ export function createLegoBrickMesh(
     m2.castShadow = true;
     group.add(m2);
     return group;
+  }
+
+  // 6b. Flexible Technic Axle 19L (50450)
+  if (clean === '50450') {
+    const len = 0.264; // 660 LDU = 264mm spanning between guide track anchors
+    const geom = new THREE.CylinderGeometry(0.0024, 0.0024, len, 16);
+    geom.rotateZ(Math.PI / 2); // Aligned along X axis
+    const m = new THREE.Mesh(geom, mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    return m;
   }
 
   // 7. Technic Panels (e.g. 64782)
@@ -424,7 +441,7 @@ export function createLegoBrickMesh(
     geom.rotateY(Math.PI / 4);
     geom.scale(totalL / totalW, 1, 1);
     const m = new THREE.Mesh(geom, mat);
-    m.position.set(0, totalH / 2, 0);
+    m.position.set(0, -totalH / 2, 0);
     m.castShadow = true;
     m.receiveShadow = true;
     return m;
@@ -436,7 +453,7 @@ export function createLegoBrickMesh(
     const height = 0.0032;
     const geom = new THREE.CylinderGeometry(radius, radius, height, 16);
     const m = new THREE.Mesh(geom, mat);
-    m.position.set(0, height / 2, 0);
+    m.position.set(0, -height / 2, 0);
     m.castShadow = true;
     m.receiveShadow = true;
     return m;

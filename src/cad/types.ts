@@ -30,6 +30,7 @@ export interface PlacedPart {
   role: PartRole;
   colorHex?: number;
   submodel?: string;
+  submodelInstance?: string;
   parentClusterId?: string;
   meta?: Record<string, unknown>;
 }

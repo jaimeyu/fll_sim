@@ -37,6 +37,13 @@ export const TECHNIC_PART_CATALOG: Record<string, PartDefinition> = {
     massGrams: 0.45,
     dimensions: { x: 8, y: 8, z: 8 },
   },
+  '50450': {
+    partNumber: '50450',
+    name: 'Technic Axle 19L Flexible with Soft Ends',
+    role: 'FASTENER_AXLE',
+    massGrams: 3.2,
+    dimensions: { x: 264, y: 6, z: 6 },
+  },
 
   // Beams & Structural Frames
   '32523': {

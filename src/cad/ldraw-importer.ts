@@ -45,10 +45,11 @@ function mat3VecMul(A: Mat3, v: Vec3): Vec3 {
  * Accounts for coordinate system differences (LDraw Y-down vs Simulator Y-up).
  */
 function matrixToQuaternion(M: Mat3): [number, number, number, number] {
-  // Simulator coordinate transformation: S = diag(1, -1, 1) -> M_sim = S * M * S
-  const m00 = M[0],  m01 = -M[1], m02 = M[2];
-  const m10 = -M[3], m11 = M[4],  m12 = -M[5];
-  const m20 = M[6],  m21 = -M[7], m22 = M[8];
+  // Proper 3D rotation transform from LDraw (Y-down, Z-forward) to Three.js (Y-up, Z-backward):
+  // R = diag(1, -1, -1), M_sim = R * M * R
+  const m00 = M[0],  m01 = -M[1], m02 = -M[2];
+  const m10 = -M[3], m11 = M[4],  m12 = M[5];
+  const m20 = -M[6], m21 = M[7],  m22 = M[8];
 
   const trace = m00 + m11 + m22;
   let qx = 0, qy = 0, qz = 0, qw = 1;
@@ -135,10 +136,13 @@ export class LDrawImporter {
     let partIndex = 0;
 
     // 2. Recursively expand submodels accumulating transformation matrices
+    let instanceCounter = 0;
     const expandSubmodel = (
       subName: string,
+      instanceId: string,
       parentMat: Mat3,
       parentTrans: Vec3,
+      parentColorCode: number,
       depth: number,
       visited: Set<string>
     ) => {
@@ -170,6 +174,9 @@ export class LDrawImporter {
           parentTrans[2] + rotTrans[2],
         ];
 
+        const rawColorCode = parseInt(tokens[1], 10);
+        const resolvedColorCode = rawColorCode === 16 ? parentColorCode : rawColorCode;
+
         const rawRef = tokens.slice(14).join(' ').trim().toLowerCase();
         const normRef = rawRef.replace(/\.(ldr|mpd|dat)$/, '');
 
@@ -178,17 +185,17 @@ export class LDrawImporter {
           if (!visited.has(target)) {
             const nextVisited = new Set(visited);
             nextVisited.add(target);
-            expandSubmodel(target, worldMat, worldTrans, depth + 1, nextVisited);
+            const childInstanceId = `${target}_inst${instanceCounter++}`;
+            expandSubmodel(target, childInstanceId, worldMat, worldTrans, resolvedColorCode, depth + 1, nextVisited);
           }
         } else {
           // Terminal primitive part (.dat)
           const cleanPartNumber = normRef.replace(/^bl_/, '');
-          const posX = worldTrans[0] * 0.4;  // 1 LDU = 0.4mm
-          const posY = -worldTrans[1] * 0.4; // Invert Y (LDraw is Y-down)
-          const posZ = worldTrans[2] * 0.4;
+          const posX = worldTrans[0] * 0.4;   // 1 LDU = 0.4mm
+          const posY = -worldTrans[1] * 0.4;  // Invert Y (LDraw is Y-down)
+          const posZ = -worldTrans[2] * 0.4;  // Invert Z for proper right-handed Three.js orientation
 
-          const colorCode = parseInt(tokens[1], 10);
-          const colorHex = LDRAW_COLOR_MAP[colorCode] ?? 0x94a3b8;
+          const colorHex = LDRAW_COLOR_MAP[resolvedColorCode] ?? 0x94a3b8;
           const role = lookupPartRole(cleanPartNumber);
           const partId = `ldraw_${partIndex++}_${cleanPartNumber}`;
           const rotation = matrixToQuaternion(worldMat);
@@ -201,23 +208,24 @@ export class LDrawImporter {
             role,
             colorHex,
             submodel: subName,
+            submodelInstance: instanceId,
           });
         }
       }
     };
 
     const identityMat: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-    expandSubmodel(primaryEntryName, identityMat, [0, 0, 0], 0, new Set([primaryEntryName]));
+    expandSubmodel(primaryEntryName, 'root_inst0', identityMat, [0, 0, 0], 16, 0, new Set([primaryEntryName]));
 
     // 3. Connect parts:
-    // A. Parts belonging to the same Studio SubModel are rigidly linked (subassemblies stay together)
-    const bySubmodel = new Map<string, string[]>();
+    // A. Parts belonging to the same Studio SubModel instance are rigidly linked (subassemblies stay together)
+    const byInstance = new Map<string, string[]>();
     for (const p of parts) {
-      const sub = p.submodel || 'main';
-      if (!bySubmodel.has(sub)) bySubmodel.set(sub, []);
-      bySubmodel.get(sub)!.push(p.id);
+      const inst = p.submodelInstance || p.submodel || 'main';
+      if (!byInstance.has(inst)) byInstance.set(inst, []);
+      byInstance.get(inst)!.push(p.id);
     }
-    for (const partIds of bySubmodel.values()) {
+    for (const partIds of byInstance.values()) {
       for (let k = 0; k < partIds.length - 1; k++) {
         links.push({
           fromPartId: partIds[k],

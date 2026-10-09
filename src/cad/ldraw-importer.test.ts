@@ -58,11 +58,11 @@ describe('LDrawImporter & MPD Submodel Recursion', () => {
     // main offset = (100, 0, 0)
     // lever offset = (0, 0, 50)
     // pin offset = (10, 10, 10)
-    // total = (110, 10, 60) in LDU -> mm: (110*0.4, -10*0.4, 60*0.4) = (44, -4, 24)
+    // total = (110, 10, 60) in LDU -> mm: (110*0.4, -10*0.4, -60*0.4) = (44, -4, -24)
     const pinPart = parsed.parts.find((p) => p.partNumber === '6558')!;
     expect(pinPart.position[0]).toBeCloseTo(44, 2);
     expect(pinPart.position[1]).toBeCloseTo(-4, 2);
-    expect(pinPart.position[2]).toBeCloseTo(24, 2);
+    expect(pinPart.position[2]).toBeCloseTo(-24, 2);
   });
 
   it('safely breaks cycles in malformed circular submodel definitions', () => {
@@ -91,6 +91,11 @@ describe('LDrawImporter & MPD Submodel Recursion', () => {
     const buffer = fs.readFileSync(filePath);
     const arrayBuf = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
     const spec = await LDrawImporter.parseStudioIo(arrayBuf);
+
+    console.log('SPEC CLUSTERS COUNT:', spec.clusters.length);
+    spec.clusters.forEach((c) => {
+      console.log(`Cluster ${c.clusterId} (${c.name}): isRoot=${c.isRootChassis}, parts=${c.partIds.length}, colliders=${c.colliders.length}, mass=${c.totalMassKg}kg`);
+    });
 
     expect(spec.name).toBe('Studio Model');
     // M01 contains over 100 parts clustered into rigid bodies
