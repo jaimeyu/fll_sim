@@ -82,4 +82,46 @@ while hub.motion_sensor.get_yaw_angle() < 90:
       clearInterval(timer);
     }
   }, 10000);
+
+  it('supports from spike.control import Timer and keyword argument start()', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+    const sensors = new VirtualSensorManager(engine.robot);
+    const api = new VirtualSpikeApi(engine, sensors);
+    const runner = new PythonScriptRunner(api);
+
+    const userScript = `
+from spike import MotorPair, ColorSensor
+from spike.control import Timer
+
+# 1. Initialize hardware (Adjust ports to match your robot)
+# Left motor on E, Right motor on F
+drive_base = MotorPair('E', 'F') 
+# Left color sensor on C, Right color sensor on D
+sensor_left = ColorSensor('C')   
+sensor_right = ColorSensor('D')  
+
+# 2. Configuration Parameters
+BASE_SPEED = 30
+KP = 0.6
+
+# 3. Execution Timer
+timer = Timer()
+timer.reset()
+
+# Short 0.05 second loop for test
+while timer.get_time_sec() < 0.05:
+    left_light = sensor_left.get_reflected_light()
+    right_light = sensor_right.get_reflected_light()
+    error = left_light - right_light
+    steering = error * KP
+    drive_base.start(steering=int(steering), speed=BASE_SPEED)
+
+drive_base.stop()
+`;
+
+    // Should execute cleanly without throwing ReferenceError or syntax errors
+    await runner.execute(userScript);
+    expect(true).toBe(true);
+  });
 });

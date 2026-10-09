@@ -26,6 +26,7 @@ export interface HudCallbacks {
   onElementTogglePlaced?: (id: string, placed: boolean) => void;
   onElementDelete?: (id: string) => void;
   onElementFocus?: (id: string) => void;
+  onFocusTarget?: (target: 'robot' | 'center' | string) => void;
   onToggleSeasonMission?: (id: string, enable: boolean) => void;
   onApplyMissionPreset?: (presetKey: string) => void;
   onOpenInspector?: (missionId?: string) => void;
@@ -196,6 +197,11 @@ export class SimulatorHud {
   private matchSeconds = 150; // 2:30 match timer
   private matchTimerRunning = false;
 
+  private scriptTabs: Array<{ id: string; title: string; code: string }> = [
+    { id: 'tab-1', title: 'Mission 1', code: SAMPLE_MISSIONS.drive_straight.code },
+  ];
+  private activeTabIndex: number = 0;
+
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
     this.rootElement = document.createElement('div');
@@ -226,6 +232,13 @@ export class SimulatorHud {
             <button class="btn btn-sm btn-outline active" data-cam="ISO">📐 3D Iso</button>
             <button class="btn btn-sm btn-outline" data-cam="TOP_DOWN">🗺️ Top-Down</button>
             <button class="btn btn-sm btn-outline" data-cam="FOLLOW">🎥 Follow</button>
+          </div>
+          <div class="hud-focus-container">
+            <label for="camera-focus-select" class="hud-label-inline">🔍 Focus:</label>
+            <select id="camera-focus-select" class="hud-select hud-select-sm" title="Focus camera view on robot, mat center, or any mission model">
+              <option value="robot" selected>🤖 Robot</option>
+              <option value="center">🎯 Field Center</option>
+            </select>
           </div>
         </div>
 
@@ -329,6 +342,12 @@ export class SimulatorHud {
             <span class="status-dot status-idle" id="exec-status-dot"></span>
             <span id="exec-status-text">IDLE</span>
           </div>
+        </div>
+
+        <!-- Script Tab Bar -->
+        <div class="script-tabs-bar">
+          <div class="script-tabs-list" id="script-tabs-list"></div>
+          <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page to paste and run custom code">➕ New Script</button>
         </div>
 
         <!-- Code Editor -->
@@ -472,16 +491,46 @@ export class SimulatorHud {
     this.btnDrawerResetAll = this.rootElement.querySelector('#btn-drawer-reset-all')!;
 
     // Set initial sample code
-    this.codeTextarea.value = SAMPLE_MISSIONS.drive_straight.code;
+    this.codeTextarea.value = this.scriptTabs[0].code;
   }
 
   private setupEvents(): void {
+    // 1. Script Tabs and Code Editor bindings
+    this.renderScriptTabs();
+
+    const btnNewTab = this.rootElement.querySelector('#btn-new-tab') as HTMLButtonElement | null;
+    btnNewTab?.addEventListener('click', () => {
+      this.addNewScriptTab();
+    });
+
+    this.codeTextarea.addEventListener('input', () => {
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+      }
+    });
+
+    // 2. Camera Focus Dropdown
+    const cameraFocusSelect = this.rootElement.querySelector('#camera-focus-select') as HTMLSelectElement | null;
+    cameraFocusSelect?.addEventListener('change', () => {
+      const val = cameraFocusSelect.value;
+      if (val === 'robot' || val === 'center') {
+        this.callbacks.onFocusTarget?.(val);
+      } else if (val) {
+        this.callbacks.onElementFocus?.(val);
+      }
+    });
+
     // Mission dropdown change
     const missionSelect = this.rootElement.querySelector('#mission-select') as HTMLSelectElement;
     missionSelect.addEventListener('change', () => {
       const selected = SAMPLE_MISSIONS[missionSelect.value];
       if (selected) {
         this.codeTextarea.value = selected.code;
+        if (this.scriptTabs[this.activeTabIndex]) {
+          this.scriptTabs[this.activeTabIndex].code = selected.code;
+          this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
+        }
+        this.renderScriptTabs();
         this.logConsole(`Loaded ${selected.title}`);
       }
     });
@@ -499,6 +548,9 @@ export class SimulatorHud {
     // Run button
     this.runBtn.addEventListener('click', () => {
       this.setExecutionState('RUNNING');
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+      }
       this.callbacks.onRunScript(this.codeTextarea.value);
     });
 
@@ -857,6 +909,7 @@ export class SimulatorHud {
     const activeCount = elements.filter((e) => e.isPlacedOnField !== false).length;
     this.assetCountBadge.textContent = activeCount.toString();
     this.renderDrawerElements();
+    this.updateFocusDropdown();
   }
 
   public renderDrawerElements(): void {
@@ -1054,5 +1107,115 @@ export class SimulatorHud {
         }
       });
     });
+  }
+
+  public updateFocusDropdown(): void {
+    const select = this.rootElement.querySelector('#camera-focus-select') as HTMLSelectElement | null;
+    if (!select) return;
+
+    const currentVal = select.value;
+    let html = `
+      <option value="robot">🤖 Robot</option>
+      <option value="center">🎯 Field Center</option>
+    `;
+
+    const placedElements = this.missionElementsData.filter((e) => e.isPlacedOnField !== false);
+    for (const elem of placedElements) {
+      html += `<option value="${elem.id}">📦 ${elem.name}</option>`;
+    }
+
+    select.innerHTML = html;
+    if (select.querySelector(`option[value="${currentVal}"]`)) {
+      select.value = currentVal;
+    } else {
+      select.value = 'robot';
+    }
+  }
+
+  public renderScriptTabs(): void {
+    const list = this.rootElement.querySelector('#script-tabs-list');
+    if (!list) return;
+
+    list.innerHTML = this.scriptTabs
+      .map((tab, idx) => {
+        const isActive = idx === this.activeTabIndex;
+        const canClose = this.scriptTabs.length > 1;
+        return `
+          <div class="script-tab ${isActive ? 'active' : ''}" data-tab-idx="${idx}" title="${tab.title}">
+            <span class="tab-title">${tab.title}</span>
+            ${canClose ? `<button class="tab-close-btn" data-close-tab="${idx}" title="Close tab">✕</button>` : ''}
+          </div>
+        `;
+      })
+      .join('');
+
+    // Tab click handlers
+    list.querySelectorAll('.script-tab').forEach((tabEl) => {
+      tabEl.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains('tab-close-btn')) {
+          e.stopPropagation();
+          const closeIdx = parseInt(target.getAttribute('data-close-tab') || '0', 10);
+          this.closeScriptTab(closeIdx);
+          return;
+        }
+        const idx = parseInt(tabEl.getAttribute('data-tab-idx') || '0', 10);
+        this.switchScriptTab(idx);
+      });
+    });
+  }
+
+  public switchScriptTab(idx: number): void {
+    if (idx < 0 || idx >= this.scriptTabs.length || idx === this.activeTabIndex) return;
+    this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+    this.activeTabIndex = idx;
+    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    this.renderScriptTabs();
+  }
+
+  public addNewScriptTab(title?: string, initialCode?: string): void {
+    this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+    const tabNum = this.scriptTabs.length + 1;
+    const defaultCode =
+      initialCode ??
+      `# Custom Python Script ${tabNum}
+from spike import MotorPair, ColorSensor
+from spike.control import Timer
+
+# Left motor on E, Right motor on F
+drive_base = MotorPair('E', 'F') 
+sensor_left = ColorSensor('C')   
+sensor_right = ColorSensor('D')  
+
+timer = Timer()
+timer.reset()
+
+print("Starting custom script ${tabNum}...")
+while timer.get_time_sec() < 5:
+    drive_base.start(steering=0, speed=30)
+
+drive_base.stop()
+print("Finished!")
+`;
+
+    this.scriptTabs.push({
+      id: `tab-${Date.now()}`,
+      title: title || `Script ${tabNum}`,
+      code: defaultCode,
+    });
+    this.activeTabIndex = this.scriptTabs.length - 1;
+    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    this.renderScriptTabs();
+    this.logConsole(`➕ Created new script page: "${this.scriptTabs[this.activeTabIndex].title}"`);
+  }
+
+  public closeScriptTab(idx: number): void {
+    if (this.scriptTabs.length <= 1) return;
+    this.scriptTabs.splice(idx, 1);
+    if (this.activeTabIndex >= this.scriptTabs.length) {
+      this.activeTabIndex = this.scriptTabs.length - 1;
+    }
+    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    this.renderScriptTabs();
   }
 }

@@ -128,6 +128,16 @@ body, html {
   gap: 6px;
 }
 
+.hud-focus-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
 .hud-top-right {
   display: flex;
   align-items: center;
@@ -287,6 +297,87 @@ body, html {
 .status-running { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
 .status-error { background: var(--accent-red); }
 
+/* Script Tabs Bar */
+.script-tabs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 4px 6px;
+}
+
+.script-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex: 1;
+}
+
+.script-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.script-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.script-tab.active {
+  background: #1e293b;
+  border-color: var(--accent-blue);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.tab-title {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.tab-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+.btn-new-tab {
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Code Editor */
 .code-editor-container {
   flex: 1;
@@ -304,7 +395,10 @@ body, html {
   line-height: 1.5;
   padding: 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
   resize: none;
   outline: none;
   white-space: pre;

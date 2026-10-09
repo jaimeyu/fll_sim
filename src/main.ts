@@ -35,9 +35,12 @@ async function bootstrapSimulator() {
   viewport.scene.add(robotRenderer.rootGroup);
   viewport.setRobotVisualRoot(robotRenderer.rootGroup);
 
-  // 5. Initialize Mission Elements Manager & Interactive Sandbox Tool
+  // 5. Initialize Mission Elements Manager & Interactive Sandbox Tool (starts with clean field)
   const missionManager = new MissionManager();
-  missionManager.init(engine.world, viewport.scene);
+  missionManager.init(engine.world, viewport.scene, {
+    loadSampleMechanisms: false,
+    autoLoadSeasonMissions: false,
+  });
 
   const interactionTool = new SandboxInteractionTool();
   interactionTool.init(engine.world, viewport.scene);
@@ -223,6 +226,21 @@ async function bootstrapSimulator() {
       if (elem) {
         viewport.selectMissionElement(id);
         viewport.focusOnElement(elem.getPosition());
+      }
+    },
+    onFocusTarget: (target) => {
+      if (target === 'robot') {
+        viewport.selectMissionElement(null);
+        viewport.focusOnElement(engine.robot.getPosition());
+      } else if (target === 'center') {
+        viewport.selectMissionElement(null);
+        viewport.focusOnElement({ x: 0, y: 0.05, z: 0 });
+      } else {
+        const elem = missionManager.getElement(target);
+        if (elem) {
+          viewport.selectMissionElement(target);
+          viewport.focusOnElement(elem.getPosition());
+        }
       }
     },
     onToggleSeasonMission: async (id, enable) => {

@@ -39,34 +39,58 @@ export class MissionManager {
     this.rootGroup = new THREE.Group();
   }
 
-  public init(world: RAPIER.World, parentScene: THREE.Scene): void {
+  public init(
+    world: RAPIER.World,
+    parentScene: THREE.Scene,
+    options: { loadSampleMechanisms?: boolean; autoLoadSeasonMissions?: boolean } = {}
+  ): void {
     this.world = world;
     parentScene.add(this.rootGroup);
 
-    // 1. Initialize 4-Axle Toggle Riser
-    const riser = new AxleRiserMission();
-    riser.init(this.world, MissionManager.ARENA_RISER_POS);
-    this.elements.set(riser.id, riser);
-    this.rootGroup.add(riser.rootGroup);
+    // If loadSampleMechanisms is true (or default true in test suites)
+    const shouldLoadSample = options.loadSampleMechanisms !== undefined ? options.loadSampleMechanisms : true;
+    if (shouldLoadSample) {
+      this.loadSampleMechanisms();
+    }
 
-    // 2. Initialize Rotary Gear Dial
-    const dial = new GearDialMission();
-    dial.init(this.world, MissionManager.ARENA_DIAL_POS);
-    this.elements.set(dial.id, dial);
-    this.rootGroup.add(dial.rootGroup);
-
-    // 3. Initialize Multi-Gear Cascading Dial
-    const cascade = new CascadeGearDialMission();
-    cascade.init(this.world, MissionManager.ARENA_CASCADE_POS);
-    this.elements.set(cascade.id, cascade);
-    this.rootGroup.add(cascade.rootGroup);
-
-    // 4. Asynchronously load default starter season models (configured via season-config.ts)
-    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+    // Asynchronously load default starter season models (configured via season-config.ts)
+    if (options.autoLoadSeasonMissions !== false && typeof window !== 'undefined' && typeof fetch !== 'undefined') {
       this.loadDefaultSeasonMissions().catch((err) => {
         console.warn('[MissionManager] Default season missions autoload deferred:', err);
       });
     }
+  }
+
+  public loadSampleMechanisms(): void {
+    if (!this.elements.has('axle-riser')) {
+      const riser = new AxleRiserMission();
+      riser.init(this.world, MissionManager.ARENA_RISER_POS);
+      this.elements.set(riser.id, riser);
+      this.rootGroup.add(riser.rootGroup);
+    }
+    if (!this.elements.has('gear-dial')) {
+      const dial = new GearDialMission();
+      dial.init(this.world, MissionManager.ARENA_DIAL_POS);
+      this.elements.set(dial.id, dial);
+      this.rootGroup.add(dial.rootGroup);
+    }
+    if (!this.elements.has('gear-cascade')) {
+      const cascade = new CascadeGearDialMission();
+      cascade.init(this.world, MissionManager.ARENA_CASCADE_POS);
+      this.elements.set(cascade.id, cascade);
+      this.rootGroup.add(cascade.rootGroup);
+    }
+  }
+
+  public clearAllElements(): void {
+    const ids = Array.from(this.elements.keys());
+    for (const id of ids) {
+      this.removeElement(id);
+    }
+    for (const spec of SEASON_MISSIONS_CONFIG) {
+      saveStoredSeasonMissionOverride(spec.id, false);
+    }
+    this.onMissionListChanged?.();
   }
 
   /**
@@ -194,29 +218,20 @@ export class MissionManager {
 
     const targetSet = new Set(targetIds);
 
-    // 1. Unload/stow any official season mission not in targetSet
+    // 1. Unload/clear ALL elements currently on the field first
+    const existingIds = Array.from(this.elements.keys());
+    for (const id of existingIds) {
+      this.removeElement(id);
+    }
     for (const spec of SEASON_MISSIONS_CONFIG) {
-      if (!targetSet.has(spec.id)) {
-        saveStoredSeasonMissionOverride(spec.id, false);
-        if (this.elements.has(spec.id)) {
-          this.removeElement(spec.id);
-        }
-      }
+      saveStoredSeasonMissionOverride(spec.id, false);
     }
 
     // 2. Load missions in targetSet
     for (const spec of SEASON_MISSIONS_CONFIG) {
       if (targetSet.has(spec.id)) {
         saveStoredSeasonMissionOverride(spec.id, true);
-        if (!this.elements.has(spec.id)) {
-          await this.loadSeasonMission(spec);
-        } else {
-          const el = this.elements.get(spec.id);
-          if (el) {
-            el.isPlacedOnField = true;
-            el.rootGroup.visible = true;
-          }
-        }
+        await this.loadSeasonMission(spec);
       }
     }
 
@@ -323,35 +338,47 @@ export class MissionManager {
         cascade.setPosition(MissionManager.ARENA_CASCADE_POS, 0);
       }
     } else if (mode === 'SANDBOX_RISER') {
+      if (!this.elements.has('axle-riser')) {
+        const newRiser = new AxleRiserMission();
+        newRiser.init(this.world, MissionManager.SANDBOX_CENTER_POS);
+        this.elements.set(newRiser.id, newRiser);
+        this.rootGroup.add(newRiser.rootGroup);
+      }
       for (const elem of this.elements.values()) {
-        elem.rootGroup.visible = (elem.id === 'axle-riser');
+        elem.rootGroup.visible = elem.id === 'axle-riser';
         if (elem.id !== 'axle-riser') {
           elem.setPosition({ x: 0, y: -50, z: 0 });
         }
       }
-      if (riser) {
-        riser.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
-      }
+      this.elements.get('axle-riser')?.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
     } else if (mode === 'SANDBOX_DIAL') {
+      if (!this.elements.has('gear-dial')) {
+        const newDial = new GearDialMission();
+        newDial.init(this.world, MissionManager.SANDBOX_CENTER_POS);
+        this.elements.set(newDial.id, newDial);
+        this.rootGroup.add(newDial.rootGroup);
+      }
       for (const elem of this.elements.values()) {
-        elem.rootGroup.visible = (elem.id === 'gear-dial');
+        elem.rootGroup.visible = elem.id === 'gear-dial';
         if (elem.id !== 'gear-dial') {
           elem.setPosition({ x: 0, y: -50, z: 0 });
         }
       }
-      if (dial) {
-        dial.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
-      }
+      this.elements.get('gear-dial')?.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
     } else if (mode === 'SANDBOX_CASCADE') {
+      if (!this.elements.has('gear-cascade')) {
+        const newCascade = new CascadeGearDialMission();
+        newCascade.init(this.world, MissionManager.SANDBOX_CENTER_POS);
+        this.elements.set(newCascade.id, newCascade);
+        this.rootGroup.add(newCascade.rootGroup);
+      }
       for (const elem of this.elements.values()) {
-        elem.rootGroup.visible = (elem.id === 'gear-cascade');
+        elem.rootGroup.visible = elem.id === 'gear-cascade';
         if (elem.id !== 'gear-cascade') {
           elem.setPosition({ x: 0, y: -50, z: 0 });
         }
       }
-      if (cascade) {
-        cascade.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
-      }
+      this.elements.get('gear-cascade')?.setPosition(MissionManager.SANDBOX_CENTER_POS, 0);
     }
   }
 

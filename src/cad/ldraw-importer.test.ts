@@ -124,14 +124,13 @@ describe('Season Missions Configuration', () => {
     ]);
   });
 
-  it('keeps default loading selective so not all 13 models load simultaneously', () => {
+  it('starts with a clean field so not all 13 models load simultaneously', () => {
     const defaultEnabled = SEASON_MISSIONS_CONFIG.filter((m) => m.enabledByDefault);
-    // Starter set should be small (<= 3 models) to ensure fast initialization
-    expect(defaultEnabled.length).toBeLessThanOrEqual(3);
-    expect(defaultEnabled.length).toBeGreaterThan(0);
+    // Field starts clean by default (0 models enabled initially)
+    expect(defaultEnabled.length).toBe(0);
 
     const defaultDisabled = SEASON_MISSIONS_CONFIG.filter((m) => !m.enabledByDefault);
-    expect(defaultDisabled.length).toBeGreaterThanOrEqual(10);
+    expect(defaultDisabled.length).toBe(SEASON_MISSIONS_CONFIG.length);
   });
 
   it('persists and retrieves user selective loading preferences', () => {

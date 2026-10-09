@@ -333,7 +333,7 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public getInteractiveMeshes(): THREE.Object3D[] {
-    return this.interactiveMeshes.length > 0 ? this.interactiveMeshes : [this.rootGroup];
+    return this.interactiveMeshes;
   }
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {

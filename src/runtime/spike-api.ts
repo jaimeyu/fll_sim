@@ -2,6 +2,30 @@ import { SimulationPhysicsEngine } from '../physics/engine';
 import { VirtualSensorManager } from '../sensors/sensor-manager';
 import { MotorPort } from '../physics/motor-controller';
 
+export class VirtualTimer {
+  private startTime: number = performance.now();
+
+  public reset(): void {
+    this.startTime = performance.now();
+  }
+
+  public now(): number {
+    return (performance.now() - this.startTime) / 1000;
+  }
+
+  public get_time_sec(): number {
+    return (performance.now() - this.startTime) / 1000;
+  }
+
+  public get_time_msec(): number {
+    return performance.now() - this.startTime;
+  }
+
+  public time(): number {
+    return Math.round(performance.now() - this.startTime);
+  }
+}
+
 export class VirtualSpikeApi {
   private engine: SimulationPhysicsEngine;
   private sensors: VirtualSensorManager;
@@ -32,6 +56,10 @@ export class VirtualSpikeApi {
   }
 
   // --- Classes exposed to user scripts ---
+
+  public createTimer(): VirtualTimer {
+    return new VirtualTimer();
+  }
 
   public createPrimeHub() {
     const self = this;
@@ -97,10 +125,11 @@ export class VirtualSpikeApi {
     };
   }
 
-  public createMotorPair(leftPort: MotorPort = 'A', rightPort: MotorPort = 'B') {
+  public createMotorPair(leftPort: any = 'A', rightPort: any = 'B') {
     const self = this;
-    const motorL = self.engine.robot.motors.get(leftPort);
-    const motorR = self.engine.robot.motors.get(rightPort);
+    // Map requested ports or fallback to drive motors 'A' and 'B'
+    const motorL = self.engine.robot.motors.get(leftPort) || self.engine.robot.motors.get('A');
+    const motorR = self.engine.robot.motors.get(rightPort) || self.engine.robot.motors.get('B');
     let defaultSpeed = 50;
 
     // Wheel physical specs:
@@ -123,17 +152,29 @@ export class VirtualSpikeApi {
       set_default_speed: (speed: number) => {
         defaultSpeed = speed;
       },
-      start: (steering = 0, speed?: number) => {
+      start: (arg1: any = 0, arg2?: any) => {
         self.checkAborted();
-        const spd = speed !== undefined ? speed : defaultSpeed;
-        // Steering: -100 (hard left) to +100 (hard right)
-        // Ratio calculation
-        let leftSpeed = spd;
-        let rightSpeed = spd;
+        let steering = 0;
+        let speed = defaultSpeed;
+
+        if (typeof arg1 === 'object' && arg1 !== null) {
+          if (arg1.steering !== undefined) steering = arg1.steering;
+          if (arg1.speed !== undefined) speed = arg1.speed;
+        } else if (typeof arg1 === 'number') {
+          steering = arg1;
+          if (typeof arg2 === 'number') speed = arg2;
+        } else if (arg2 !== undefined) {
+          speed = arg2;
+        }
+
+        // Clamp steering to -100 .. 100
+        steering = Math.max(-100, Math.min(100, steering));
+        let leftSpeed = speed;
+        let rightSpeed = speed;
         if (steering > 0) {
-          rightSpeed = spd * (1 - (2 * steering) / 100);
+          rightSpeed = speed * (1 - (2 * steering) / 100);
         } else if (steering < 0) {
-          leftSpeed = spd * (1 - (2 * Math.abs(steering)) / 100);
+          leftSpeed = speed * (1 - (2 * Math.abs(steering)) / 100);
         }
         motorL?.start(leftSpeed);
         motorR?.start(rightSpeed);
@@ -232,13 +273,14 @@ export class VirtualSpikeApi {
     };
   }
 
-  public createColorSensor(port: 'C' | 'D' = 'C') {
+  public createColorSensor(port: any = 'C') {
     const self = this;
+    const normalizedPort: 'C' | 'D' = String(port).toUpperCase() === 'D' ? 'D' : 'C';
     return {
-      port,
+      port: normalizedPort,
       get_reflected_light: () => {
         self.checkAborted();
-        return self.sensors.sampleColorSensor(port).reflectedLight;
+        return self.sensors.sampleColorSensor(normalizedPort).reflectedLight;
       },
       get_color: () => {
         self.checkAborted();

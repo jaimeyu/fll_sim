@@ -20,6 +20,49 @@ export class PythonScriptRunner {
     this.isRunning = false;
   }
 
+  public static findMatchingParen(str: string, openIndex: number): number {
+    let depth = 0;
+    let inQuote: string | null = null;
+    for (let i = openIndex; i < str.length; i++) {
+      const ch = str[i];
+      if ((ch === '"' || ch === "'") && (i === 0 || str[i - 1] !== '\\')) {
+        if (!inQuote) inQuote = ch;
+        else if (inQuote === ch) inQuote = null;
+      } else if (!inQuote) {
+        if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0) return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  public static splitArguments(argsStr: string): string[] {
+    const result: string[] = [];
+    let depth = 0;
+    let inQuote: string | null = null;
+    let start = 0;
+    for (let i = 0; i < argsStr.length; i++) {
+      const ch = argsStr[i];
+      if ((ch === '"' || ch === "'") && (i === 0 || argsStr[i - 1] !== '\\')) {
+        if (!inQuote) inQuote = ch;
+        else if (inQuote === ch) inQuote = null;
+      } else if (!inQuote) {
+        if (ch === '(' || ch === '[' || ch === '{') depth++;
+        else if (ch === ')' || ch === ']' || ch === '}') depth--;
+        else if (ch === ',' && depth === 0) {
+          result.push(argsStr.substring(start, i).trim());
+          start = i + 1;
+        }
+      }
+    }
+    const last = argsStr.substring(start).trim();
+    if (last) result.push(last);
+    return result;
+  }
+
   /**
    * Transpiles a subset of Python into async JavaScript
    */
@@ -147,6 +190,34 @@ export class PythonScriptRunner {
       transformed = transformed.replace(/\bwait_for_seconds\(/g, 'await wait_for_seconds(');
       transformed = transformed.replace(/\btime\.sleep\(/g, 'await wait_for_seconds(');
 
+      // Transform .start(...) with keyword arguments (e.g. steering=int(steering), speed=BASE_SPEED)
+      const startCallIdx = transformed.indexOf('.start(');
+      if (startCallIdx !== -1) {
+        const parenOpen = startCallIdx + 6; // index of '('
+        const parenClose = PythonScriptRunner.findMatchingParen(transformed, parenOpen);
+        if (parenClose !== -1) {
+          const argsStr = transformed.substring(parenOpen + 1, parenClose);
+          const args = PythonScriptRunner.splitArguments(argsStr);
+          const hasKwargs = args.some((a) => /^[a-zA-Z_]\w*\s*=/.test(a));
+          if (hasKwargs) {
+            const props: string[] = [];
+            for (const arg of args) {
+              const eqIdx = arg.indexOf('=');
+              if (eqIdx !== -1) {
+                const k = arg.substring(0, eqIdx).trim();
+                const v = arg.substring(eqIdx + 1).trim();
+                props.push(`${k}: ${v}`);
+              } else {
+                props.push(arg);
+              }
+            }
+            const before = transformed.substring(0, parenOpen + 1);
+            const after = transformed.substring(parenClose);
+            transformed = `${before}{ ${props.join(', ')} }${after}`;
+          }
+        }
+      }
+
       // Handle simple print
       transformed = transformed.replace(/\bprint\((.*?)\)/g, 'console.log($1)');
 
@@ -172,11 +243,15 @@ export class PythonScriptRunner {
     const signal = this.abortController.signal;
 
     // Build execution context environment
+    const self = this;
     const PrimeHub = () => this.api.createPrimeHub();
     const Motor = (port: any) => this.api.createMotor(port);
-    const MotorPair = (l: any, r: any) => this.api.createMotorPair(l, r);
-    const ColorSensor = (port: any) => this.api.createColorSensor(port);
+    const MotorPair = (l: any = 'A', r: any = 'B') => this.api.createMotorPair(l, r);
+    const ColorSensor = (port: any = 'C') => this.api.createColorSensor(port);
     const DistanceSensor = () => this.api.createDistanceSensor();
+    const Timer = function () {
+      return self.api.createTimer();
+    };
     const wait_for_seconds = async (sec: number) => {
       await this.api.wait(sec);
     };
@@ -185,6 +260,34 @@ export class PythonScriptRunner {
         await this.api.wait(sec);
       },
     };
+
+    const control = {
+      Timer: () => this.api.createTimer(),
+      wait_for_seconds,
+    };
+
+    const spike = {
+      PrimeHub,
+      Motor,
+      MotorPair,
+      ColorSensor,
+      DistanceSensor,
+      Timer: () => this.api.createTimer(),
+      control,
+    };
+
+    // Python built-in functions
+    const int = (v: any) => Math.trunc(Number(v)) || 0;
+    const float = (v: any) => Number(v) || 0;
+    const round = (v: any, d = 0) => {
+      const f = Math.pow(10, d);
+      return Math.round(Number(v) * f) / f;
+    };
+    const abs = (v: any) => Math.abs(Number(v));
+    const min = (...args: any[]) => Math.min(...(Array.isArray(args[0]) ? args[0] : args));
+    const max = (...args: any[]) => Math.max(...(Array.isArray(args[0]) ? args[0] : args));
+    const len = (v: any) => (v && typeof v.length === 'number' ? v.length : 0);
+    const str = (v: any) => String(v);
 
     const __yield = async () => {
       if (signal.aborted) throw new Error('Aborted');
@@ -207,8 +310,19 @@ export class PythonScriptRunner {
         'MotorPair',
         'ColorSensor',
         'DistanceSensor',
+        'Timer',
         'wait_for_seconds',
         'time',
+        'spike',
+        'control',
+        'int',
+        'float',
+        'round',
+        'abs',
+        'min',
+        'max',
+        'len',
+        'str',
         '__yield',
         'console',
         `return (async () => {\n${jsCode}\n})();`
@@ -220,8 +334,19 @@ export class PythonScriptRunner {
         MotorPair,
         ColorSensor,
         DistanceSensor,
+        Timer,
         wait_for_seconds,
         time,
+        spike,
+        control,
+        int,
+        float,
+        round,
+        abs,
+        min,
+        max,
+        len,
+        str,
         __yield,
         { log: consoleLog }
       );

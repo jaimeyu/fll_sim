@@ -26,7 +26,7 @@ export const SEASON_MISSIONS_CONFIG: SeasonMissionSpec[] = [
     name: 'Mission 01: Drone Survey',
     book: 'Book 01',
     ioFile: '/missions/M01.io',
-    enabledByDefault: true, // Enabled as default starter model
+    enabledByDefault: false,
     isFixedBase: true,
     arenaPosition: { x: -0.75, y: 0.002, z: -0.32 },
     yawDegrees: 0,
@@ -50,7 +50,7 @@ export const SEASON_MISSIONS_CONFIG: SeasonMissionSpec[] = [
     name: 'Mission 03: Flip the Rock',
     book: 'Book 03',
     ioFile: '/missions/M03.io',
-    enabledByDefault: true, // Enabled as default starter model
+    enabledByDefault: false,
     isFixedBase: true,
     arenaPosition: { x: 0.05, y: 0.002, z: -0.34 },
     yawDegrees: 0,
