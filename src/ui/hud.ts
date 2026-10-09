@@ -1,6 +1,7 @@
 import { TelemetryState, ExecutionState, SpawnPose } from '../runtime/types';
 import { CameraViewPreset } from '../view/viewport';
 import { SimulatorAppMode } from '../missions/mission-manager';
+import { MatMapType } from '../view/mat-texture';
 
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
@@ -8,7 +9,8 @@ export interface HudCallbacks {
   onResetRobot: () => void;
   onCameraChange: (preset: CameraViewPreset) => void;
   onImportFile: (file: File) => void;
-  onMapChange?: (mapType: 'grid' | 'procedural') => void;
+  onImportMissionElement?: (file: File) => void;
+  onMapChange?: (mapType: MatMapType) => void;
   onSpawnPoseChange?: (pose: SpawnPose) => void;
   onMoveRobotToPose?: (pose: SpawnPose, label?: string) => void;
   onCaptureCurrentPose?: () => void;
@@ -17,6 +19,11 @@ export interface HudCallbacks {
   onSpawnTestBlock?: () => void;
   onToggleDynoMode?: (active: boolean) => void;
   onResetMission?: () => void;
+  onResetAllMissions?: () => void;
+  onElementTransformChange?: (id: string, x: number, z: number, yawDegrees: number) => void;
+  onElementTogglePlaced?: (id: string, placed: boolean) => void;
+  onElementDelete?: (id: string) => void;
+  onElementFocus?: (id: string) => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -153,6 +160,26 @@ export class SimulatorHud {
   private btnResetMission!: HTMLButtonElement;
   private missionScoreText!: HTMLElement;
 
+  // Mission Asset Drawer UI elements
+  private assetDrawer!: HTMLElement;
+  private btnToggleDrawer!: HTMLButtonElement;
+  private btnCloseDrawer!: HTMLButtonElement;
+  private drawerElementsList!: HTMLElement;
+  private assetCountBadge!: HTMLElement;
+  private missionCadFileInput!: HTMLInputElement;
+  private btnTopbarResetElements!: HTMLButtonElement;
+  private btnDrawerResetAll!: HTMLButtonElement;
+  private missionElementsData: Array<{
+    id: string;
+    name: string;
+    description: string;
+    sourceFile?: string;
+    isPlacedOnField?: boolean;
+    position: { x: number; y: number; z: number };
+    yawDegrees: number;
+    isCustom?: boolean;
+  }> = [];
+
   private isToolActive = true;
   private isDynoActive = false;
 
@@ -199,21 +226,52 @@ export class SimulatorHud {
               <option value="ARENA" selected>🏟️ Competition Arena</option>
               <option value="SANDBOX_RISER">🔬 Sandbox: 4-Axle Riser</option>
               <option value="SANDBOX_DIAL">🔬 Sandbox: Rotary Dial</option>
+              <option value="SANDBOX_CASCADE">🔬 Sandbox: Multi-Gear Cascade</option>
             </select>
           </div>
           <div class="map-select-container">
             <label for="map-select" class="hud-label-inline">🗺️ Mat:</label>
             <select id="map-select" class="hud-select hud-select-sm">
-              <option value="grid" selected>Official Grid Mat</option>
+              <option value="numbered" selected>Numbered Field Mat (BioGlow)</option>
+              <option value="grid">Grid Playing Field Mat</option>
               <option value="procedural">Procedural FLL Mat</option>
             </select>
           </div>
-          <label class="btn btn-sm btn-secondary file-upload-btn">
-            📂 Import Studio .io / .ldr
+          <button class="btn btn-sm btn-outline" id="btn-topbar-reset-elements" title="Reset all mission elements back to starting idle position">🔄 Reset Elements</button>
+          <button class="btn btn-sm btn-primary" id="btn-toggle-asset-drawer" title="Open Mission Element Asset Drawer & Library">📦 Mission Assets <span class="badge-count" id="asset-count-badge">3</span></button>
+          <label class="btn btn-sm btn-secondary file-upload-btn" title="Import robot CAD model (.io / .ldr)">
+            🤖 Import Robot (.io)
             <input type="file" id="cad-file-input" accept=".io,.ldr,.mpd" style="display: none;">
           </label>
         </div>
       </header>
+
+      <!-- Slide-out Mission Asset Drawer -->
+      <div class="hud-asset-drawer" id="asset-drawer" style="display: none;">
+        <div class="drawer-header">
+          <div class="drawer-title-group">
+            <span class="drawer-icon">📦</span>
+            <span class="drawer-title">Mission Asset Library</span>
+          </div>
+          <button class="btn btn-xs btn-outline drawer-close-btn" id="btn-close-drawer">✖</button>
+        </div>
+        
+        <div class="drawer-toolbar">
+          <label class="btn btn-sm btn-primary file-upload-btn w-100">
+            ➕ Import Mission Model (.io / .ldr)
+            <input type="file" id="mission-cad-file-input" accept=".io,.ldr,.mpd,.dat" style="display: none;">
+          </label>
+          <button class="btn btn-sm btn-outline w-100" id="btn-drawer-reset-all">🔄 Reset All Elements to Idle</button>
+        </div>
+
+        <div class="drawer-content" id="drawer-elements-list">
+          <!-- Populated dynamically with element cards -->
+        </div>
+
+        <div class="drawer-footer-hint">
+          💡 <strong>Tip:</strong> Click & drag mission elements directly on the mat! Use <strong>mouse wheel</strong> or press <strong>R</strong> to rotate.
+        </div>
+      </div>
 
       <!-- Floating Sandbox Action Toolbar -->
       <div class="hud-sandbox-toolbar" id="sandbox-toolbar" style="display: none;">
@@ -321,6 +379,20 @@ export class SimulatorHud {
               <input type="number" id="spawn-yaw" step="5" value="90">
             </div>
           </div>
+          <!-- Quick Heading & Rotation Row -->
+          <div class="spawn-rotate-row">
+            <span class="rotate-label">Heading:</span>
+            <button class="btn btn-xs btn-outline" data-rot-step="-45" title="Rotate robot -45°">⟲ -45°</button>
+            <button class="btn btn-xs btn-outline" data-rot-step="-15" title="Rotate robot -15°">⟲ -15°</button>
+            <button class="btn btn-xs btn-outline" data-rot-step="15" title="Rotate robot +15°">⟳ +15°</button>
+            <button class="btn btn-xs btn-outline" data-rot-step="45" title="Rotate robot +45°">⟳ +45°</button>
+          </div>
+          <div class="spawn-heading-chips">
+            <button class="btn btn-xs btn-ghost" data-rot-preset="0" title="Facing North (0°)">0° N</button>
+            <button class="btn btn-xs btn-ghost" data-rot-preset="90" title="Facing East (90°)">90° E</button>
+            <button class="btn btn-xs btn-ghost" data-rot-preset="180" title="Facing South (180°)">180° S</button>
+            <button class="btn btn-xs btn-ghost" data-rot-preset="270" title="Facing West (270°)">270° W</button>
+          </div>
           <div class="spawn-actions-row">
             <button class="btn btn-xs btn-primary" id="btn-move-pose" title="Stop running code and immediately move robot to entered (X, Z, Yaw) coordinates">🚀 Move Robot</button>
             <button class="btn btn-xs btn-outline" id="btn-capture-pose" title="Capture current robot position on field as default start pose">📌 Set as Start</button>
@@ -363,6 +435,15 @@ export class SimulatorHud {
     this.btnResetMission = this.rootElement.querySelector('#btn-reset-mission')!;
     this.missionScoreText = this.rootElement.querySelector('#mission-score-text')!;
 
+    this.assetDrawer = this.rootElement.querySelector('#asset-drawer')!;
+    this.btnToggleDrawer = this.rootElement.querySelector('#btn-toggle-asset-drawer')!;
+    this.btnCloseDrawer = this.rootElement.querySelector('#btn-close-drawer')!;
+    this.drawerElementsList = this.rootElement.querySelector('#drawer-elements-list')!;
+    this.assetCountBadge = this.rootElement.querySelector('#asset-count-badge')!;
+    this.missionCadFileInput = this.rootElement.querySelector('#mission-cad-file-input')!;
+    this.btnTopbarResetElements = this.rootElement.querySelector('#btn-topbar-reset-elements')!;
+    this.btnDrawerResetAll = this.rootElement.querySelector('#btn-drawer-reset-all')!;
+
     // Set initial sample code
     this.codeTextarea.value = SAMPLE_MISSIONS.drive_straight.code;
   }
@@ -382,7 +463,7 @@ export class SimulatorHud {
     const mapSelect = this.rootElement.querySelector('#map-select') as HTMLSelectElement | null;
     if (mapSelect) {
       mapSelect.addEventListener('change', () => {
-        const val = mapSelect.value as 'grid' | 'procedural';
+        const val = mapSelect.value as MatMapType;
         this.callbacks.onMapChange?.(val);
         this.logConsole(`Switched competition mat to: ${mapSelect.options[mapSelect.selectedIndex].text}`);
       });
@@ -486,6 +567,59 @@ export class SimulatorHud {
         this.setExecutionState('IDLE');
         this.callbacks.onMoveRobotToPose?.(pose, label);
       });
+    });
+
+    // Heading quick-rotate step buttons (⟲ -45°, ⟲ -15°, ⟳ +15°, ⟳ +45°)
+    const rotStepBtns = this.rootElement.querySelectorAll('[data-rot-step]');
+    rotStepBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const step = parseFloat(btn.getAttribute('data-rot-step') || '0');
+        const curPose = this.getSpawnPose();
+        let newYaw = (curPose.yawDegrees + step) % 360;
+        if (newYaw > 180) newYaw -= 360;
+        if (newYaw < -180) newYaw += 360;
+        newYaw = Math.round(newYaw);
+        this.spawnInputYaw.value = newYaw.toString();
+        const updatedPose = { ...curPose, yawDegrees: newYaw };
+        this.callbacks.onMoveRobotToPose?.(updatedPose, `Rotated to heading ${newYaw}°`);
+      });
+    });
+
+    // Heading preset chips (0° N, 90° E, 180° S, 270° W)
+    const rotPresetBtns = this.rootElement.querySelectorAll('[data-rot-preset]');
+    rotPresetBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const presetYaw = parseFloat(btn.getAttribute('data-rot-preset') || '0');
+        const curPose = this.getSpawnPose();
+        this.spawnInputYaw.value = presetYaw.toString();
+        const updatedPose = { ...curPose, yawDegrees: presetYaw };
+        this.callbacks.onMoveRobotToPose?.(updatedPose, `Aligned heading to ${presetYaw}°`);
+      });
+    });
+
+    // Reset All Mission Elements buttons
+    const handleResetAllElements = () => {
+      this.callbacks.onResetAllMissions?.();
+      this.callbacks.onResetMission?.();
+      this.logConsole('🔄 All mission elements reset to starting idle state.');
+    };
+    this.btnTopbarResetElements?.addEventListener('click', handleResetAllElements);
+    this.btnDrawerResetAll?.addEventListener('click', handleResetAllElements);
+
+    // Toggle Mission Asset Drawer
+    this.btnToggleDrawer?.addEventListener('click', () => {
+      this.toggleAssetDrawer();
+    });
+    this.btnCloseDrawer?.addEventListener('click', () => {
+      this.toggleAssetDrawer(false);
+    });
+
+    // Mission Model CAD file importer (.io / .ldr / .dat)
+    this.missionCadFileInput?.addEventListener('change', () => {
+      if (this.missionCadFileInput.files && this.missionCadFileInput.files[0]) {
+        this.callbacks.onImportMissionElement?.(this.missionCadFileInput.files[0]);
+        this.missionCadFileInput.value = '';
+      }
     });
 
     // Mode dropdown change
@@ -639,5 +773,162 @@ export class SimulatorHud {
       this.missionScoreText.textContent = `PROGRESS: ${score}%`;
       this.missionScoreText.className = 'chip-val';
     }
+  }
+
+  public toggleAssetDrawer(open?: boolean): void {
+    const isVisible = this.assetDrawer.style.display !== 'none';
+    const shouldOpen = open !== undefined ? open : !isVisible;
+    this.assetDrawer.style.display = shouldOpen ? 'flex' : 'none';
+    if (shouldOpen) {
+      this.btnToggleDrawer.classList.add('active');
+    } else {
+      this.btnToggleDrawer.classList.remove('active');
+    }
+  }
+
+  public setMissionElements(
+    elements: Array<{
+      id: string;
+      name: string;
+      description: string;
+      sourceFile?: string;
+      isPlacedOnField?: boolean;
+      position: { x: number; y: number; z: number };
+      yawDegrees: number;
+      isCustom?: boolean;
+    }>
+  ): void {
+    this.missionElementsData = elements;
+    const activeCount = elements.filter((e) => e.isPlacedOnField !== false).length;
+    this.assetCountBadge.textContent = activeCount.toString();
+    this.renderDrawerElements();
+  }
+
+  public renderDrawerElements(): void {
+    this.drawerElementsList.innerHTML = this.missionElementsData
+      .map(
+        (elem) => `
+      <div class="drawer-card" data-element-id="${elem.id}">
+        <div class="drawer-card-header">
+          <span class="card-elem-name">${elem.name}</span>
+          <span class="badge ${elem.isPlacedOnField !== false ? 'badge-active' : 'badge-inactive'}">
+            ${elem.isPlacedOnField !== false ? 'ON FIELD' : 'IN DRAWER'}
+          </span>
+        </div>
+        <p class="card-elem-desc">${elem.description}${elem.sourceFile ? ` <span style="color:#38bdf8">(${elem.sourceFile})</span>` : ''}</p>
+        <div class="card-actions-row">
+          <button class="btn btn-xs ${elem.isPlacedOnField !== false ? 'btn-danger' : 'btn-success'}" data-action="toggle-placed" data-id="${elem.id}">
+            ${elem.isPlacedOnField !== false ? '➖ Stow in Drawer' : '➕ Place on Field'}
+          </button>
+          <button class="btn btn-xs btn-outline" data-action="focus" data-id="${elem.id}">
+            🔍 Focus
+          </button>
+          ${elem.isCustom ? `<button class="btn btn-xs btn-outline text-danger" data-action="delete" data-id="${elem.id}" title="Delete element">🗑️</button>` : ''}
+        </div>
+        ${
+          elem.isPlacedOnField !== false
+            ? `
+        <div class="card-transform-group">
+          <div class="card-inputs-row">
+            <div class="spawn-input-group">
+              <label>X (m)</label>
+              <input type="number" step="0.05" value="${elem.position.x.toFixed(2)}" data-transform="x" data-id="${elem.id}">
+            </div>
+            <div class="spawn-input-group">
+              <label>Z (m)</label>
+              <input type="number" step="0.05" value="${elem.position.z.toFixed(2)}" data-transform="z" data-id="${elem.id}">
+            </div>
+            <div class="spawn-input-group">
+              <label>Yaw (°)</label>
+              <input type="number" step="5" value="${Math.round(elem.yawDegrees)}" data-transform="yaw" data-id="${elem.id}">
+            </div>
+          </div>
+          <div class="card-rotate-row">
+            <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="-45" data-id="${elem.id}">⟲ -45°</button>
+            <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="45" data-id="${elem.id}">⟳ +45°</button>
+            <button class="btn btn-xs btn-outline" data-action="reset-pose" data-id="${elem.id}">↺ Reset</button>
+          </div>
+        </div>
+        `
+            : ''
+        }
+      </div>
+    `
+      )
+      .join('');
+
+    // Wire up events in the cards
+    this.drawerElementsList.querySelectorAll('[data-action="toggle-placed"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        const elem = this.missionElementsData.find((e) => e.id === id);
+        if (elem) {
+          const placed = elem.isPlacedOnField === false;
+          elem.isPlacedOnField = placed;
+          this.callbacks.onElementTogglePlaced?.(id, placed);
+          this.setMissionElements(this.missionElementsData);
+        }
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="focus"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onElementFocus?.(id);
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onElementDelete?.(id);
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="rot-step"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        const delta = parseFloat(btn.getAttribute('data-delta') || '0');
+        const elem = this.missionElementsData.find((e) => e.id === id);
+        if (elem) {
+          let newYaw = Math.round((elem.yawDegrees + delta) % 360);
+          if (newYaw > 180) newYaw -= 360;
+          if (newYaw < -180) newYaw += 360;
+          elem.yawDegrees = newYaw;
+          this.callbacks.onElementTransformChange?.(id, elem.position.x, elem.position.z, newYaw);
+          this.setMissionElements(this.missionElementsData);
+        }
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="reset-pose"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        const elem = this.missionElementsData.find((e) => e.id === id);
+        if (elem) {
+          this.callbacks.onResetMission?.();
+        }
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('input[data-transform]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const inputElem = input as HTMLInputElement;
+        const id = inputElem.getAttribute('data-id')!;
+        const elem = this.missionElementsData.find((e) => e.id === id);
+        if (elem) {
+          const card = inputElem.closest('.drawer-card');
+          if (card) {
+            const xVal = parseFloat((card.querySelector('input[data-transform="x"]') as HTMLInputElement).value) || 0;
+            const zVal = parseFloat((card.querySelector('input[data-transform="z"]') as HTMLInputElement).value) || 0;
+            const yawVal = parseFloat((card.querySelector('input[data-transform="yaw"]') as HTMLInputElement).value) || 0;
+            elem.position.x = xVal;
+            elem.position.z = zVal;
+            elem.yawDegrees = yawVal;
+            this.callbacks.onElementTransformChange?.(id, xVal, zVal, yawVal);
+          }
+        }
+      });
+    });
   }
 }

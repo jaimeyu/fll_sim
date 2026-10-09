@@ -27,6 +27,8 @@ export class GearDialMission implements MissionElement {
 
   private world!: RAPIER.World;
   private basePos: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  private yawDegrees: number = 0;
+  public isPlacedOnField: boolean = true;
 
   // Physics Bodies
   private pedestalBody!: RAPIER.RigidBody;
@@ -66,7 +68,7 @@ export class GearDialMission implements MissionElement {
       this.pedestalBody
     );
 
-    // 2. Dynamic 4-Spoke Turnstile Rotor (Revolves around Y axis)
+    // 2. Dynamic 4-Spoke Turnstile Rotor (Revolves strictly around Y axis, zero pitch/roll wobble)
     // Centered at robot bumper height: Y = 0.035m (Spans Y = 0.021m to 0.049m)
     const rotorDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(x, y + 0.035, z)
@@ -74,6 +76,8 @@ export class GearDialMission implements MissionElement {
       .setLinearDamping(10.0) // Resist translation; shaft holds it in place
       .lockTranslations(); // Rotate only around Y
     this.rotorBody = this.world.createRigidBody(rotorDesc);
+    // Authentically rigid Technic pin fit: strictly lock X (pitch) and Z (roll) rotations
+    this.rotorBody.setEnabledRotations(false, true, false, true);
 
     // 4 Cross-Paddle Colliders (Arm 1 along X, Arm 2 along Z, 160mm total span)
     const arm1 = RAPIER.ColliderDesc.cuboid(0.080, 0.014, 0.008)
@@ -231,8 +235,11 @@ export class GearDialMission implements MissionElement {
     if (!this.rotorBody) return;
 
     const { x, y, z } = this.basePos;
+    const radYaw = (this.yawDegrees * Math.PI) / 180;
     this.baseplateGroup.position.set(x, y + 0.002, z);
+    this.baseplateGroup.rotation.y = radYaw;
     this.gearTrainGroup.position.set(x, y + 0.002, z);
+    this.gearTrainGroup.rotation.y = radYaw;
 
     // Rotor transform
     const rP = this.rotorBody.translation();
@@ -264,24 +271,40 @@ export class GearDialMission implements MissionElement {
   public reset(): void {
     const { x, y, z } = this.basePos;
     const zeroVel = { x: 0, y: 0, z: 0 };
-    const identQuat = { x: 0, y: 0, z: 0, w: 1 };
+    const radYaw = (this.yawDegrees * Math.PI) / 180;
+    const qy = Math.sin(radYaw / 2);
+    const qw = Math.cos(radYaw / 2);
+    const yawQuat = { x: 0, y: qy, z: 0, w: qw };
 
     this.pedestalBody.setTranslation({ x, y: y + 0.008, z }, true);
-    this.pedestalBody.setRotation(identQuat, true);
+    this.pedestalBody.setRotation(yawQuat, true);
 
     this.rotorBody.setTranslation({ x, y: y + 0.035, z }, true);
-    this.rotorBody.setRotation(identQuat, true);
+    this.rotorBody.setRotation(yawQuat, true);
     this.rotorBody.setLinvel(zeroVel, true);
     this.rotorBody.setAngvel(zeroVel, true);
+    this.rotorBody.setEnabledRotations(false, true, false, true);
 
-    this.initialAngle = 0;
-    this.currentAngle = 0;
+    this.initialAngle = this.getRotationAngle();
+    this.currentAngle = this.initialAngle;
     this.syncVisuals();
   }
 
-  public setPosition(pos: { x: number; y: number; z: number }): void {
+  public setPosition(pos: { x: number; y: number; z: number }, yawDegrees?: number): void {
     this.basePos = { ...pos };
+    if (yawDegrees !== undefined) {
+      this.yawDegrees = yawDegrees;
+    }
     this.reset();
+  }
+
+  public setRotation(yawDegrees: number): void {
+    this.yawDegrees = yawDegrees;
+    this.reset();
+  }
+
+  public getYawDegrees(): number {
+    return this.yawDegrees;
   }
 
   public getPosition(): { x: number; y: number; z: number } {

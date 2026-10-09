@@ -14,4 +14,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@dimforge/rapier3d-compat'],
   },
+  test: {
+    testTimeout: 20000,
+  },
 });

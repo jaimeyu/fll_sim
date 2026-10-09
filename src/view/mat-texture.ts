@@ -1,19 +1,21 @@
 import * as THREE from 'three';
 import { MatColorSampler } from '../sensors/sensor-manager';
 
+export type MatMapType = 'numbered' | 'grid' | 'procedural';
+
 export class CompetitionMatTexture implements MatColorSampler {
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
   public texture: THREE.CanvasTexture;
 
-  // Real world dimensions (meters): 2.40m x 1.40m (matches official FLL grid mat aspect ratio 1.714)
+  // Real world dimensions (meters): 2.40m x 1.40m (matches official FLL mat aspect ratio)
   public worldLength = 2.40;
   public worldWidth = 1.40;
 
   private canvasWidth = 2048;
   private canvasHeight = 1024;
   private pixelData: Uint8ClampedArray | null = null;
-  public currentMap: 'grid' | 'procedural' = 'grid';
+  public currentMap: MatMapType = 'numbered';
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -31,14 +33,14 @@ export class CompetitionMatTexture implements MatColorSampler {
     // Cache image data for fast CPU sensor sampling
     this.cacheImageData();
 
-    // Default to the official competition grid map
-    this.loadMap('grid').catch(() => {});
+    // Default to the official BioGlow numbered competition map
+    this.loadMap('numbered').catch(() => {});
   }
 
   /**
-   * Switches active competition mat between official grid image and procedural canvas
+   * Switches active competition mat between numbered field mat, grid image, and procedural canvas
    */
-  public async loadMap(mapType: 'grid' | 'procedural'): Promise<void> {
+  public async loadMap(mapType: MatMapType): Promise<void> {
     this.currentMap = mapType;
     if (mapType === 'procedural') {
       this.drawCompetitionMat();
@@ -53,6 +55,10 @@ export class CompetitionMatTexture implements MatColorSampler {
       this.cacheImageData();
       return;
     }
+
+    const src = mapType === 'numbered'
+      ? '/maps/bioglow_numbered_mat.png'
+      : '/maps/playing_field_grid.png';
 
     return new Promise<void>((resolve) => {
       const img = new Image();
@@ -71,7 +77,7 @@ export class CompetitionMatTexture implements MatColorSampler {
         this.texture.needsUpdate = true;
         resolve();
       };
-      img.src = '/maps/playing_field_grid.png';
+      img.src = src;
     });
   }
 

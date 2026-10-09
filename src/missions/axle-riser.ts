@@ -26,6 +26,8 @@ export class AxleRiserMission implements MissionElement {
 
   private world!: RAPIER.World;
   private basePos: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  private yawDegrees: number = 0;
+  public isPlacedOnField: boolean = true;
 
   // Physics Bodies
   private anchorBody!: RAPIER.RigidBody;
@@ -48,20 +50,38 @@ export class AxleRiserMission implements MissionElement {
     this.rootGroup = new THREE.Group();
   }
 
-  public init(world: RAPIER.World, basePosition: { x: number; y: number; z: number }): void {
+  public init(world: RAPIER.World, basePosition: { x: number; y: number; z: number }, yawDegrees = 0): void {
     this.world = world;
     this.basePos = { ...basePosition };
+    this.yawDegrees = yawDegrees;
 
     this.createPhysicsBodies();
     this.createLegoVisuals();
     this.syncVisuals();
   }
 
+  private getDirectionVectors(): { ux: number; uz: number; wx: number; wz: number } {
+    const rad = (this.yawDegrees * Math.PI) / 180;
+    return {
+      ux: Math.cos(rad),
+      uz: -Math.sin(rad),
+      wx: Math.sin(rad),
+      wz: Math.cos(rad),
+    };
+  }
+
   private createPhysicsBodies(): void {
     const { x, y, z } = this.basePos;
+    const { ux, uz } = this.getDirectionVectors();
+    const rad = (this.yawDegrees * Math.PI) / 180;
+    const qy = Math.sin(rad / 2);
+    const qw = Math.cos(rad / 2);
+    const yawQuat = { x: 0, y: qy, z: 0, w: qw };
 
     // 1. Fixed Base Anchor Body (Anchored firmly to field)
-    const anchorDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x - 0.09, y + 0.015, z);
+    const anchorDesc = RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(x - 0.09 * ux, y + 0.015, z - 0.09 * uz)
+      .setRotation(yawQuat);
     this.anchorBody = this.world.createRigidBody(anchorDesc);
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(0.040, 0.015, 0.045).setFriction(0.8),
@@ -71,7 +91,8 @@ export class AxleRiserMission implements MissionElement {
     // 2. Dynamic Slider Push Body (Direct contact target for robot bumper and mouse tool)
     // Positioned at robot bumper height (Y = 0.015m to 0.045m)
     const sliderDesc = RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(x + this.initialSliderOffset, y + 0.024, z)
+      .setTranslation(x + this.initialSliderOffset * ux, y + 0.024, z + this.initialSliderOffset * uz)
+      .setRotation(yawQuat)
       .setLinearDamping(4.5)  // Technic friction pin resistance opposes runaway movement
       .setAngularDamping(8.0)
       .lockRotations(); // Keep slider aligned with field track
@@ -86,7 +107,8 @@ export class AxleRiserMission implements MissionElement {
 
     // 3. Middle Elevated Riser Body (Scoring element body)
     const riserDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
-      .setTranslation(x, y + 0.025, z);
+      .setTranslation(x, y + 0.025, z)
+      .setRotation(yawQuat);
     this.riserBody = this.world.createRigidBody(riserDesc);
     const riserCollider = RAPIER.ColliderDesc.cuboid(0.022, 0.020, 0.035)
       .setFriction(0.5);
@@ -186,30 +208,38 @@ export class AxleRiserMission implements MissionElement {
   private updateKinematics(): void {
     if (!this.sliderBody || !this.anchorBody) return;
 
-    // 1. Clamp slider strictly within the mechanical track bounds
+    const { ux, uz } = this.getDirectionVectors();
     const currTrans = this.sliderBody.translation();
-    const minX = this.basePos.x + 0.035;
-    const maxX = this.basePos.x + this.initialSliderOffset + 0.01;
 
-    let clampedX = THREE.MathUtils.clamp(currTrans.x, minX, maxX);
-    let clampedZ = this.basePos.z; // Prevent side drift
-    let clampedY = this.basePos.y + 0.024;
+    // 1. Project slider position onto local mechanism track axis u
+    const distSpan = (currTrans.x - this.basePos.x) * ux + (currTrans.z - this.basePos.z) * uz;
+    const minS = 0.035;
+    const maxS = this.initialSliderOffset + 0.01;
+    const clampedS = THREE.MathUtils.clamp(distSpan, minS, maxS);
 
-    if (currTrans.x !== clampedX || Math.abs(currTrans.z - clampedZ) > 0.001) {
+    const clampedX = this.basePos.x + clampedS * ux;
+    const clampedY = this.basePos.y + 0.024;
+    const clampedZ = this.basePos.z + clampedS * uz;
+
+    const dx = currTrans.x - clampedX;
+    const dz = currTrans.z - clampedZ;
+    if (Math.sqrt(dx * dx + dz * dz) > 0.001) {
       this.sliderBody.setTranslation({ x: clampedX, y: clampedY, z: clampedZ }, true);
       const vel = this.sliderBody.linvel();
-      this.sliderBody.setLinvel({ x: Math.min(vel.x, 0), y: 0, z: 0 }, true);
+      const dotV = vel.x * ux + vel.z * uz;
+      const dampedV = Math.min(dotV, 0);
+      this.sliderBody.setLinvel({ x: dampedV * ux, y: 0, z: dampedV * uz }, true);
     }
 
     // 2. High Pin Friction: Damp velocity to simulate tight Technic friction pins
     const linvel = this.sliderBody.linvel();
-    if (Math.abs(linvel.x) > 0.001) {
-      this.sliderBody.setLinvel({ x: linvel.x * 0.88, y: 0, z: 0 }, true);
+    const speed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+    if (speed > 0.001) {
+      this.sliderBody.setLinvel({ x: linvel.x * 0.88, y: 0, z: linvel.z * 0.88 }, true);
     }
 
     // 3. Compute 4-Bar Scissor Toggle Kinematics
-    const distanceSpan = clampedX - (this.basePos.x - 0.09);
-    // Span at rest ~0.21m, compressed ~0.125m
+    const distanceSpan = clampedS + 0.09;
     const restSpan = this.initialSliderOffset + 0.09;
     const compressedSpan = 0.120;
     const progress = THREE.MathUtils.clamp((restSpan - distanceSpan) / (restSpan - compressedSpan), 0.0, 1.0);
@@ -217,12 +247,12 @@ export class AxleRiserMission implements MissionElement {
 
     // Kinematic riser elevation
     const elevationY = this.basePos.y + 0.020 + progress * 0.052; // Rises up to 7.4cm!
-    const midX = (this.basePos.x - 0.09 + clampedX) / 2;
+    const midS = (clampedS - 0.09) / 2;
 
     this.riserBody.setTranslation({
-      x: midX,
+      x: this.basePos.x + midS * ux,
       y: elevationY + 0.016,
-      z: this.basePos.z,
+      z: this.basePos.z + midS * uz,
     }, true);
   }
 
@@ -230,64 +260,98 @@ export class AxleRiserMission implements MissionElement {
     if (!this.sliderBody || !this.anchorBody) return;
 
     const { x, y, z } = this.basePos;
+    const { ux, uz, wx, wz } = this.getDirectionVectors();
+    const radYaw = (this.yawDegrees * Math.PI) / 180;
+
+    // Baseplate
     this.baseplateGroup.position.set(x, y + 0.002, z);
+    this.baseplateGroup.rotation.y = radYaw;
 
     // Anchor
-    this.anchorMesh.position.set(x - 0.09, y + 0.008, z);
+    this.anchorMesh.position.set(x - 0.09 * ux, y + 0.008, z - 0.09 * uz);
+    this.anchorMesh.rotation.y = radYaw;
 
     // Slider
     const sP = this.sliderBody.translation();
     this.sliderMesh.position.set(sP.x, sP.y, sP.z);
+    this.sliderMesh.rotation.y = radYaw;
 
     // Kinematic Riser
     const rP = this.riserBody.translation();
     this.riserMesh.position.set(rP.x, rP.y, rP.z);
+    this.riserMesh.rotation.y = radYaw;
 
     // 4-Bar Linkages: Link A and Link B
-    // Link A connects Anchor (x - 0.09, y + 0.02) to Riser (rP.x - 0.022, rP.y)
-    const pAnchor = new THREE.Vector3(x - 0.09, y + 0.022, z);
-    const pRiserLeft = new THREE.Vector3(rP.x - 0.022, rP.y - 0.004, z);
+    // Link A connects Anchor (x - 0.09, y + 0.022) to Riser (rP.x - 0.022, rP.y)
+    const pAnchor = new THREE.Vector3(x - 0.09 * ux, y + 0.022, z - 0.09 * uz);
+    const pRiserLeft = new THREE.Vector3(rP.x - 0.022 * ux, rP.y - 0.004, rP.z - 0.022 * uz);
     const midA = new THREE.Vector3().addVectors(pAnchor, pRiserLeft).multiplyScalar(0.5);
-    const deltaA = new THREE.Vector3().subVectors(pRiserLeft, pAnchor);
-    const angleA = Math.atan2(deltaA.y, deltaA.x);
+    const deltaAY = pRiserLeft.y - pAnchor.y;
+    const deltaAH = Math.hypot(pRiserLeft.x - pAnchor.x, pRiserLeft.z - pAnchor.z);
+    const angleA = Math.atan2(deltaAY, deltaAH);
 
-    this.linkAMesh.position.set(midA.x, midA.y, midA.z + 0.014);
-    this.linkAMesh.rotation.z = angleA;
+    this.linkAMesh.position.set(midA.x + 0.014 * wx, midA.y, midA.z + 0.014 * wz);
+    this.linkAMesh.rotation.set(0, 0, 0);
+    this.linkAMesh.rotation.y = radYaw;
+    this.linkAMesh.rotateZ(angleA);
 
     // Link B connects Riser (rP.x + 0.022, rP.y) to Slider (sP.x, y + 0.022)
-    const pRiserRight = new THREE.Vector3(rP.x + 0.022, rP.y - 0.004, z);
-    const pSlider = new THREE.Vector3(sP.x, y + 0.022, z);
+    const pRiserRight = new THREE.Vector3(rP.x + 0.022 * ux, rP.y - 0.004, rP.z + 0.022 * uz);
+    const pSlider = new THREE.Vector3(sP.x, y + 0.022, sP.z);
     const midB = new THREE.Vector3().addVectors(pRiserRight, pSlider).multiplyScalar(0.5);
-    const deltaB = new THREE.Vector3().subVectors(pSlider, pRiserRight);
-    const angleB = Math.atan2(deltaB.y, deltaB.x);
+    const deltaBY = pSlider.y - pRiserRight.y;
+    const deltaBH = Math.hypot(pSlider.x - pRiserRight.x, pSlider.z - pRiserRight.z);
+    const angleB = Math.atan2(deltaBY, deltaBH);
 
-    this.linkBMesh.position.set(midB.x, midB.y, midB.z + 0.014);
-    this.linkBMesh.rotation.z = angleB;
+    this.linkBMesh.position.set(midB.x + 0.014 * wx, midB.y, midB.z + 0.014 * wz);
+    this.linkBMesh.rotation.set(0, 0, 0);
+    this.linkBMesh.rotation.y = radYaw;
+    this.linkBMesh.rotateZ(angleB);
   }
 
   public reset(): void {
     const { x, y, z } = this.basePos;
+    const { ux, uz } = this.getDirectionVectors();
     const zeroVel = { x: 0, y: 0, z: 0 };
-    const identQuat = { x: 0, y: 0, z: 0, w: 1 };
+    const rad = (this.yawDegrees * Math.PI) / 180;
+    const qy = Math.sin(rad / 2);
+    const qw = Math.cos(rad / 2);
+    const yawQuat = { x: 0, y: qy, z: 0, w: qw };
 
-    this.anchorBody.setTranslation({ x: x - 0.09, y: y + 0.015, z }, true);
-    this.anchorBody.setRotation(identQuat, true);
+    this.anchorBody.setTranslation({ x: x - 0.09 * ux, y: y + 0.015, z: z - 0.09 * uz }, true);
+    this.anchorBody.setRotation(yawQuat, true);
 
-    this.sliderBody.setTranslation({ x: x + this.initialSliderOffset, y: y + 0.024, z }, true);
-    this.sliderBody.setRotation(identQuat, true);
+    this.sliderBody.setTranslation({
+      x: x + this.initialSliderOffset * ux,
+      y: y + 0.024,
+      z: z + this.initialSliderOffset * uz,
+    }, true);
+    this.sliderBody.setRotation(yawQuat, true);
     this.sliderBody.setLinvel(zeroVel, true);
     this.sliderBody.setAngvel(zeroVel, true);
 
     this.riserBody.setTranslation({ x, y: y + 0.038, z }, true);
-    this.riserBody.setRotation(identQuat, true);
+    this.riserBody.setRotation(yawQuat, true);
 
     this.currentProgress = 0.0;
     this.syncVisuals();
   }
 
-  public setPosition(pos: { x: number; y: number; z: number }): void {
+  public setPosition(pos: { x: number; y: number; z: number }, yawDegrees?: number): void {
     this.basePos = { ...pos };
+    if (yawDegrees !== undefined) {
+      this.yawDegrees = yawDegrees;
+    }
     this.reset();
+  }
+
+  public setRotation(yawDegrees: number): void {
+    this.yawDegrees = yawDegrees;
+    this.reset();
+  }
+
+  public getYawDegrees(): number {
+    return this.yawDegrees;
   }
 
   public getPosition(): { x: number; y: number; z: number } {
@@ -310,14 +374,17 @@ export class AxleRiserMission implements MissionElement {
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {
     if (!this.sliderBody) return;
-    const currX = this.sliderBody.translation().x;
-    const targetX = THREE.MathUtils.clamp(
-      groundTarget.x,
-      this.basePos.x + 0.035,
-      this.basePos.x + this.initialSliderOffset
+    const { ux, uz } = this.getDirectionVectors();
+    const currTrans = this.sliderBody.translation();
+    const currS = (currTrans.x - this.basePos.x) * ux + (currTrans.z - this.basePos.z) * uz;
+
+    const targetS = THREE.MathUtils.clamp(
+      (groundTarget.x - this.basePos.x) * ux + (groundTarget.z - this.basePos.z) * uz,
+      0.035,
+      this.initialSliderOffset
     );
-    const velX = (targetX - currX) * 15.0;
-    this.sliderBody.setLinvel({ x: velX, y: 0, z: 0 }, true);
+    const velS = (targetS - currS) * 15.0;
+    this.sliderBody.setLinvel({ x: velS * ux, y: 0, z: velS * uz }, true);
   }
 
   public destroy(): void {

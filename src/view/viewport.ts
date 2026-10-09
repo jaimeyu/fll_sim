@@ -12,9 +12,15 @@ export class Viewport3D {
   public matTexture: CompetitionMatTexture;
   public currentView: CameraViewPreset = 'ISO';
 
-  public onRobotDrop?: (x: number, z: number) => void;
-  public onRobotDragMove?: (x: number, z: number) => void;
+  public onRobotDrop?: (x: number, z: number, yawDegrees?: number) => void;
+  public onRobotDragMove?: (x: number, z: number, yawDegrees?: number) => void;
   public onRobotDragStart?: () => void;
+  public onRobotRotate?: (yawDegrees: number) => void;
+
+  public onElementDragStart?: (elementId: string) => void;
+  public onElementDragMove?: (elementId: string, x: number, z: number, yawDegrees: number) => void;
+  public onElementDrop?: (elementId: string, x: number, z: number, yawDegrees: number) => void;
+  public onElementSelected?: (elementId: string | null) => void;
 
   private tableMesh!: THREE.Group;
   private container: HTMLElement;
@@ -26,16 +32,23 @@ export class Viewport3D {
   private dragOffset = new THREE.Vector2(0, 0);
   private robotHitProxy!: THREE.Mesh;
   private dropReticle!: THREE.Group;
+  private elementReticle!: THREE.Group;
   private robotVisualRoot: THREE.Object3D | null = null;
+  private robotYawDegrees: number = 90;
 
-  // Sandbox Mode Mouse Tool & Workbench
+  // Sandbox Mode Mouse Tool & Workbench & Mission Elements
   private interactionTool: any = null;
   private isDraggingTool = false;
   private workbenchMesh!: THREE.Group;
   private workbenchSpotlight!: THREE.SpotLight;
   private missionManager: any = null;
   private draggedBlock: any = null;
-  private draggedMissionElement: any = null;
+  private draggedMissionMechanism: any = null;
+  private isDraggingElement = false;
+  private selectedElement: any = null;
+  private elementDragOffset = new THREE.Vector2(0, 0);
+  private hoveredElement: any = null;
+  private isHoveringRobot = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -77,6 +90,7 @@ export class Viewport3D {
 
     // 7. Interactive Drag-and-Drop Placement Support
     this.createDropReticle();
+    this.createElementReticle();
     this.createRobotHitProxy();
     this.setupDragAndDrop();
 
@@ -382,6 +396,61 @@ export class Viewport3D {
     this.scene.add(this.dropReticle);
   }
 
+  private createElementReticle(): void {
+    this.elementReticle = new THREE.Group();
+    this.elementReticle.visible = false;
+
+    // Outer amber ring (diameter 24cm)
+    const ringGeom = new THREE.RingGeometry(0.10, 0.12, 36);
+    ringGeom.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const outerRing = new THREE.Mesh(ringGeom, ringMat);
+    this.elementReticle.add(outerRing);
+
+    // Inner amber target circle
+    const innerGeom = new THREE.RingGeometry(0.02, 0.035, 24);
+    innerGeom.rotateX(-Math.PI / 2);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xfbbf24,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const innerRing = new THREE.Mesh(innerGeom, innerMat);
+    this.elementReticle.add(innerRing);
+
+    // Forward direction indicator arrow
+    const arrowGeom = new THREE.ConeGeometry(0.022, 0.05, 12);
+    arrowGeom.rotateX(Math.PI / 2);
+    arrowGeom.translate(0, 0, 0.14);
+    const arrowMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const arrowMesh = new THREE.Mesh(arrowGeom, arrowMat);
+    this.elementReticle.add(arrowMesh);
+
+    // Translucent floor highlight disc
+    const diskGeom = new THREE.CircleGeometry(0.12, 32);
+    diskGeom.rotateX(-Math.PI / 2);
+    const diskMat = new THREE.MeshBasicMaterial({
+      color: 0xd97706,
+      transparent: true,
+      opacity: 0.20,
+      side: THREE.DoubleSide,
+    });
+    const diskMesh = new THREE.Mesh(diskGeom, diskMat);
+    this.elementReticle.add(diskMesh);
+
+    this.scene.add(this.elementReticle);
+  }
+
   private createRobotHitProxy(): void {
     // Generous bounding hit cylinder around the robot (diameter 32cm, height 20cm)
     const geom = new THREE.CylinderGeometry(0.16, 0.16, 0.20, 16);
@@ -420,8 +489,54 @@ export class Viewport3D {
   }
 
   public updateReticleYaw(yawDegrees: number): void {
+    this.robotYawDegrees = yawDegrees;
     if (this.dropReticle) {
       this.dropReticle.rotation.y = (yawDegrees * Math.PI) / 180;
+    }
+  }
+
+  public setRobotYaw(yawDegrees: number): void {
+    this.robotYawDegrees = yawDegrees;
+    this.updateReticleYaw(yawDegrees);
+  }
+
+  public getRobotYaw(): number {
+    return this.robotYawDegrees;
+  }
+
+  public selectMissionElement(id: string | null): void {
+    if (!id || !this.missionManager) {
+      this.selectedElement = null;
+      if (this.elementReticle) this.elementReticle.visible = false;
+      this.onElementSelected?.(null);
+      return;
+    }
+    const elem = this.missionManager.getElement(id);
+    if (elem) {
+      this.selectedElement = elem;
+      const pos = elem.getPosition();
+      const yaw = elem.getYawDegrees ? elem.getYawDegrees() : 0;
+      this.elementReticle.position.set(pos.x, 0.003, pos.z);
+      this.elementReticle.rotation.y = (yaw * Math.PI) / 180;
+      this.elementReticle.visible = true;
+      this.onElementSelected?.(id);
+    }
+  }
+
+  public getSelectedElement(): any {
+    return this.selectedElement;
+  }
+
+  public updateElementTransform(id: string, pos: { x: number; y: number; z: number }, yawDegrees?: number): void {
+    const elem = this.missionManager?.getElement(id);
+    if (elem) {
+      elem.setPosition(pos, yawDegrees);
+      if (this.selectedElement === elem) {
+        this.elementReticle.position.set(pos.x, 0.003, pos.z);
+        if (yawDegrees !== undefined) {
+          this.elementReticle.rotation.y = (yawDegrees * Math.PI) / 180;
+        }
+      }
     }
   }
 
@@ -464,7 +579,7 @@ export class Viewport3D {
       return null;
     };
 
-    const getMissionElementHit = (coords: { x: number; y: number }): any => {
+    const getMissionMechanismHit = (coords: { x: number; y: number }): any => {
       if (!this.missionManager) return null;
       this.mouse.set(coords.x, coords.y);
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -477,7 +592,7 @@ export class Viewport3D {
         }
       }
       if (candidates.length === 0) return null;
-      const meshes = candidates.map(c => c.mesh);
+      const meshes = candidates.map((c) => c.mesh);
       const hits = this.raycaster.intersectObjects(meshes, true);
       if (hits.length > 0) {
         const hitMesh = hits[0].object;
@@ -485,6 +600,29 @@ export class Viewport3D {
           if (cand.mesh === hitMesh || cand.mesh.getObjectById(hitMesh.id)) {
             return cand.element;
           }
+        }
+      }
+      return null;
+    };
+
+    const getMissionElementEntireHit = (coords: { x: number; y: number }): any => {
+      if (!this.missionManager) return null;
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const groups: THREE.Object3D[] = [];
+      const map = new Map<THREE.Object3D, any>();
+      for (const elem of this.missionManager.elements.values()) {
+        if (!elem.rootGroup.visible) continue;
+        groups.push(elem.rootGroup);
+        map.set(elem.rootGroup, elem);
+      }
+      if (groups.length === 0) return null;
+      const hits = this.raycaster.intersectObjects(groups, true);
+      if (hits.length > 0) {
+        let curr: THREE.Object3D | null = hits[0].object;
+        while (curr) {
+          if (map.has(curr)) return map.get(curr);
+          curr = curr.parent;
         }
       }
       return null;
@@ -505,6 +643,88 @@ export class Viewport3D {
       const hit = new THREE.Vector3();
       return this.raycaster.ray.intersectPlane(this.groundPlane, hit) ? hit : null;
     };
+
+    // 1. Mouse Wheel Rotation Listener: smoothly rotate robot or mission element
+    dom.addEventListener('wheel', (e: WheelEvent) => {
+      // Rotating Robot: when dragging or hovering robot
+      if (this.isDragging || this.isHoveringRobot) {
+        e.preventDefault();
+        e.stopPropagation();
+        const step = e.shiftKey ? 15 : 5;
+        const delta = e.deltaY < 0 ? step : -step;
+        let newYaw = (this.robotYawDegrees + delta) % 360;
+        if (newYaw > 180) newYaw -= 360;
+        if (newYaw < -180) newYaw += 360;
+        this.robotYawDegrees = Math.round(newYaw);
+        this.updateReticleYaw(this.robotYawDegrees);
+        this.onRobotRotate?.(this.robotYawDegrees);
+        if (this.isDragging) {
+          this.onRobotDragMove?.(this.dropReticle.position.x, this.dropReticle.position.z, this.robotYawDegrees);
+        }
+        return;
+      }
+
+      // Rotating Mission Element: when dragging element or hovering selected element
+      if (this.isDraggingElement || (this.selectedElement && this.hoveredElement === this.selectedElement)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const step = e.shiftKey ? 15 : 5;
+        const delta = e.deltaY < 0 ? step : -step;
+        let curYaw = this.selectedElement.getYawDegrees ? this.selectedElement.getYawDegrees() : 0;
+        let newYaw = Math.round((curYaw + delta) % 360);
+        if (newYaw > 180) newYaw -= 360;
+        if (newYaw < -180) newYaw += 360;
+        this.elementReticle.rotation.y = (newYaw * Math.PI) / 180;
+        const curPos = this.selectedElement.getPosition();
+        if (this.selectedElement.setRotation) {
+          this.selectedElement.setRotation(newYaw);
+        } else {
+          this.selectedElement.setPosition(curPos, newYaw);
+        }
+        this.onElementDragMove?.(this.selectedElement.id, curPos.x, curPos.z, newYaw);
+        return;
+      }
+    }, { passive: false });
+
+    // 2. Keyboard Rotation Listener: 'R' key rotates active object by 15 degrees
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+      if (e.key === 'r' || e.key === 'R') {
+        const step = e.shiftKey ? -15 : 15;
+        if (this.isDragging || this.isHoveringRobot) {
+          e.preventDefault();
+          let newYaw = (this.robotYawDegrees + step) % 360;
+          if (newYaw > 180) newYaw -= 360;
+          if (newYaw < -180) newYaw += 360;
+          this.robotYawDegrees = Math.round(newYaw);
+          this.updateReticleYaw(this.robotYawDegrees);
+          this.onRobotRotate?.(this.robotYawDegrees);
+          if (this.isDragging) {
+            this.onRobotDragMove?.(this.dropReticle.position.x, this.dropReticle.position.z, this.robotYawDegrees);
+          }
+        } else if (this.selectedElement) {
+          e.preventDefault();
+          let curYaw = this.selectedElement.getYawDegrees ? this.selectedElement.getYawDegrees() : 0;
+          let newYaw = Math.round((curYaw + step) % 360);
+          if (newYaw > 180) newYaw -= 360;
+          if (newYaw < -180) newYaw += 360;
+          this.elementReticle.rotation.y = (newYaw * Math.PI) / 180;
+          const curPos = this.selectedElement.getPosition();
+          if (this.selectedElement.setRotation) {
+            this.selectedElement.setRotation(newYaw);
+          } else {
+            this.selectedElement.setPosition(curPos, newYaw);
+          }
+          this.onElementDragMove?.(this.selectedElement.id, curPos.x, curPos.z, newYaw);
+        }
+      } else if (e.key === 'Escape') {
+        if (this.selectedElement) {
+          this.selectMissionElement(null);
+        }
+      }
+    });
 
     dom.addEventListener('pointerdown', (e: PointerEvent) => {
       // Only handle left mouse click / primary pointer
@@ -532,19 +752,21 @@ export class Viewport3D {
         return;
       }
 
-      // 3. Check if clicking interactive mission mechanism element (slider, rotor)
-      const missionHit = getMissionElementHit(coords);
-      if (missionHit) {
-        this.draggedMissionElement = missionHit;
-        this.controls.enabled = false;
-        this.container.style.cursor = 'grabbing';
-        const groundHit = getGroundIntersection(coords);
-        if (groundHit) {
-          this.draggedMissionElement.applyUserDrag?.(groundHit);
+      // 3. Check if clicking interactive mechanism handle (slider/rotor paddle) without Shift
+      if (!e.shiftKey) {
+        const mechanismHit = getMissionMechanismHit(coords);
+        if (mechanismHit) {
+          this.draggedMissionMechanism = mechanismHit;
+          this.controls.enabled = false;
+          this.container.style.cursor = 'grabbing';
+          const groundHit = getGroundIntersection(coords);
+          if (groundHit) {
+            this.draggedMissionMechanism.applyUserDrag?.(groundHit);
+          }
+          e.stopPropagation();
+          e.preventDefault();
+          return;
         }
-        e.stopPropagation();
-        e.preventDefault();
-        return;
       }
 
       // 4. Check if clicking robot
@@ -552,12 +774,12 @@ export class Viewport3D {
         this.isDragging = true;
         this.controls.enabled = false;
         this.dropReticle.visible = true;
+        this.updateReticleYaw(this.robotYawDegrees);
         this.container.style.cursor = 'grabbing';
         this.onRobotDragStart?.();
 
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
-          // Store offset from robot center to initial ground intersection
           this.dragOffset.set(
             this.robotHitProxy.position.x - groundHit.x,
             this.robotHitProxy.position.z - groundHit.z
@@ -565,9 +787,37 @@ export class Viewport3D {
           const targetX = THREE.MathUtils.clamp(groundHit.x + this.dragOffset.x, -1.15, 1.15);
           const targetZ = THREE.MathUtils.clamp(groundHit.z + this.dragOffset.y, -0.65, 0.65);
           this.dropReticle.position.set(targetX, 0.003, targetZ);
-          this.onRobotDragMove?.(targetX, targetZ);
+          this.onRobotDragMove?.(targetX, targetZ, this.robotYawDegrees);
         }
 
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+
+      // 5. Check if clicking mission element body / baseplate to move and rotate it
+      const entireElemHit = getMissionElementEntireHit(coords);
+      if (entireElemHit) {
+        this.selectedElement = entireElemHit;
+        this.isDraggingElement = true;
+        this.controls.enabled = false;
+        this.container.style.cursor = 'grabbing';
+
+        const elemPos = entireElemHit.getPosition();
+        const elemYaw = entireElemHit.getYawDegrees ? entireElemHit.getYawDegrees() : 0;
+        this.elementReticle.position.set(elemPos.x, 0.003, elemPos.z);
+        this.elementReticle.rotation.y = (elemYaw * Math.PI) / 180;
+        this.elementReticle.visible = true;
+
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          this.elementDragOffset.set(elemPos.x - groundHit.x, elemPos.z - groundHit.z);
+        } else {
+          this.elementDragOffset.set(0, 0);
+        }
+
+        this.onElementSelected?.(entireElemHit.id);
+        this.onElementDragStart?.(entireElemHit.id);
         e.stopPropagation();
         e.preventDefault();
         return;
@@ -580,7 +830,7 @@ export class Viewport3D {
           const clampedX = THREE.MathUtils.clamp(groundHit.x, -1.15, 1.15);
           const clampedZ = THREE.MathUtils.clamp(groundHit.z, -0.65, 0.65);
           this.onRobotDragStart?.();
-          this.onRobotDrop?.(clampedX, clampedZ);
+          this.onRobotDrop?.(clampedX, clampedZ, this.robotYawDegrees);
           e.stopPropagation();
         }
       }
@@ -599,10 +849,10 @@ export class Viewport3D {
         if (groundHit) {
           this.interactionTool?.dragBlock(this.draggedBlock, groundHit.x, groundHit.z);
         }
-      } else if (this.draggedMissionElement) {
+      } else if (this.draggedMissionMechanism) {
         const groundHit = getGroundIntersection(coords);
         if (groundHit) {
-          this.draggedMissionElement.applyUserDrag?.(groundHit);
+          this.draggedMissionMechanism.applyUserDrag?.(groundHit);
         }
       } else if (this.isDragging) {
         const groundHit = getGroundIntersection(coords);
@@ -610,15 +860,38 @@ export class Viewport3D {
           const targetX = THREE.MathUtils.clamp(groundHit.x + this.dragOffset.x, -1.15, 1.15);
           const targetZ = THREE.MathUtils.clamp(groundHit.z + this.dragOffset.y, -0.65, 0.65);
           this.dropReticle.position.set(targetX, 0.003, targetZ);
-          this.onRobotDragMove?.(targetX, targetZ);
+          this.onRobotDragMove?.(targetX, targetZ, this.robotYawDegrees);
+        }
+      } else if (this.isDraggingElement && this.selectedElement) {
+        const groundHit = getGroundIntersection(coords);
+        if (groundHit) {
+          const isArena = this.tableMesh.visible;
+          const targetX = THREE.MathUtils.clamp(
+            groundHit.x + this.elementDragOffset.x,
+            isArena ? -1.10 : -0.45,
+            isArena ? 1.10 : 0.45
+          );
+          const targetZ = THREE.MathUtils.clamp(
+            groundHit.z + this.elementDragOffset.y,
+            isArena ? -0.52 : -0.45,
+            isArena ? 0.52 : 0.45
+          );
+          this.elementReticle.position.set(targetX, 0.003, targetZ);
+          const yaw = this.selectedElement.getYawDegrees ? this.selectedElement.getYawDegrees() : 0;
+          this.selectedElement.setPosition({ x: targetX, y: 0.002, z: targetZ }, yaw);
+          this.onElementDragMove?.(this.selectedElement.id, targetX, targetZ, yaw);
         }
       } else {
-        // Hover indicator over draggable items
+        // Track hover state for cursor and wheel rotation targets
+        this.isHoveringRobot = isRobotHit(coords);
+        this.hoveredElement = getMissionElementEntireHit(coords);
+
         if (
           isPusherHit(coords) ||
           getSpawnedBlockHit(coords) ||
-          getMissionElementHit(coords) ||
-          isRobotHit(coords)
+          getMissionMechanismHit(coords) ||
+          this.hoveredElement ||
+          this.isHoveringRobot
         ) {
           this.container.style.cursor = 'grab';
         } else {
@@ -638,8 +911,8 @@ export class Viewport3D {
         this.controls.enabled = true;
         this.container.style.cursor = 'default';
       }
-      if (this.draggedMissionElement) {
-        this.draggedMissionElement = null;
+      if (this.draggedMissionMechanism) {
+        this.draggedMissionMechanism = null;
         this.controls.enabled = true;
         this.container.style.cursor = 'default';
       }
@@ -648,7 +921,15 @@ export class Viewport3D {
         this.controls.enabled = true;
         this.dropReticle.visible = false;
         this.container.style.cursor = 'default';
-        this.onRobotDrop?.(this.dropReticle.position.x, this.dropReticle.position.z);
+        this.onRobotDrop?.(this.dropReticle.position.x, this.dropReticle.position.z, this.robotYawDegrees);
+      }
+      if (this.isDraggingElement && this.selectedElement) {
+        this.isDraggingElement = false;
+        this.controls.enabled = true;
+        this.container.style.cursor = 'default';
+        const curPos = this.selectedElement.getPosition();
+        const curYaw = this.selectedElement.getYawDegrees ? this.selectedElement.getYawDegrees() : 0;
+        this.onElementDrop?.(this.selectedElement.id, curPos.x, curPos.z, curYaw);
       }
     };
 

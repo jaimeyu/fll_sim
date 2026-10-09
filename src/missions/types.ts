@@ -31,9 +31,29 @@ export interface MissionElement {
   reset(): void;
 
   /**
-   * Repositions the base anchor of the mission model
+   * Repositions the base anchor of the mission model with optional yaw rotation (degrees)
    */
-  setPosition(pos: { x: number; y: number; z: number }): void;
+  setPosition(pos: { x: number; y: number; z: number }, yawDegrees?: number): void;
+
+  /**
+   * Sets the yaw rotation of the mission model in degrees
+   */
+  setRotation?(yawDegrees: number): void;
+
+  /**
+   * Returns current yaw rotation in degrees
+   */
+  getYawDegrees?(): number;
+
+  /**
+   * Whether the element is currently deployed on the field mat / workbench
+   */
+  isPlacedOnField?: boolean;
+
+  /**
+   * Original CAD source filename if imported
+   */
+  sourceFile?: string;
 
   /**
    * Returns current world position of base anchor
