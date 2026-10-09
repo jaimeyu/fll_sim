@@ -89,9 +89,11 @@ export class MissionManager {
         this.loadingMissions.delete(spec.id);
         return null;
       }
-      const res = await fetch(spec.ioFile);
+      const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
+      const fileUrl = `${baseUrl}${spec.ioFile.replace(/^\//, '')}`;
+      const res = await fetch(fileUrl);
       if (!res.ok) {
-        console.warn(`[MissionManager] Failed to fetch ${spec.ioFile}: HTTP ${res.status}`);
+        console.warn(`[MissionManager] Failed to fetch ${fileUrl}: HTTP ${res.status}`);
         this.loadingMissions.delete(spec.id);
         this.onMissionListChanged?.();
         return null;

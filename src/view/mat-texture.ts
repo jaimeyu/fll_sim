@@ -56,9 +56,10 @@ export class CompetitionMatTexture implements MatColorSampler {
       return;
     }
 
+    const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
     const src = mapType === 'numbered'
-      ? '/maps/bioglow_numbered_mat.png'
-      : '/maps/playing_field_grid.png';
+      ? `${baseUrl}maps/bioglow_numbered_mat.png`
+      : `${baseUrl}maps/playing_field_grid.png`;
 
     return new Promise<void>((resolve) => {
       const img = new Image();

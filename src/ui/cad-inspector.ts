@@ -405,7 +405,9 @@ export class CadModelInspector {
     if (!specConfig) return;
 
     try {
-      const res = await fetch(specConfig.ioFile);
+      const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
+      const fileUrl = `${baseUrl}${specConfig.ioFile.replace(/^\//, '')}`;
+      const res = await fetch(fileUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();
       await this.inspectBinaryArchive(buffer, specConfig.name, specConfig.id);
