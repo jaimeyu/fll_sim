@@ -104,7 +104,34 @@ export class CadClusteringPreSolver {
       const colliders: ClusteredCompoundBody['colliders'] = [];
       const massKg = Math.max(0.01, totalMassGrams / 1000);
 
-      if (isRoot) {
+      // Compute bounding box of parts in cluster in meters
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+
+      for (const id of componentPartIds) {
+        const p = partMap.get(id);
+        if (!p) continue;
+        const px = p.position[0] / 1000;
+        const py = p.position[1] / 1000;
+        const pz = p.position[2] / 1000;
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+        if (pz < minZ) minZ = pz;
+        if (pz > maxZ) maxZ = pz;
+      }
+
+      const hasParts = minX !== Infinity;
+      const cx = hasParts ? (minX + maxX) / 2 : 0;
+      const cy = hasParts ? (minY + maxY) / 2 : 0;
+      const cz = hasParts ? (minZ + maxZ) / 2 : 0;
+      const hx = hasParts ? Math.max(0.008, (maxX - minX) / 2 + 0.004) : 0.02;
+      const hy = hasParts ? Math.max(0.004, (maxY - minY) / 2 + 0.003) : 0.015;
+      const hz = hasParts ? Math.max(0.008, (maxZ - minZ) / 2 + 0.004) : 0.02;
+
+      if (isRoot && hasCore) {
         // 1. Compound box for main chassis frame (88mm wide frame, leaving clean clearance to wheels).
         // Elevated with bottom at Y = 0.005 - 0.012 = -0.007m (28mm clearance above ground at Y = -0.035m, never drags).
         colliders.push({
@@ -149,11 +176,11 @@ export class CadClusteringPreSolver {
       } else {
         colliders.push({
           shape: 'box',
-          halfExtents: [0.02, 0.02, 0.02],
-          offset: [0, 0, 0],
+          halfExtents: [hx, hy, hz],
+          offset: [cx, cy, cz],
           rotation: [0, 0, 0, 1],
-          friction: 0.5,
-          restitution: 0.1,
+          friction: isRoot ? 0.8 : 0.5,
+          restitution: 0.05,
         });
       }
 

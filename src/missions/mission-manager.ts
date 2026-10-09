@@ -5,6 +5,15 @@ import { AxleRiserMission } from './axle-riser';
 import { GearDialMission } from './gear-dial';
 import { CascadeGearDialMission } from './gear-cascade';
 
+import { CustomImportedMissionElement } from './custom-imported-element';
+import { LDrawImporter } from '../cad/ldraw-importer';
+import {
+  SEASON_MISSIONS_CONFIG,
+  SeasonMissionSpec,
+  isMissionConfigEnabled,
+  saveStoredSeasonMissionOverride,
+} from './season-config';
+
 export type SimulatorAppMode = 'ARENA' | 'SANDBOX_RISER' | 'SANDBOX_DIAL' | 'SANDBOX_CASCADE';
 
 /**
@@ -17,6 +26,8 @@ export class MissionManager {
   public currentMode: SimulatorAppMode = 'ARENA';
 
   private world!: RAPIER.World;
+  private loadingMissions: Set<string> = new Set();
+  public onMissionListChanged?: () => void;
 
   // Standard Competition Field Mat Coordinates
   public static readonly ARENA_RISER_POS = { x: -0.35, y: 0.002, z: 0.18 };
@@ -49,6 +60,108 @@ export class MissionManager {
     cascade.init(this.world, MissionManager.ARENA_CASCADE_POS);
     this.elements.set(cascade.id, cascade);
     this.rootGroup.add(cascade.rootGroup);
+
+    // 4. Asynchronously load default starter season models (configured via season-config.ts)
+    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+      this.loadDefaultSeasonMissions().catch((err) => {
+        console.warn('[MissionManager] Default season missions autoload deferred:', err);
+      });
+    }
+  }
+
+  /**
+   * Asynchronously loads a specific season mission .io model
+   */
+  public async loadSeasonMission(spec: SeasonMissionSpec): Promise<CustomImportedMissionElement | null> {
+    if (this.elements.has(spec.id)) {
+      const existing = this.elements.get(spec.id) as CustomImportedMissionElement;
+      existing.isPlacedOnField = true;
+      existing.rootGroup.visible = true;
+      return existing;
+    }
+    if (this.loadingMissions.has(spec.id)) return null;
+
+    this.loadingMissions.add(spec.id);
+    this.onMissionListChanged?.();
+
+    try {
+      if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+        this.loadingMissions.delete(spec.id);
+        return null;
+      }
+      const res = await fetch(spec.ioFile);
+      if (!res.ok) {
+        console.warn(`[MissionManager] Failed to fetch ${spec.ioFile}: HTTP ${res.status}`);
+        this.loadingMissions.delete(spec.id);
+        this.onMissionListChanged?.();
+        return null;
+      }
+      const buffer = await res.arrayBuffer();
+      const parsedSpec = await LDrawImporter.parseStudioIo(buffer);
+      const customElem = new CustomImportedMissionElement(parsedSpec, {
+        id: spec.id,
+        name: spec.name,
+        description: spec.description,
+        sourceFile: spec.ioFile,
+        isBaseFixed: spec.isFixedBase,
+      });
+
+      customElem.init(this.world, spec.arenaPosition, spec.yawDegrees);
+      this.registerCustomElement(customElem);
+      this.loadingMissions.delete(spec.id);
+      this.onMissionListChanged?.();
+      return customElem;
+    } catch (err) {
+      console.error(`[MissionManager] Failed to load season mission ${spec.id}:`, err);
+      this.loadingMissions.delete(spec.id);
+      this.onMissionListChanged?.();
+      return null;
+    }
+  }
+
+  /**
+   * Loads all season missions configured with enabledByDefault: true
+   */
+  public async loadDefaultSeasonMissions(): Promise<void> {
+    for (const spec of SEASON_MISSIONS_CONFIG) {
+      if (isMissionConfigEnabled(spec)) {
+        await this.loadSeasonMission(spec);
+      }
+    }
+  }
+
+  /**
+   * Toggles a season mission model on or off, updating persistent storage
+   */
+  public async toggleSeasonMission(id: string, enable: boolean): Promise<boolean> {
+    saveStoredSeasonMissionOverride(id, enable);
+    if (!enable) {
+      this.removeElement(id);
+      this.onMissionListChanged?.();
+      return false;
+    } else {
+      const config = SEASON_MISSIONS_CONFIG.find((m) => m.id === id);
+      if (config) {
+        await this.loadSeasonMission(config);
+        return true;
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Returns current status of all 13 official season missions
+   */
+  public getSeasonMissionsStatus(): Array<{
+    spec: SeasonMissionSpec;
+    isLoaded: boolean;
+    isLoading: boolean;
+  }> {
+    return SEASON_MISSIONS_CONFIG.map((spec) => ({
+      spec,
+      isLoaded: this.elements.has(spec.id),
+      isLoading: this.loadingMissions.has(spec.id),
+    }));
   }
 
   public getWorld(): RAPIER.World {

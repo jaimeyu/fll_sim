@@ -754,3 +754,90 @@ body, html {
   line-height: 1.4;
 }
 
+/* Season Mission Catalog in Drawer */
+.drawer-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  margin: 10px 0 4px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.drawer-loaded-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.season-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.season-model-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.season-model-card:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(30, 41, 59, 0.7);
+}
+
+.season-model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.season-model-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.season-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: #0284c7;
+  color: white;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.season-model-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.season-model-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.season-model-action {
+  flex-shrink: 0;
+}
+
+

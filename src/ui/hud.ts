@@ -3,6 +3,8 @@ import { CameraViewPreset } from '../view/viewport';
 import { SimulatorAppMode } from '../missions/mission-manager';
 import { MatMapType } from '../view/mat-texture';
 
+import { SeasonMissionSpec } from '../missions/season-config';
+
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
   onStopScript: () => void;
@@ -24,6 +26,7 @@ export interface HudCallbacks {
   onElementTogglePlaced?: (id: string, placed: boolean) => void;
   onElementDelete?: (id: string) => void;
   onElementFocus?: (id: string) => void;
+  onToggleSeasonMission?: (id: string, enable: boolean) => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -182,6 +185,11 @@ export class SimulatorHud {
 
   private isToolActive = true;
   private isDynoActive = false;
+  private seasonMissionsStatus: Array<{
+    spec: SeasonMissionSpec;
+    isLoaded: boolean;
+    isLoading: boolean;
+  }> = [];
 
   private matchSeconds = 150; // 2:30 match timer
   private matchTimerRunning = false;
@@ -796,66 +804,125 @@ export class SimulatorHud {
       position: { x: number; y: number; z: number };
       yawDegrees: number;
       isCustom?: boolean;
+    }>,
+    seasonStatus?: Array<{
+      spec: SeasonMissionSpec;
+      isLoaded: boolean;
+      isLoading: boolean;
     }>
   ): void {
     this.missionElementsData = elements;
+    if (seasonStatus) {
+      this.seasonMissionsStatus = seasonStatus;
+    }
     const activeCount = elements.filter((e) => e.isPlacedOnField !== false).length;
     this.assetCountBadge.textContent = activeCount.toString();
     this.renderDrawerElements();
   }
 
   public renderDrawerElements(): void {
-    this.drawerElementsList.innerHTML = this.missionElementsData
-      .map(
-        (elem) => `
-      <div class="drawer-card" data-element-id="${elem.id}">
-        <div class="drawer-card-header">
-          <span class="card-elem-name">${elem.name}</span>
-          <span class="badge ${elem.isPlacedOnField !== false ? 'badge-active' : 'badge-inactive'}">
-            ${elem.isPlacedOnField !== false ? 'ON FIELD' : 'IN DRAWER'}
-          </span>
-        </div>
-        <p class="card-elem-desc">${elem.description}${elem.sourceFile ? ` <span style="color:#38bdf8">(${elem.sourceFile})</span>` : ''}</p>
-        <div class="card-actions-row">
-          <button class="btn btn-xs ${elem.isPlacedOnField !== false ? 'btn-danger' : 'btn-success'}" data-action="toggle-placed" data-id="${elem.id}">
-            ${elem.isPlacedOnField !== false ? '➖ Stow in Drawer' : '➕ Place on Field'}
-          </button>
-          <button class="btn btn-xs btn-outline" data-action="focus" data-id="${elem.id}">
-            🔍 Focus
-          </button>
-          ${elem.isCustom ? `<button class="btn btn-xs btn-outline text-danger" data-action="delete" data-id="${elem.id}" title="Delete element">🗑️</button>` : ''}
-        </div>
-        ${
-          elem.isPlacedOnField !== false
-            ? `
-        <div class="card-transform-group">
-          <div class="card-inputs-row">
-            <div class="spawn-input-group">
-              <label>X (m)</label>
-              <input type="number" step="0.05" value="${elem.position.x.toFixed(2)}" data-transform="x" data-id="${elem.id}">
+    const loadedCardsHtml = this.missionElementsData.length === 0
+      ? `<div style="color:var(--text-muted);font-size:11px;padding:6px 0;">No models on field. Use the catalog below to selectively load season missions.</div>`
+      : this.missionElementsData
+          .map(
+            (elem) => `
+          <div class="drawer-card" data-element-id="${elem.id}">
+            <div class="drawer-card-header">
+              <span class="card-elem-name">${elem.name}</span>
+              <span class="badge ${elem.isPlacedOnField !== false ? 'badge-active' : 'badge-inactive'}">
+                ${elem.isPlacedOnField !== false ? 'ON FIELD' : 'IN DRAWER'}
+              </span>
             </div>
-            <div class="spawn-input-group">
-              <label>Z (m)</label>
-              <input type="number" step="0.05" value="${elem.position.z.toFixed(2)}" data-transform="z" data-id="${elem.id}">
+            <p class="card-elem-desc">${elem.description}${elem.sourceFile ? ` <span style="color:#38bdf8">(${elem.sourceFile})</span>` : ''}</p>
+            <div class="card-actions-row">
+              <button class="btn btn-xs ${elem.isPlacedOnField !== false ? 'btn-danger' : 'btn-success'}" data-action="toggle-placed" data-id="${elem.id}">
+                ${elem.isPlacedOnField !== false ? '➖ Stow in Drawer' : '➕ Place on Field'}
+              </button>
+              <button class="btn btn-xs btn-outline" data-action="focus" data-id="${elem.id}">
+                🔍 Focus
+              </button>
+              ${elem.isCustom ? `<button class="btn btn-xs btn-outline text-danger" data-action="delete" data-id="${elem.id}" title="Delete element">🗑️</button>` : ''}
             </div>
-            <div class="spawn-input-group">
-              <label>Yaw (°)</label>
-              <input type="number" step="5" value="${Math.round(elem.yawDegrees)}" data-transform="yaw" data-id="${elem.id}">
+            ${
+              elem.isPlacedOnField !== false
+                ? `
+            <div class="card-transform-group">
+              <div class="card-inputs-row">
+                <div class="spawn-input-group">
+                  <label>X (m)</label>
+                  <input type="number" step="0.05" value="${elem.position.x.toFixed(2)}" data-transform="x" data-id="${elem.id}">
+                </div>
+                <div class="spawn-input-group">
+                  <label>Z (m)</label>
+                  <input type="number" step="0.05" value="${elem.position.z.toFixed(2)}" data-transform="z" data-id="${elem.id}">
+                </div>
+                <div class="spawn-input-group">
+                  <label>Yaw (°)</label>
+                  <input type="number" step="5" value="${Math.round(elem.yawDegrees)}" data-transform="yaw" data-id="${elem.id}">
+                </div>
+              </div>
+              <div class="card-rotate-row">
+                <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="-45" data-id="${elem.id}">⟲ -45°</button>
+                <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="45" data-id="${elem.id}">⟳ +45°</button>
+                <button class="btn btn-xs btn-outline" data-action="reset-pose" data-id="${elem.id}">↺ Reset</button>
+              </div>
             </div>
+            `
+                : ''
+            }
           </div>
-          <div class="card-rotate-row">
-            <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="-45" data-id="${elem.id}">⟲ -45°</button>
-            <button class="btn btn-xs btn-outline" data-action="rot-step" data-delta="45" data-id="${elem.id}">⟳ +45°</button>
-            <button class="btn btn-xs btn-outline" data-action="reset-pose" data-id="${elem.id}">↺ Reset</button>
-          </div>
-        </div>
         `
-            : ''
-        }
+          )
+          .join('');
+
+    const seasonCardsHtml = this.seasonMissionsStatus.length === 0
+      ? ''
+      : `
+        <div class="drawer-section-title">🏆 Official Season Models (${this.seasonMissionsStatus.length})</div>
+        <div class="season-models-list">
+          ${this.seasonMissionsStatus
+            .map(
+              ({ spec, isLoaded, isLoading }) => `
+            <div class="season-model-card" data-season-id="${spec.id}">
+              <div class="season-model-info">
+                <div class="season-model-header">
+                  <span class="season-badge">${spec.id}</span>
+                  <span class="season-model-name" title="${spec.name}">${spec.name}</span>
+                </div>
+                <div class="season-model-desc">${spec.book} • ${spec.description.slice(0, 48)}...</div>
+              </div>
+              <div class="season-model-action">
+                ${
+                  isLoading
+                    ? `<button class="btn btn-xs btn-outline" disabled>⏳ Loading...</button>`
+                    : isLoaded
+                    ? `<button class="btn btn-xs btn-outline text-success" data-action="toggle-season" data-id="${spec.id}" data-enable="false">✅ Loaded (Stow)</button>`
+                    : `<button class="btn btn-xs btn-primary" data-action="toggle-season" data-id="${spec.id}" data-enable="true">➕ Load</button>`
+                }
+              </div>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+      `;
+
+    this.drawerElementsList.innerHTML = `
+      <div class="drawer-section-title">🏟️ Active Field Elements (${this.missionElementsData.filter((e) => e.isPlacedOnField !== false).length})</div>
+      <div class="drawer-loaded-list">
+        ${loadedCardsHtml}
       </div>
-    `
-      )
-      .join('');
+      ${seasonCardsHtml}
+    `;
+
+    // Wire up season toggle buttons
+    this.drawerElementsList.querySelectorAll('[data-action="toggle-season"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        const enable = btn.getAttribute('data-enable') === 'true';
+        this.callbacks.onToggleSeasonMission?.(id, enable);
+      });
+    });
 
     // Wire up events in the cards
     this.drawerElementsList.querySelectorAll('[data-action="toggle-placed"]').forEach((btn) => {

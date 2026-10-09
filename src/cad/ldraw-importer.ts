@@ -10,48 +10,207 @@ export interface ParsedLDrawModel {
   links: ConnectionLink[];
 }
 
+type Mat3 = [number, number, number, number, number, number, number, number, number];
+type Vec3 = [number, number, number];
+
+/** Multiply two 3x3 matrices in row-major order: C = A * B */
+function mat3Mul(A: Mat3, B: Mat3): Mat3 {
+  return [
+    A[0] * B[0] + A[1] * B[3] + A[2] * B[6],
+    A[0] * B[1] + A[1] * B[4] + A[2] * B[7],
+    A[0] * B[2] + A[1] * B[5] + A[2] * B[8],
+
+    A[3] * B[0] + A[4] * B[3] + A[5] * B[6],
+    A[3] * B[1] + A[4] * B[4] + A[5] * B[7],
+    A[3] * B[2] + A[4] * B[5] + A[5] * B[8],
+
+    A[6] * B[0] + A[7] * B[3] + A[8] * B[6],
+    A[6] * B[1] + A[7] * B[4] + A[8] * B[7],
+    A[6] * B[2] + A[7] * B[5] + A[8] * B[8],
+  ];
+}
+
+/** Multiply a 3x3 matrix by a 3D vector: v' = A * v */
+function mat3VecMul(A: Mat3, v: Vec3): Vec3 {
+  return [
+    A[0] * v[0] + A[1] * v[1] + A[2] * v[2],
+    A[3] * v[0] + A[4] * v[1] + A[5] * v[2],
+    A[6] * v[0] + A[7] * v[1] + A[8] * v[2],
+  ];
+}
+
+/**
+ * Extracts a normalized [qx, qy, qz, qw] unit quaternion from an LDraw 3x3 rotation matrix.
+ * Accounts for coordinate system differences (LDraw Y-down vs Simulator Y-up).
+ */
+function matrixToQuaternion(M: Mat3): [number, number, number, number] {
+  // Simulator coordinate transformation: S = diag(1, -1, 1) -> M_sim = S * M * S
+  const m00 = M[0],  m01 = -M[1], m02 = M[2];
+  const m10 = -M[3], m11 = M[4],  m12 = -M[5];
+  const m20 = M[6],  m21 = -M[7], m22 = M[8];
+
+  const trace = m00 + m11 + m22;
+  let qx = 0, qy = 0, qz = 0, qw = 1;
+
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1.0);
+    qw = 0.25 / s;
+    qx = (m21 - m12) * s;
+    qy = (m02 - m20) * s;
+    qz = (m10 - m01) * s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
+    qw = (m21 - m12) / s;
+    qx = 0.25 * s;
+    qy = (m01 + m10) / s;
+    qz = (m02 + m20) / s;
+  } else if (m11 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
+    qw = (m02 - m20) / s;
+    qx = (m01 + m10) / s;
+    qy = 0.25 * s;
+    qz = (m12 + m21) / s;
+  } else {
+    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
+    qw = (m10 - m01) / s;
+    qx = (m02 + m20) / s;
+    qy = (m12 + m21) / s;
+    qz = 0.25 * s;
+  }
+
+  const len = Math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+  if (len > 0.00001) {
+    return [qx / len, qy / len, qz / len, qw / len];
+  }
+  return [0, 0, 0, 1];
+}
+
 export class LDrawImporter {
   /**
-   * Parses raw LDraw text (.ldr / .mpd) into placed parts
+   * Parses raw LDraw text (.ldr / .mpd) into placed parts, recursively
+   * expanding multi-part document (MPD) submodel hierarchies and applying
+   * 3D transformation matrices.
    */
   public static parseLDrawText(text: string, modelName = 'Imported LDraw Robot'): ParsedLDrawModel {
-    const lines = text.split(/\r?\n/);
-    const parts: PlacedPart[] = [];
-    const links: ConnectionLink[] = [];
+    // 1. Index all submodels in the document (0 FILE <name>)
+    const submodels = new Map<string, string[]>();
+    const fileChunks = text.split(/\r?\n0\s+FILE\s+/i);
+    let primaryEntryName = '';
 
-    let partIndex = 0;
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('1 ')) continue;
+    if (fileChunks.length > 1 || text.trim().startsWith('0 FILE')) {
+      for (let i = 0; i < fileChunks.length; i++) {
+        const chunk = fileChunks[i];
+        const lines = chunk.split(/\r?\n/);
+        if (!lines.length) continue;
 
-      // Format: 1 <colour> x y z a b c d e f g h i <file>
-      const tokens = trimmed.split(/\s+/);
-      if (tokens.length < 15) continue;
+        let name = '';
+        let startIdx = 0;
+        if (i === 0 && !chunk.toUpperCase().startsWith('0 FILE')) {
+          name = 'main';
+          startIdx = 0;
+        } else {
+          name = lines[0].trim().toLowerCase();
+          startIdx = 1;
+        }
 
-      const x = parseFloat(tokens[2]);
-      const y = parseFloat(tokens[3]);
-      const z = parseFloat(tokens[4]);
-      const partNumber = tokens[14].toLowerCase().replace(/\.dat$/, '');
+        if (!name) continue;
+        if (!primaryEntryName) primaryEntryName = name;
 
-      // In LDraw, coordinates: X is right, Y is down, Z is forward (in LDU: 1 LDU = 0.4mm, 1 stud = 20 LDU = 8mm)
-      // Convert to mm:
-      const posX = x * 0.4;
-      const posY = -y * 0.4; // Flip Y so positive is up
-      const posZ = z * 0.4;
-
-      const role = lookupPartRole(partNumber);
-      const partId = `ldraw_${partIndex++}_${partNumber}`;
-
-      parts.push({
-        id: partId,
-        partNumber,
-        position: [posX, posY, posZ],
-        rotation: [0, 0, 0, 1], // Identity or extracted from 3x3 rotation matrix
-        role,
-      });
+        const normKey = name.replace(/\.(ldr|mpd|dat|io)$/, '');
+        submodels.set(normKey, lines.slice(startIdx));
+        submodels.set(name, lines.slice(startIdx));
+      }
+    } else {
+      // Single flat file
+      const lines = text.split(/\r?\n/);
+      submodels.set('main', lines);
+      primaryEntryName = 'main';
     }
 
-    // Connect parts based on proximity or role
+    // Match preferred entrypoint if available
+    const normModelName = modelName.trim().toLowerCase().replace(/\.(ldr|mpd|io|dat)$/, '');
+    if (submodels.has(normModelName)) {
+      primaryEntryName = normModelName;
+    } else if (!submodels.has(primaryEntryName)) {
+      primaryEntryName = submodels.keys().next().value || 'main';
+    }
+
+    const parts: PlacedPart[] = [];
+    const links: ConnectionLink[] = [];
+    let partIndex = 0;
+
+    // 2. Recursively expand submodels accumulating transformation matrices
+    const expandSubmodel = (
+      subName: string,
+      parentMat: Mat3,
+      parentTrans: Vec3,
+      depth: number,
+      visited: Set<string>
+    ) => {
+      if (depth > 25) return;
+      const lines = submodels.get(subName) || [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('1 ')) continue;
+
+        const tokens = trimmed.split(/\s+/);
+        if (tokens.length < 15) continue;
+
+        const tx = parseFloat(tokens[2]);
+        const ty = parseFloat(tokens[3]);
+        const tz = parseFloat(tokens[4]);
+
+        const localMat: Mat3 = [
+          parseFloat(tokens[5]), parseFloat(tokens[6]), parseFloat(tokens[7]),
+          parseFloat(tokens[8]), parseFloat(tokens[9]), parseFloat(tokens[10]),
+          parseFloat(tokens[11]), parseFloat(tokens[12]), parseFloat(tokens[13]),
+        ];
+
+        const worldMat = mat3Mul(parentMat, localMat);
+        const rotTrans = mat3VecMul(parentMat, [tx, ty, tz]);
+        const worldTrans: Vec3 = [
+          parentTrans[0] + rotTrans[0],
+          parentTrans[1] + rotTrans[1],
+          parentTrans[2] + rotTrans[2],
+        ];
+
+        const rawRef = tokens.slice(14).join(' ').trim().toLowerCase();
+        const normRef = rawRef.replace(/\.(ldr|mpd|dat)$/, '');
+
+        if (submodels.has(rawRef) || submodels.has(normRef)) {
+          const target = submodels.has(normRef) ? normRef : rawRef;
+          if (!visited.has(target)) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(target);
+            expandSubmodel(target, worldMat, worldTrans, depth + 1, nextVisited);
+          }
+        } else {
+          // Terminal primitive part (.dat)
+          const cleanPartNumber = normRef.replace(/^bl_/, '');
+          const posX = worldTrans[0] * 0.4;  // 1 LDU = 0.4mm
+          const posY = -worldTrans[1] * 0.4; // Invert Y (LDraw is Y-down)
+          const posZ = worldTrans[2] * 0.4;
+
+          const role = lookupPartRole(cleanPartNumber);
+          const partId = `ldraw_${partIndex++}_${cleanPartNumber}`;
+          const rotation = matrixToQuaternion(worldMat);
+
+          parts.push({
+            id: partId,
+            partNumber: cleanPartNumber,
+            position: [posX, posY, posZ],
+            rotation,
+            role,
+          });
+        }
+      }
+    };
+
+    const identityMat: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    expandSubmodel(primaryEntryName, identityMat, [0, 0, 0], 0, new Set([primaryEntryName]));
+
+    // 3. Connect parts based on proximity or mechanical role
     for (let i = 0; i < parts.length; i++) {
       for (let j = i + 1; j < parts.length; j++) {
         const p1 = parts[i];
@@ -61,7 +220,7 @@ export class LDrawImporter {
         const dz = p1.position[2] - p2.position[2];
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        // Within 16mm (2 studs), connect
+        // Within 16mm (2 studs pitch), form physical link
         if (dist <= 16.0) {
           if (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM') {
             links.push({
@@ -114,3 +273,4 @@ export class LDrawImporter {
     return CadClusteringPreSolver.solve(parsed);
   }
 }
+

@@ -55,8 +55,9 @@ async function bootstrapSimulator() {
       yawDegrees: elem.getYawDegrees ? elem.getYawDegrees() : 0,
       isCustom: elem instanceof CustomImportedMissionElement,
     }));
-    hud.setMissionElements(allElems);
+    hud.setMissionElements(allElems, missionManager.getSeasonMissionsStatus());
   };
+  missionManager.onMissionListChanged = syncHudMissionElements;
 
   // 6. Initialize Virtual SPIKE Prime API & Python Runner
   let api = new VirtualSpikeApi(engine, sensors);
@@ -219,6 +220,16 @@ async function bootstrapSimulator() {
       if (elem) {
         viewport.selectMissionElement(id);
         viewport.focusOnElement(elem.getPosition());
+      }
+    },
+    onToggleSeasonMission: async (id, enable) => {
+      hud.logConsole(`${enable ? 'Loading' : 'Unloading'} season mission ${id}...`);
+      try {
+        await missionManager.toggleSeasonMission(id, enable);
+        syncHudMissionElements();
+        hud.logConsole(`✅ Season mission ${id} ${enable ? 'loaded onto mat' : 'unloaded'}.`);
+      } catch (err: any) {
+        hud.logConsole(`Failed to toggle season mission ${id}: ${err.message || err}`);
       }
     },
     onModeChange: (mode) => {
