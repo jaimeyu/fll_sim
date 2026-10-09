@@ -31,7 +31,7 @@ export class FllArenaPhysics {
     this.floorBody = world.createRigidBody(floorBodyDesc);
     const floorColliderDesc = RAPIER.ColliderDesc.cuboid(halfL + 0.1, 0.05, halfW + 0.1)
       .setFriction(config.matFriction)
-      .setRestitution(0.05);
+      .setRestitution(0.0);
     world.createCollider(floorColliderDesc, this.floorBody);
 
     // 2. Perimeter Boundary Walls (North, South, East, West)

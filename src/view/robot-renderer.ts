@@ -182,9 +182,9 @@ export class Robot3DRenderer {
       const readingC = this.sensorManager.sampleColorSensor('C');
       const readingD = this.sensorManager.sampleColorSensor('D');
 
-      // Place spots just above mat surface (Y = 0.001)
-      this.sensorSpotC.position.set(readingC.worldPosition[0], 0.001, readingC.worldPosition[2]);
-      this.sensorSpotD.position.set(readingD.worldPosition[0], 0.001, readingD.worldPosition[2]);
+      // Place spots just above mat surface (Y = 0.003m)
+      this.sensorSpotC.position.set(readingC.worldPosition[0], 0.003, readingC.worldPosition[2]);
+      this.sensorSpotD.position.set(readingD.worldPosition[0], 0.003, readingD.worldPosition[2]);
 
       // Color swatch for spot materials
       (this.sensorSpotC.material as THREE.MeshBasicMaterial).color.setRGB(

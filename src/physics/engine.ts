@@ -19,7 +19,7 @@ export class SimulationPhysicsEngine {
   private accumulator: number = 0;
   private defaultPose: SpawnPose = {
     x: -0.8, // Start in Launch Area (Left side)
-    y: 0.05,
+    y: 0.035, // Seated directly at resting height (wheels touching mat)
     z: -0.3,
     yawDegrees: 90, // Facing East toward mission field
   };
@@ -34,6 +34,11 @@ export class SimulationPhysicsEngine {
     // Standard Earth gravity
     const gravity = { x: 0.0, y: -9.81, z: 0.0 };
     this.world = new RAPIER.World(gravity);
+
+    // High solver accuracy for articulated robotics constraints:
+    // Prevents joint compliance springing and eliminates bouncing/jitter on high-friction mats
+    this.world.integrationParameters.numSolverIterations = 16;
+    this.world.integrationParameters.numInternalPgsIterations = 4;
 
     // Create 4x8 ft competition table arena
     this.arena = new FllArenaPhysics(this.world);
@@ -52,20 +57,7 @@ export class SimulationPhysicsEngine {
   public resetRobot(pose?: SpawnPose): void {
     if (!this.isInitialized) return;
     const targetPose = pose || this.defaultPose;
-
-    // Reset velocities
-    this.robot.chassisBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    this.robot.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
-
-    const halfYaw = (targetPose.yawDegrees * Math.PI) / 360;
-    this.robot.chassisBody.setTranslation({ x: targetPose.x, y: targetPose.y, z: targetPose.z }, true);
-    this.robot.chassisBody.setRotation({ x: 0, y: Math.sin(halfYaw), z: 0, w: Math.cos(halfYaw) }, true);
-
-    // Reset motors
-    for (const motor of this.robot.motors.values()) {
-      motor.resetDegrees();
-      motor.stop();
-    }
+    this.robot.reset(targetPose);
   }
 
   /**

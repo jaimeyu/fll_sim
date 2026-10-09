@@ -33,4 +33,126 @@ describe('Rapier Physics Engine', () => {
 
     world.free();
   });
+
+  it('tests revolute joint motor', async () => {
+    await RAPIER.init();
+    const world = new RAPIER.World({ x: 0, y: 0, z: 0 }); // zero gravity
+    const bodyA = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
+    const bodyB = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(1, 0, 0));
+    world.createCollider(RAPIER.ColliderDesc.ball(0.1), bodyB);
+
+    const jointData = RAPIER.JointData.revolute({ x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 });
+    const joint = world.createImpulseJoint(jointData, bodyA, bodyB, true) as RAPIER.RevoluteImpulseJoint;
+    joint.configureMotorVelocity(5.0, 10.0);
+    joint.setMotorMaxForce(100.0);
+
+    for (let i = 0; i < 60; i++) {
+      world.step();
+    }
+    const angvel = bodyB.angvel();
+    console.log('Isolated Revolute joint angvel:', angvel);
+    expect(Math.abs(angvel.y)).toBeGreaterThan(1.0);
+    world.free();
+  });
+
+  it('tests RobotPhysicsBody wheels in the air', async () => {
+    await RAPIER.init();
+    const { getFllAdvanceDrivingBaseSpec } = await import('../cad/models/advance-driving-base');
+    const { RobotPhysicsBody } = await import('./robot-body');
+    const world = new RAPIER.World({ x: 0, y: 0, z: 0 }); // zero gravity, no floor
+    const spec = getFllAdvanceDrivingBaseSpec();
+    const robot = new RobotPhysicsBody(world, spec, { x: 0, y: 1.0, z: 0, yawDegrees: 0 });
+
+    const motorA = robot.motors.get('A');
+    const motorB = robot.motors.get('B');
+    motorA?.start(50);
+    motorB?.start(50);
+
+    for (let i = 0; i < 60; i++) {
+      robot.updateMotors(1 / 60);
+      world.step();
+    }
+
+    for (const [id, wb] of robot.wheelBodies.entries()) {
+      console.log(`In-air Wheel ${id} angvel:`, wb.angvel(), 'linvel:', wb.linvel());
+      expect(Math.abs(wb.angvel().x)).toBeGreaterThan(1.0);
+    }
+    world.free();
+  });
+
+  it('tests RobotPhysicsBody driving on competition floor', async () => {
+    await RAPIER.init();
+    const { getFllAdvanceDrivingBaseSpec } = await import('../cad/models/advance-driving-base');
+    const { RobotPhysicsBody } = await import('./robot-body');
+    const { FllArenaPhysics } = await import('./arena');
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    world.integrationParameters.numSolverIterations = 16;
+    world.integrationParameters.numInternalPgsIterations = 4;
+    new FllArenaPhysics(world);
+
+    const spec = getFllAdvanceDrivingBaseSpec();
+    const robot = new RobotPhysicsBody(world, spec, { x: 0, y: 0.035, z: 0, yawDegrees: 90 });
+
+    // Settle first
+    for (let i = 0; i < 30; i++) {
+      robot.updateMotors(1 / 60);
+      world.step();
+    }
+
+    const p0 = robot.getPosition();
+
+    // Start motors A and B at 50% speed
+    robot.motors.get('A')?.start(50);
+    robot.motors.get('B')?.start(50);
+
+    for (let i = 0; i < 60; i++) {
+      robot.updateMotors(1 / 60);
+      world.step();
+    }
+
+    const p1 = robot.getPosition();
+    const dist = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+    expect(dist).toBeGreaterThan(0.04); // Drives at least 4cm in 1s
+    world.free();
+  });
+
+  it('tests idle stillness with 16 iters and 4 pgs', async () => {
+    const { getFllAdvanceDrivingBaseSpec } = await import('../cad/models/advance-driving-base');
+    const { RobotPhysicsBody } = await import('./robot-body');
+    const { FllArenaPhysics } = await import('./arena');
+
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    world.integrationParameters.numSolverIterations = 16;
+    world.integrationParameters.numInternalPgsIterations = 4;
+    new FllArenaPhysics(world);
+    const spec = getFllAdvanceDrivingBaseSpec();
+    const robot = new RobotPhysicsBody(world, spec, { x: 0, y: 0.035, z: 0, yawDegrees: 0 });
+
+    // Settle for 40 steps
+    for (let i = 0; i < 40; i++) {
+      robot.updateMotors(1 / 60);
+      world.step();
+    }
+
+    const initialY = robot.getPosition().y;
+
+    // Run 60 steps idle
+    let maxVy = 0;
+    let maxAngSpeed = 0;
+    for (let i = 0; i < 60; i++) {
+      robot.updateMotors(1 / 60);
+      world.step();
+      const vy = Math.abs(robot.chassisBody.linvel().y);
+      const angvel = robot.chassisBody.angvel();
+      const angSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
+      if (vy > maxVy) maxVy = vy;
+      if (angSpeed > maxAngSpeed) maxAngSpeed = angSpeed;
+    }
+    expect(maxVy).toBeLessThan(0.005);
+    expect(maxAngSpeed).toBeLessThan(0.05);
+
+    const finalY = robot.getPosition().y;
+    expect(Math.abs(finalY - initialY)).toBeLessThan(0.0005);
+    world.free();
+  });
 });

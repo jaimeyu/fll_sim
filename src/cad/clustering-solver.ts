@@ -105,14 +105,16 @@ export class CadClusteringPreSolver {
       const massKg = Math.max(0.01, totalMassGrams / 1000);
 
       if (isRoot) {
-        // Compound box for main chassis frame
+        // Compound box for main chassis frame (88mm wide frame, leaving clean clearance to wheels).
+        // Center of mass shifted to Z = -0.025m (between wheels at Z=0 and rear caster at Z=-0.065m),
+        // giving standard 60/40 differential drive static tripod stability so the robot never tips or rocks.
         colliders.push({
           shape: 'box',
-          halfExtents: [0.07, 0.03, 0.08], // ~14cm wide, 6cm tall, 16cm long
-          offset: [0, 0.04, 0],
+          halfExtents: [0.044, 0.015, 0.06],
+          offset: [0, 0.015, -0.025],
           rotation: [0, 0, 0, 1],
           friction: 0.5,
-          restitution: 0.1,
+          restitution: 0.0,
         });
       } else if (clusterName === 'Drive Wheel') {
         // Cylinder collider for drive wheel
@@ -122,8 +124,8 @@ export class CadClusteringPreSolver {
           halfHeight: 0.013, // 26mm width = 13mm half height
           offset: [0, 0, 0],
           rotation: [0, 0, 0.7071, 0.7071], // Oriented along X axis
-          friction: 0.85, // High traction rubber
-          restitution: 0.05,
+          friction: 0.9, // High traction rubber
+          restitution: 0.0,
         });
       } else if (clusterName === 'Passive Caster / Skid') {
         // Low-friction sphere collider for caster ball

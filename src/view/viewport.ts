@@ -22,9 +22,9 @@ export class Viewport3D {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f172a); // Slate-900 dark theme
 
-    // 2. Camera
+    // 2. Camera: Optimized near and far planes for maximum depth buffer precision
     const aspect = container.clientWidth / container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.05, 50);
+    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 25);
     this.setCameraPreset('ISO');
 
     // 3. Renderer
@@ -86,14 +86,19 @@ export class Viewport3D {
     this.tableMesh = new THREE.Group();
 
     // Table Mat (2.362m x 1.143m)
+    // Placed slightly above ground (Y = 0.002m) with polygon offset to eliminate any z-fighting
     const matGeom = new THREE.PlaneGeometry(this.matTexture.worldLength, this.matTexture.worldWidth);
     matGeom.rotateX(-Math.PI / 2);
     const matMaterial = new THREE.MeshStandardMaterial({
       map: this.matTexture.texture,
       roughness: 0.8,
       metalness: 0.05,
+      polygonOffset: true,
+      polygonOffsetFactor: -1.0,
+      polygonOffsetUnits: -1.0,
     });
     const matMesh = new THREE.Mesh(matGeom, matMaterial);
+    matMesh.position.set(0, 0.002, 0);
     matMesh.receiveShadow = true;
     this.tableMesh.add(matMesh);
 
@@ -150,12 +155,13 @@ export class Viewport3D {
     this.tableMesh.add(wallW);
 
     // Table Wooden Base Frame Underneath
+    // Positioned with top surface strictly below Y = 0 (top at Y = -0.005m) to prevent coplanar interference
     const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
     const baseMesh = new THREE.Mesh(
       new THREE.BoxGeometry(this.matTexture.worldLength + 0.1, 0.08, this.matTexture.worldWidth + 0.1),
       baseMat
     );
-    baseMesh.position.set(0, -0.04, 0);
+    baseMesh.position.set(0, -0.045, 0);
     this.tableMesh.add(baseMesh);
 
     this.scene.add(this.tableMesh);
