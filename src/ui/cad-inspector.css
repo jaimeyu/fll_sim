@@ -365,3 +365,89 @@
   margin-top: auto;
   padding-top: 8px;
 }
+
+/* =========================================================================
+   Assembly Step Debugger Bar & Active Element Details
+   ========================================================================= */
+
+.inspector-step-bar {
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.step-bar-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.step-playback-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.step-counter-text {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-left: auto;
+}
+
+.step-slider-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.step-scrubber {
+  width: 100%;
+  accent-color: #38bdf8;
+  cursor: pointer;
+  height: 6px;
+  border-radius: 3px;
+  background: #1e293b;
+}
+
+.active-step-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.font-mono {
+  font-family: monospace;
+}
+
+.highlight-blue {
+  color: #38bdf8;
+}
+
+.text-xs {
+  font-size: 10px;
+}
+
+.color-sample-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  vertical-align: middle;
+  margin-right: 4px;
+}
+

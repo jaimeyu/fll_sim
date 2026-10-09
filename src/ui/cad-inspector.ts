@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import JSZip from 'jszip';
 import { LDrawImporter } from '../cad/ldraw-importer';
-import { RobotAssemblySpec } from '../cad/types';
+import { RobotAssemblySpec, PlacedPart } from '../cad/types';
 import { createLegoBrickMesh, LEGO_COLORS } from '../view/lego-visuals';
 import { SEASON_MISSIONS_CONFIG } from '../missions/season-config';
 
@@ -11,12 +11,22 @@ export interface CadInspectorCallbacks {
   onToggleSolidMode?: (missionId: string, solid: boolean) => void;
 }
 
+export interface InspectedStepItem {
+  stepIndex: number;
+  part: PlacedPart;
+  clusterIndex: number;
+  clusterName: string;
+  isRootChassis: boolean;
+  mesh: THREE.Object3D;
+}
+
 /**
  * CAD Model Inspector & Diagnostic Validator
  * 
  * Provides an interactive 3D inspection studio for BrickLink Studio (.io)
  * and LDraw (.ldr) models, displaying side-by-side official Studio renders,
- * part hierarchy breakdown, physical collider diagnostics, and kinematic validation.
+ * step-by-step assembly build playback, part hierarchy breakdown, physical
+ * collider diagnostics, and kinematic validation.
  */
 export class CadModelInspector {
   private overlay: HTMLElement;
@@ -36,6 +46,13 @@ export class CadModelInspector {
   private isWireframe: boolean = false;
   private showColliders: boolean = false;
   private isSolidMode: boolean = false;
+
+  // Assembly Step Debugger State
+  private inspectedSteps: InspectedStepItem[] = [];
+  private isStepMode: boolean = false;
+  private currentStepIndex: number = 0;
+  private stepPlayTimer: number | null = null;
+  private highlightHelper: THREE.BoxHelper | null = null;
 
   public getCurrentSpec(): RobotAssemblySpec | null {
     return this.currentSpec;
@@ -71,7 +88,7 @@ export class CadModelInspector {
             <span class="inspector-icon">🔬</span>
             <div class="inspector-title-text">
               <h2>LEGO® CAD Model Inspector & Validator</h2>
-              <p class="inspector-subtitle">Verify official Studio 2.0 (.io) geometry, submodels, and physical kinematic solver</p>
+              <p class="inspector-subtitle">Verify official Studio 2.0 (.io) geometry, step-by-step assembly, and kinematic solver</p>
             </div>
           </div>
           <div class="inspector-header-controls">
@@ -106,6 +123,30 @@ export class CadModelInspector {
               </div>
             </div>
 
+            <!-- Assembly Step Debugger Bar -->
+            <div class="inspector-step-bar" id="inspector-step-bar">
+              <div class="step-bar-top">
+                <button class="btn btn-xs btn-outline" id="btn-toggle-step-mode" title="Toggle step-by-step assembly build inspection">🧱 Step Build Mode: OFF</button>
+                <div class="step-playback-group" id="step-playback-controls" style="display: none;">
+                  <button class="btn btn-xs btn-ghost" id="btn-step-first" title="First step (⏮)">⏮</button>
+                  <button class="btn btn-xs btn-ghost" id="btn-step-prev" title="Previous step (◀)">◀</button>
+                  <button class="btn btn-xs btn-primary" id="btn-step-play" title="Auto-build playback">▶ Play</button>
+                  <button class="btn btn-xs btn-ghost" id="btn-step-next" title="Next step (▶)">▶</button>
+                  <button class="btn btn-xs btn-ghost" id="btn-step-last" title="Last step (⏭)">⏭</button>
+                  <select id="step-speed-select" class="hud-select hud-select-sm" title="Playback speed">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="5" selected>5x</option>
+                    <option value="10">10x</option>
+                  </select>
+                </div>
+                <span class="step-counter-text" id="step-counter-display">All parts visible</span>
+              </div>
+              <div class="step-slider-row" id="step-slider-row" style="display: none;">
+                <input type="range" id="step-scrubber-slider" min="1" max="1" value="1" class="step-scrubber" />
+              </div>
+            </div>
+
             <div class="inspector-studio-render-container" id="inspector-studio-container" style="display: none;">
               <div class="studio-render-box">
                 <img id="inspector-thumbnail-img" src="" alt="Official Studio 2.0 Render" />
@@ -123,6 +164,14 @@ export class CadModelInspector {
               <div class="status-details">
                 <div class="status-head">MODEL GEOMETRY VALID</div>
                 <div class="status-sub">All submodels linked without loose or unanchored parts</div>
+              </div>
+            </div>
+
+            <!-- Active Step Inspection Card -->
+            <div class="inspector-section-card" id="inspector-active-step-card" style="display: none;">
+              <div class="section-card-title">🔍 Step Inspector: Active LEGO Element</div>
+              <div class="active-step-details" id="active-step-details">
+                <!-- Dynamically populated -->
               </div>
             </div>
 
@@ -277,6 +326,44 @@ export class CadModelInspector {
       }
     });
 
+    // Step Debugger Scrubber and Playback Events
+    const btnToggleStep = this.overlay.querySelector('#btn-toggle-step-mode');
+    btnToggleStep?.addEventListener('click', () => this.toggleStepMode());
+
+    const stepSlider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement | null;
+    stepSlider?.addEventListener('input', () => {
+      this.setStep(parseInt(stepSlider.value, 10));
+    });
+
+    const btnStepFirst = this.overlay.querySelector('#btn-step-first');
+    btnStepFirst?.addEventListener('click', () => this.setStep(1));
+
+    const btnStepPrev = this.overlay.querySelector('#btn-step-prev');
+    btnStepPrev?.addEventListener('click', () => this.setStep(this.currentStepIndex - 1));
+
+    const btnStepPlay = this.overlay.querySelector('#btn-step-play');
+    btnStepPlay?.addEventListener('click', () => {
+      if (this.stepPlayTimer !== null) {
+        this.stopStepPlay();
+      } else {
+        this.startStepPlay();
+      }
+    });
+
+    const btnStepNext = this.overlay.querySelector('#btn-step-next');
+    btnStepNext?.addEventListener('click', () => this.setStep(this.currentStepIndex + 1));
+
+    const btnStepLast = this.overlay.querySelector('#btn-step-last');
+    btnStepLast?.addEventListener('click', () => this.setStep(this.inspectedSteps.length));
+
+    const stepSpeedSelect = this.overlay.querySelector('#step-speed-select') as HTMLSelectElement | null;
+    stepSpeedSelect?.addEventListener('change', () => {
+      if (this.stepPlayTimer !== null) {
+        this.stopStepPlay();
+        this.startStepPlay();
+      }
+    });
+
     // Deploy to mat
     const btnDeploy = this.overlay.querySelector('#btn-deploy-inspected')!;
     btnDeploy.addEventListener('click', () => {
@@ -393,6 +480,7 @@ export class CadModelInspector {
 
   public close(): void {
     this.overlay.style.display = 'none';
+    this.stopStepPlay();
     this.stopLoop();
   }
 
@@ -471,6 +559,11 @@ export class CadModelInspector {
   private build3DRepresentation(spec: RobotAssemblySpec): void {
     this.modelGroup.clear();
     this.colliderGroup.clear();
+    this.inspectedSteps = [];
+    if (this.highlightHelper) {
+      this.scene.remove(this.highlightHelper);
+      this.highlightHelper = null;
+    }
 
     const clusterPalette = [
       LEGO_COLORS.DARK_BLUE,
@@ -511,6 +604,15 @@ export class CadModelInspector {
           mesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
           mesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
           clusterObj.add(mesh);
+
+          this.inspectedSteps.push({
+            stepIndex: this.inspectedSteps.length + 1,
+            part,
+            clusterIndex: colorIdx,
+            clusterName: cluster.name,
+            isRootChassis: !!cluster.isRootChassis,
+            mesh,
+          });
         }
       }
       this.modelGroup.add(clusterObj);
@@ -530,6 +632,190 @@ export class CadModelInspector {
         const colMesh = new THREE.Mesh(geom, mat);
         colMesh.position.set(col.offset[0], col.offset[1] + groundCorrectionY, col.offset[2]);
         this.colliderGroup.add(colMesh);
+      }
+    }
+
+    const slider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement | null;
+    if (slider) {
+      slider.min = '1';
+      slider.max = Math.max(1, this.inspectedSteps.length).toString();
+      slider.value = this.isStepMode ? this.currentStepIndex.toString() : this.inspectedSteps.length.toString();
+    }
+
+    if (this.isStepMode) {
+      if (this.currentStepIndex === 0 || this.currentStepIndex > this.inspectedSteps.length) {
+        this.currentStepIndex = 1;
+      }
+      this.updateStepDisplay();
+    } else {
+      for (const item of this.inspectedSteps) {
+        item.mesh.visible = true;
+      }
+      const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
+      if (counter) counter.textContent = `All ${this.inspectedSteps.length} parts visible`;
+    }
+  }
+
+  public toggleStepMode(active?: boolean): void {
+    this.isStepMode = active !== undefined ? active : !this.isStepMode;
+    const btn = this.overlay.querySelector('#btn-toggle-step-mode') as HTMLButtonElement | null;
+    const controls = this.overlay.querySelector('#step-playback-controls') as HTMLElement | null;
+    const sliderRow = this.overlay.querySelector('#step-slider-row') as HTMLElement | null;
+
+    if (btn) {
+      btn.textContent = `🧱 Step Build Mode: ${this.isStepMode ? 'ON' : 'OFF'}`;
+      btn.classList.toggle('active', this.isStepMode);
+    }
+    if (controls) controls.style.display = this.isStepMode ? 'flex' : 'none';
+    if (sliderRow) sliderRow.style.display = this.isStepMode ? 'flex' : 'none';
+
+    if (this.isStepMode) {
+      if (this.currentStepIndex === 0 || this.currentStepIndex > this.inspectedSteps.length) {
+        this.currentStepIndex = 1;
+      }
+      this.updateStepDisplay();
+    } else {
+      this.stopStepPlay();
+      for (const item of this.inspectedSteps) {
+        item.mesh.visible = true;
+      }
+      if (this.highlightHelper) this.highlightHelper.visible = false;
+      const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
+      if (counter) counter.textContent = `All ${this.inspectedSteps.length} parts visible`;
+      const stepCard = this.overlay.querySelector('#inspector-active-step-card') as HTMLElement | null;
+      if (stepCard) stepCard.style.display = 'none';
+    }
+  }
+
+  public setStep(step: number): void {
+    const total = this.inspectedSteps.length;
+    if (total === 0) return;
+    this.currentStepIndex = Math.max(1, Math.min(total, step));
+    this.updateStepDisplay();
+  }
+
+  public startStepPlay(): void {
+    if (this.stepPlayTimer !== null) return;
+    const speedSelect = this.overlay.querySelector('#step-speed-select') as HTMLSelectElement | null;
+    const speedMult = parseFloat(speedSelect?.value || '5');
+    const intervalMs = Math.max(30, Math.round(500 / speedMult));
+
+    const btnPlay = this.overlay.querySelector('#btn-step-play') as HTMLButtonElement | null;
+    if (btnPlay) {
+      btnPlay.textContent = '⏸ Pause';
+      btnPlay.classList.add('btn-warning');
+      btnPlay.classList.remove('btn-primary');
+    }
+
+    this.stepPlayTimer = window.setInterval(() => {
+      if (this.currentStepIndex >= this.inspectedSteps.length) {
+        this.stopStepPlay();
+        return;
+      }
+      this.setStep(this.currentStepIndex + 1);
+    }, intervalMs);
+  }
+
+  public stopStepPlay(): void {
+    if (this.stepPlayTimer !== null) {
+      clearInterval(this.stepPlayTimer);
+      this.stepPlayTimer = null;
+    }
+    const btnPlay = this.overlay.querySelector('#btn-step-play') as HTMLButtonElement | null;
+    if (btnPlay) {
+      btnPlay.textContent = '▶ Play';
+      btnPlay.classList.add('btn-primary');
+      btnPlay.classList.remove('btn-warning');
+    }
+  }
+
+  private updateStepDisplay(): void {
+    const total = this.inspectedSteps.length;
+    if (total === 0) return;
+
+    const slider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement | null;
+    const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
+    const stepCard = this.overlay.querySelector('#inspector-active-step-card') as HTMLElement | null;
+    const stepDetails = this.overlay.querySelector('#active-step-details') as HTMLElement | null;
+
+    if (slider) {
+      slider.max = total.toString();
+      slider.value = this.currentStepIndex.toString();
+    }
+
+    for (let i = 0; i < total; i++) {
+      const item = this.inspectedSteps[i];
+      item.mesh.visible = (i < this.currentStepIndex);
+    }
+
+    const activeItem = this.inspectedSteps[this.currentStepIndex - 1];
+
+    if (counter) {
+      if (activeItem) {
+        counter.textContent = `Step ${this.currentStepIndex} / ${total} (Part ${activeItem.part.partNumber})`;
+      } else {
+        counter.textContent = `Step ${this.currentStepIndex} / ${total}`;
+      }
+    }
+
+    if (activeItem && this.isStepMode) {
+      if (!this.highlightHelper) {
+        this.highlightHelper = new THREE.BoxHelper(activeItem.mesh, 0x38bdf8);
+        this.scene.add(this.highlightHelper);
+      } else {
+        this.highlightHelper.setFromObject(activeItem.mesh);
+        this.highlightHelper.visible = true;
+      }
+
+      if (stepCard && stepDetails) {
+        stepCard.style.display = 'flex';
+        const p = activeItem.part;
+        const px = p.position[0];
+        const py = p.position[1];
+        const pz = p.position[2];
+        const studsX = (px / 8).toFixed(1);
+        const studsZ = (pz / 8).toFixed(1);
+        const platesY = (py / 3.2).toFixed(1);
+        const q = p.rotation;
+        const colorHexStr = p.colorHex !== undefined ? `#${p.colorHex.toString(16).padStart(6, '0')}` : 'default';
+
+        stepDetails.innerHTML = `
+          <div class="step-detail-row">
+            <span class="dim-label">Element / Part #:</span>
+            <span class="dim-val highlight-blue"><strong>${p.partNumber}</strong> (${p.role || 'brick'})</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Submodel Context:</span>
+            <span class="dim-val">${p.submodelInstance || p.submodel || 'main assembly'}</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Cluster Body:</span>
+            <span class="dim-val">${activeItem.clusterName} (${activeItem.isRootChassis ? '🔒 Base' : '⚙️ Articulated'})</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Position (X, Y, Z):</span>
+            <span class="dim-val font-mono">${px.toFixed(1)}, ${py.toFixed(1)}, ${pz.toFixed(1)} mm</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Stud Coordinates:</span>
+            <span class="dim-val font-mono">${studsX}s, ${platesY}p, ${studsZ}s</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Rotation (x, y, z, w):</span>
+            <span class="dim-val font-mono text-xs">${q[0].toFixed(2)}, ${q[1].toFixed(2)}, ${q[2].toFixed(2)}, ${q[3].toFixed(2)}</span>
+          </div>
+          <div class="step-detail-row">
+            <span class="dim-label">Color:</span>
+            <span class="dim-val"><span class="color-sample-dot" style="background-color: ${colorHexStr};"></span> ${colorHexStr}</span>
+          </div>
+        `;
+      }
+    } else {
+      if (this.highlightHelper) {
+        this.highlightHelper.visible = false;
+      }
+      if (stepCard) {
+        stepCard.style.display = 'none';
       }
     }
   }

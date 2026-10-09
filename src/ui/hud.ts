@@ -141,6 +141,31 @@ export class SimulatorHud {
   private timerDisplay!: HTMLElement;
   private runBtn!: HTMLButtonElement;
   private stopBtn!: HTMLButtonElement;
+  private topbarRunBtn!: HTMLButtonElement;
+  private topbarStopBtn!: HTMLButtonElement;
+
+  // Activity Bar & Drawer state
+  private activeView: 'code' | 'assets' | 'field' | 'terminal' = 'code';
+  private isDrawerOpen: boolean = true;
+
+  // Drawer Panel & Views DOM elements
+  private drawerPanel!: HTMLElement;
+  private viewCode!: HTMLElement;
+  private viewAssets!: HTMLElement;
+  private viewField!: HTMLElement;
+  private viewTerminal!: HTMLElement;
+  private drawerPanelTitle!: HTMLElement;
+  private drawerPanelIcon!: HTMLElement;
+  private drawerTermLog!: HTMLElement;
+
+  // Floating Terminal DOM elements
+  private floatingTerminal!: HTMLElement;
+  private floatingTermLog!: HTMLElement;
+  private isFloatingTermOpen: boolean = false;
+
+  // Telemetry Panel toggle state
+  private telemetryPanel!: HTMLElement;
+  private isTelemetryOpen: boolean = true;
 
   // Telemetry DOM elements
   private telemPosX!: HTMLElement;
@@ -167,14 +192,8 @@ export class SimulatorHud {
   private missionScoreText!: HTMLElement;
 
   // Mission Asset Drawer UI elements
-  private assetDrawer!: HTMLElement;
-  private btnToggleDrawer!: HTMLButtonElement;
-  private btnCloseDrawer!: HTMLButtonElement;
   private drawerElementsList!: HTMLElement;
   private assetCountBadge!: HTMLElement;
-  private missionCadFileInput!: HTMLInputElement;
-  private btnTopbarResetElements!: HTMLButtonElement;
-  private btnDrawerResetAll!: HTMLButtonElement;
   private missionElementsData: Array<{
     id: string;
     name: string;
@@ -220,7 +239,11 @@ export class SimulatorHud {
         <div class="hud-brand">
           <span class="hud-logo">🤖</span>
           <span class="hud-title">FLL Robot Simulator</span>
-          <span class="hud-badge">SPIKE Prime • WebGL/Wasm</span>
+          <span class="hud-badge">SPIKE Prime</span>
+          <div class="status-indicator">
+            <span class="status-dot status-idle" id="exec-status-dot"></span>
+            <span id="exec-status-text">IDLE</span>
+          </div>
         </div>
 
         <div class="hud-top-center">
@@ -243,92 +266,54 @@ export class SimulatorHud {
         </div>
 
         <div class="hud-top-right">
-          <div class="mode-select-container">
-            <label for="mode-select" class="hud-label-inline">🎯 Mode:</label>
-            <select id="mode-select" class="hud-select hud-select-sm">
-              <option value="ARENA" selected>🏟️ Competition Arena</option>
-              <option value="SANDBOX_RISER">🔬 Sandbox: 4-Axle Riser</option>
-              <option value="SANDBOX_DIAL">🔬 Sandbox: Rotary Dial</option>
-              <option value="SANDBOX_CASCADE">🔬 Sandbox: Multi-Gear Cascade</option>
-            </select>
-          </div>
-          <div class="map-select-container">
-            <label for="map-select" class="hud-label-inline">🗺️ Mat:</label>
-            <select id="map-select" class="hud-select hud-select-sm">
-              <option value="numbered" selected>Numbered Field Mat (BioGlow)</option>
-              <option value="grid">Grid Playing Field Mat</option>
-              <option value="procedural">Procedural FLL Mat</option>
-            </select>
-          </div>
-          <button class="btn btn-sm btn-outline" id="btn-topbar-reset-elements" title="Reset all mission elements back to starting idle position">🔄 Reset Elements</button>
+          <button id="btn-topbar-run" class="btn btn-sm btn-primary" title="Run Active Python Script">▶ RUN</button>
+          <button id="btn-topbar-stop" class="btn btn-sm btn-danger" disabled title="Stop Execution">⏹ STOP</button>
+          <button class="btn btn-sm btn-outline" id="btn-toggle-floating-terminal" title="Toggle Floating Debug Terminal Window">📟 Terminal</button>
+          <button class="btn btn-sm btn-outline" id="btn-toggle-telemetry" title="Toggle Live Telemetry Card">📡 Telemetry</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
-          <button class="btn btn-sm btn-primary" id="btn-toggle-asset-drawer" title="Open Mission Element Asset Drawer & Library">📦 Mission Assets <span class="badge-count" id="asset-count-badge">3</span></button>
-          <label class="btn btn-sm btn-secondary file-upload-btn" title="Import robot CAD model (.io / .ldr)">
-            🤖 Import Robot (.io)
-            <input type="file" id="cad-file-input" accept=".io,.ldr,.mpd" style="display: none;">
-          </label>
         </div>
       </header>
 
-      <!-- Slide-out Mission Asset Drawer -->
-      <div class="hud-asset-drawer" id="asset-drawer" style="display: none;">
-        <div class="drawer-header">
-          <div class="drawer-title-group">
-            <span class="drawer-icon">📦</span>
-            <span class="drawer-title">Mission Asset Library</span>
+      <!-- Left Activity Bar (Fixed 48px vertical bar) -->
+      <nav class="hud-activity-bar">
+        <button class="activity-btn active" id="act-btn-code" title="💻 Python Code Editor" data-view="code">
+          <span class="act-icon">💻</span>
+          <span class="act-label">Code</span>
+        </button>
+        <button class="activity-btn" id="act-btn-assets" title="📦 Mission Asset Library & Presets" data-view="assets">
+          <span class="act-icon">📦</span>
+          <span class="act-label">Assets</span>
+          <span class="act-badge" id="asset-count-badge">3</span>
+        </button>
+        <button class="activity-btn" id="act-btn-field" title="⚙️ Field & Simulation Setup" data-view="field">
+          <span class="act-icon">⚙️</span>
+          <span class="act-label">Field</span>
+        </button>
+        <button class="activity-btn" id="act-btn-terminal" title="📟 Debug Terminal & Logs" data-view="terminal">
+          <span class="act-icon">📟</span>
+          <span class="act-label">Terminal</span>
+        </button>
+        <div class="act-spacer"></div>
+        <button class="activity-btn" id="act-btn-cad" title="🔬 LEGO CAD Model Inspector & Step Debugger">
+          <span class="act-icon">🔬</span>
+          <span class="act-label">CAD</span>
+        </button>
+      </nav>
+
+      <!-- Left Resizable Multi-Job Drawer Panel -->
+      <aside class="hud-drawer-panel" id="hud-drawer-panel">
+        <div class="drawer-panel-header">
+          <div class="drawer-panel-title-group">
+            <span class="drawer-panel-icon" id="drawer-panel-icon">💻</span>
+            <span class="drawer-panel-title" id="drawer-panel-title">Python Code Editor</span>
           </div>
-          <button class="btn btn-xs btn-outline drawer-close-btn" id="btn-close-drawer">✖</button>
-        </div>
-        
-        <div class="drawer-toolbar">
-          <label class="btn btn-sm btn-primary file-upload-btn w-100">
-            ➕ Import Mission Model (.io / .ldr)
-            <input type="file" id="mission-cad-file-input" accept=".io,.ldr,.mpd,.dat" style="display: none;">
-          </label>
-          <div class="drawer-preset-container">
-            <label for="select-mission-preset" class="drawer-preset-label">🎯 Mission Preset:</label>
-            <div class="drawer-preset-controls">
-              <select id="select-mission-preset" class="hud-select hud-select-sm flex-1">
-                <option value="" disabled selected>Select preset...</option>
-                <option value="starter">⚡ Starter Test (Missions 1, 2, 3)</option>
-                <option value="m1_only">🎯 Mission 1 Only (Drone Survey)</option>
-                <option value="m2_only">🎯 Mission 2 Only (Exploding Seeds)</option>
-                <option value="m3_only">🎯 Mission 3 Only (Flip the Rock)</option>
-                <option value="north">🧭 North Zone (Missions 1 - 4)</option>
-                <option value="all">🌟 All 13 Official Missions</option>
-                <option value="clear">🧹 Clear All Models</option>
-              </select>
-              <button class="btn btn-sm btn-secondary" id="btn-apply-mission-preset" title="Load selected mission preset">Load</button>
-            </div>
+          <div class="drawer-panel-header-actions">
+            <button class="btn btn-xs btn-outline" id="btn-minimize-drawer" title="Minimize Drawer (or click active icon)">◀</button>
           </div>
-          <button class="btn btn-sm btn-outline w-100" id="btn-drawer-reset-all">🔄 Reset All Elements to Idle</button>
         </div>
 
-        <div class="drawer-content" id="drawer-elements-list">
-          <!-- Populated dynamically with element cards -->
-        </div>
-
-        <div class="drawer-footer-hint">
-          💡 <strong>Tip:</strong> Click & drag mission elements directly on the mat! Use <strong>mouse wheel</strong> or press <strong>R</strong> to rotate.
-        </div>
-      </div>
-
-      <!-- Floating Sandbox Action Toolbar -->
-      <div class="hud-sandbox-toolbar" id="sandbox-toolbar" style="display: none;">
-        <span class="sandbox-badge">🔬 SANDBOX WORKBENCH</span>
-        <button class="btn btn-sm btn-outline active" id="btn-toggle-tool">🖐️ Pusher Tool: ON</button>
-        <button class="btn btn-sm btn-outline" id="btn-spawn-block">🧱 Drop Test Block</button>
-        <button class="btn btn-sm btn-outline" id="btn-toggle-dyno">🔒 Robot Dyno: OFF</button>
-        <button class="btn btn-sm btn-outline" id="btn-reset-mission">↺ Reset Mission</button>
-        <div class="mission-status-chip">
-          <span class="chip-label">STATUS:</span>
-          <span class="chip-val" id="mission-score-text">UNSOLVED (0%)</span>
-        </div>
-      </div>
-
-      <!-- Main Sidebar Panel (Left: Code & Control) -->
-      <aside class="hud-sidebar">
-        <div class="sidebar-header">
+        <!-- View 1: Python Code Editor -->
+        <div class="drawer-view-content" id="view-content-code">
           <div class="mission-select-container">
             <label for="mission-select">Sample Mission:</label>
             <select id="mission-select" class="hud-select">
@@ -338,39 +323,194 @@ export class SimulatorHud {
               <option value="line_squaring">Mission 4: Dual-Sensor Line Squaring</option>
             </select>
           </div>
-          <div class="status-indicator">
-            <span class="status-dot status-idle" id="exec-status-dot"></span>
-            <span id="exec-status-text">IDLE</span>
+
+          <div class="script-tabs-bar">
+            <div class="script-tabs-list" id="script-tabs-list"></div>
+            <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page">➕ New Script</button>
+          </div>
+
+          <div class="code-editor-container">
+            <textarea id="python-code-editor" spellcheck="false"></textarea>
+          </div>
+
+          <div class="hud-action-bar">
+            <button id="btn-run" class="btn btn-primary">▶ RUN</button>
+            <button id="btn-stop" class="btn btn-danger" disabled>⏹ STOP</button>
+            <button id="btn-reset" class="btn btn-warning">↺ RESET</button>
+          </div>
+
+          <div class="console-card">
+            <div class="console-title-bar">
+              <span>ROBOT CONSOLE PREVIEW</span>
+              <button class="btn btn-xs btn-ghost" id="btn-open-terminal-from-preview" title="Open full floating terminal">📟 Pop Out ↗</button>
+            </div>
+            <div id="console-output" class="console-text">System ready. Select a mission or write Python code, then click RUN.</div>
           </div>
         </div>
 
-        <!-- Script Tab Bar -->
-        <div class="script-tabs-bar">
-          <div class="script-tabs-list" id="script-tabs-list"></div>
-          <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page to paste and run custom code">➕ New Script</button>
+        <!-- View 2: Mission Asset Library -->
+        <div class="drawer-view-content" id="view-content-assets" style="display: none;">
+          <div class="drawer-toolbar">
+            <label class="btn btn-sm btn-primary file-upload-btn w-100">
+              ➕ Import Mission Model (.io / .ldr)
+              <input type="file" id="mission-cad-file-input" accept=".io,.ldr,.mpd,.dat" style="display: none;">
+            </label>
+            <div class="drawer-preset-container">
+              <label for="select-mission-preset" class="drawer-preset-label">🎯 Mission Preset:</label>
+              <div class="drawer-preset-controls">
+                <select id="select-mission-preset" class="hud-select hud-select-sm flex-1">
+                  <option value="" disabled selected>Select preset...</option>
+                  <option value="starter">⚡ Starter Test (Missions 1, 2, 3)</option>
+                  <option value="m1_only">🎯 Mission 1 Only (Drone Survey)</option>
+                  <option value="m2_only">🎯 Mission 2 Only (Exploding Seeds)</option>
+                  <option value="m3_only">🎯 Mission 3 Only (Flip the Rock)</option>
+                  <option value="north">🧭 North Zone (Missions 1 - 4)</option>
+                  <option value="all">🌟 All 13 Official Missions</option>
+                  <option value="clear">🧹 Clear All Models</option>
+                </select>
+                <button class="btn btn-sm btn-secondary" id="btn-apply-mission-preset" title="Load selected mission preset">Load</button>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline w-100" id="btn-drawer-reset-all">🔄 Reset All Elements to Idle</button>
+          </div>
+
+          <div class="drawer-content" id="drawer-elements-list">
+            <!-- Populated dynamically with element cards and season catalog -->
+          </div>
+
+          <div class="drawer-footer-hint">
+            💡 <strong>Tip:</strong> Click & drag mission elements directly on the mat! Use <strong>mouse wheel</strong> or press <strong>R</strong> to rotate.
+          </div>
         </div>
 
-        <!-- Code Editor -->
-        <div class="code-editor-container">
-          <textarea id="python-code-editor" spellcheck="false"></textarea>
+        <!-- View 3: Field & Simulation Setup -->
+        <div class="drawer-view-content" id="view-content-field" style="display: none;">
+          <div class="field-settings-scroll">
+            <div class="settings-card">
+              <div class="settings-card-title">🎯 Simulation Mode</div>
+              <select id="mode-select" class="hud-select w-100">
+                <option value="ARENA" selected>🏟️ Competition Arena</option>
+                <option value="SANDBOX_RISER">🔬 Sandbox: 4-Axle Riser</option>
+                <option value="SANDBOX_DIAL">🔬 Sandbox: Rotary Dial</option>
+                <option value="SANDBOX_CASCADE">🔬 Sandbox: Multi-Gear Cascade</option>
+              </select>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">🗺️ Competition Field Mat</div>
+              <select id="map-select" class="hud-select w-100">
+                <option value="numbered" selected>Numbered Field Mat (BioGlow)</option>
+                <option value="grid">Grid Playing Field Mat</option>
+                <option value="procedural">Procedural FLL Mat</option>
+              </select>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">🤖 Robot Hardware CAD</div>
+              <p class="settings-card-desc">Import official SPIKE Prime Studio (.io) or LDraw (.ldr) build.</p>
+              <label class="btn btn-sm btn-secondary file-upload-btn w-100" title="Import robot CAD model (.io / .ldr)">
+                📂 Import Robot Model (.io)
+                <input type="file" id="cad-file-input" accept=".io,.ldr,.mpd" style="display: none;">
+              </label>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">📍 Robot Spawn Position & Presets</div>
+              <div class="spawn-inputs-row">
+                <div class="spawn-input-group">
+                  <label for="spawn-x">X (m)</label>
+                  <input type="number" id="spawn-x" step="0.05" value="-0.80">
+                </div>
+                <div class="spawn-input-group">
+                  <label for="spawn-z">Z (m)</label>
+                  <input type="number" id="spawn-z" step="0.05" value="0.32">
+                </div>
+                <div class="spawn-input-group">
+                  <label for="spawn-yaw">Yaw (°)</label>
+                  <input type="number" id="spawn-yaw" step="5" value="90">
+                </div>
+              </div>
+              <div class="spawn-rotate-row">
+                <span class="rotate-label">Heading:</span>
+                <button class="btn btn-xs btn-outline" data-rot-step="-45">⟲ -45°</button>
+                <button class="btn btn-xs btn-outline" data-rot-step="-15">⟲ -15°</button>
+                <button class="btn btn-xs btn-outline" data-rot-step="15">⟳ +15°</button>
+                <button class="btn btn-xs btn-outline" data-rot-step="45">⟳ +45°</button>
+              </div>
+              <div class="spawn-heading-chips">
+                <button class="btn btn-xs btn-ghost" data-rot-preset="0">0° N</button>
+                <button class="btn btn-xs btn-ghost" data-rot-preset="90">90° E</button>
+                <button class="btn btn-xs btn-ghost" data-rot-preset="180">180° S</button>
+                <button class="btn btn-xs btn-ghost" data-rot-preset="270">270° W</button>
+              </div>
+              <div class="spawn-actions-row">
+                <button class="btn btn-xs btn-primary" id="btn-move-pose">🚀 Move Robot</button>
+                <button class="btn btn-xs btn-outline" id="btn-capture-pose">📌 Set as Start</button>
+              </div>
+              <div class="spawn-presets-row">
+                <button class="btn btn-xs btn-outline" data-spawn-preset="red">🚩 Red Arc</button>
+                <button class="btn btn-xs btn-outline" data-spawn-preset="blue">🔷 Blue Arc</button>
+                <button class="btn btn-xs btn-outline" data-spawn-preset="center">🎯 Center</button>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">🔬 Sandbox Workbench Tools</div>
+              <div class="settings-btn-col">
+                <button class="btn btn-sm btn-outline active" id="btn-toggle-tool">🖐️ Pusher Tool: ON</button>
+                <button class="btn btn-sm btn-outline" id="btn-spawn-block">🧱 Drop Test Block</button>
+                <button class="btn btn-sm btn-outline" id="btn-toggle-dyno">🔒 Robot Dyno: OFF</button>
+                <button class="btn btn-sm btn-outline" id="btn-reset-mission">↺ Reset Mission</button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Execution Action Buttons -->
-        <div class="hud-action-bar">
-          <button id="btn-run" class="btn btn-primary">▶ RUN</button>
-          <button id="btn-stop" class="btn btn-danger" disabled>⏹ STOP</button>
-          <button id="btn-reset" class="btn btn-warning">↺ RESET</button>
+        <!-- View 4: Full-Height Debug Terminal View -->
+        <div class="drawer-view-content" id="view-content-terminal" style="display: none;">
+          <div class="terminal-drawer-toolbar">
+            <span class="terminal-status-chip">● LIVE CONSOLE</span>
+            <div class="terminal-drawer-actions">
+              <button class="btn btn-xs btn-outline" id="btn-drawer-term-clear">🧹 Clear</button>
+              <button class="btn btn-xs btn-secondary" id="btn-popout-terminal" title="Pop out into floating window">🗗 Pop Out</button>
+            </div>
+          </div>
+          <div id="terminal-drawer-log" class="terminal-log-area">
+            <div><span style="color: #64748b;">[INIT]</span> Robot terminal ready. Standard output and execution logs stream here.</div>
+          </div>
         </div>
 
-        <!-- Console Log Output -->
-        <div class="console-card">
-          <div class="console-title">ROBOT CONSOLE OUTPUT</div>
-          <div id="console-output" class="console-text">System ready. Select a mission or write Python code, then click RUN.</div>
-        </div>
+        <!-- Resizer handle on right edge -->
+        <div class="hud-panel-resizer" id="hud-panel-resizer" title="Drag to resize panel"></div>
       </aside>
 
+      <!-- Floating Debug Terminal Window -->
+      <div class="hud-floating-terminal" id="hud-floating-terminal" style="display: none;">
+        <div class="floating-terminal-header" id="floating-terminal-header">
+          <div class="floating-terminal-title">
+            <span>📟 Robot Debug Terminal</span>
+          </div>
+          <div class="floating-terminal-actions">
+            <button class="btn btn-xs btn-outline" id="btn-float-term-clear" title="Clear console output">🧹 Clear</button>
+            <button class="btn btn-xs btn-outline" id="btn-float-term-close" title="Close floating terminal">✖</button>
+          </div>
+        </div>
+        <div class="floating-terminal-body" id="floating-terminal-log">
+          <div><span style="color: #64748b;">[SYSTEM]</span> Debug terminal ready. Live output will stream here.</div>
+        </div>
+      </div>
+
+      <!-- Floating Sandbox Action Toolbar -->
+      <div class="hud-sandbox-toolbar" id="sandbox-toolbar" style="display: none;">
+        <span class="sandbox-badge">🔬 SANDBOX WORKBENCH</span>
+        <div class="mission-status-chip">
+          <span class="chip-label">STATUS:</span>
+          <span class="chip-val" id="mission-score-text">UNSOLVED (0%)</span>
+        </div>
+      </div>
+
       <!-- Bottom-Right Telemetry Card -->
-      <div class="hud-telemetry-panel">
+      <div class="hud-telemetry-panel" id="hud-telemetry-panel">
         <div class="telem-header">
           <span>📡 LIVE TELEMETRY</span>
           <span id="telem-fps" class="fps-badge">60 FPS</span>
@@ -405,50 +545,6 @@ export class SimulatorHud {
             <span class="value" id="telem-dist">-- cm</span>
           </div>
         </div>
-
-        <!-- Starting Pose Configuration Section -->
-        <div class="telem-spawn-section">
-          <div class="telem-subheading">
-            <span>📍 ROBOT POSITION & PRESETS</span>
-          </div>
-          <div class="spawn-inputs-row">
-            <div class="spawn-input-group">
-              <label for="spawn-x">X (m)</label>
-              <input type="number" id="spawn-x" step="0.05" value="-0.80">
-            </div>
-            <div class="spawn-input-group">
-              <label for="spawn-z">Z (m)</label>
-              <input type="number" id="spawn-z" step="0.05" value="0.32">
-            </div>
-            <div class="spawn-input-group">
-              <label for="spawn-yaw">Yaw (°)</label>
-              <input type="number" id="spawn-yaw" step="5" value="90">
-            </div>
-          </div>
-          <!-- Quick Heading & Rotation Row -->
-          <div class="spawn-rotate-row">
-            <span class="rotate-label">Heading:</span>
-            <button class="btn btn-xs btn-outline" data-rot-step="-45" title="Rotate robot -45°">⟲ -45°</button>
-            <button class="btn btn-xs btn-outline" data-rot-step="-15" title="Rotate robot -15°">⟲ -15°</button>
-            <button class="btn btn-xs btn-outline" data-rot-step="15" title="Rotate robot +15°">⟳ +15°</button>
-            <button class="btn btn-xs btn-outline" data-rot-step="45" title="Rotate robot +45°">⟳ +45°</button>
-          </div>
-          <div class="spawn-heading-chips">
-            <button class="btn btn-xs btn-ghost" data-rot-preset="0" title="Facing North (0°)">0° N</button>
-            <button class="btn btn-xs btn-ghost" data-rot-preset="90" title="Facing East (90°)">90° E</button>
-            <button class="btn btn-xs btn-ghost" data-rot-preset="180" title="Facing South (180°)">180° S</button>
-            <button class="btn btn-xs btn-ghost" data-rot-preset="270" title="Facing West (270°)">270° W</button>
-          </div>
-          <div class="spawn-actions-row">
-            <button class="btn btn-xs btn-primary" id="btn-move-pose" title="Stop running code and immediately move robot to entered (X, Z, Yaw) coordinates">🚀 Move Robot</button>
-            <button class="btn btn-xs btn-outline" id="btn-capture-pose" title="Capture current robot position on field as default start pose">📌 Set as Start</button>
-          </div>
-          <div class="spawn-presets-row">
-            <button class="btn btn-xs btn-outline" data-spawn-preset="red" title="Stop run and move to Red Launch Arc (Left)">🚩 Red Arc</button>
-            <button class="btn btn-xs btn-outline" data-spawn-preset="blue" title="Stop run and move to Blue Launch Arc (Right)">🔷 Blue Arc</button>
-            <button class="btn btn-xs btn-outline" data-spawn-preset="center" title="Stop run and move to Field Center (0, 0)">🎯 Center</button>
-          </div>
-        </div>
       </div>
     `;
 
@@ -459,6 +555,23 @@ export class SimulatorHud {
     this.timerDisplay = this.rootElement.querySelector('#hud-match-timer')!;
     this.runBtn = this.rootElement.querySelector('#btn-run')!;
     this.stopBtn = this.rootElement.querySelector('#btn-stop')!;
+    this.topbarRunBtn = this.rootElement.querySelector('#btn-topbar-run')!;
+    this.topbarStopBtn = this.rootElement.querySelector('#btn-topbar-stop')!;
+
+    // Drawer and view elements
+    this.drawerPanel = this.rootElement.querySelector('#hud-drawer-panel')!;
+    this.viewCode = this.rootElement.querySelector('#view-content-code')!;
+    this.viewAssets = this.rootElement.querySelector('#view-content-assets')!;
+    this.viewField = this.rootElement.querySelector('#view-content-field')!;
+    this.viewTerminal = this.rootElement.querySelector('#view-content-terminal')!;
+    this.drawerPanelTitle = this.rootElement.querySelector('#drawer-panel-title')!;
+    this.drawerPanelIcon = this.rootElement.querySelector('#drawer-panel-icon')!;
+    this.drawerTermLog = this.rootElement.querySelector('#terminal-drawer-log')!;
+
+    // Floating Terminal elements
+    this.floatingTerminal = this.rootElement.querySelector('#hud-floating-terminal')!;
+    this.floatingTermLog = this.rootElement.querySelector('#floating-terminal-log')!;
+    this.telemetryPanel = this.rootElement.querySelector('#hud-telemetry-panel')!;
 
     this.telemPosX = this.rootElement.querySelector('#telem-pos')!;
     this.telemYaw = this.rootElement.querySelector('#telem-yaw')!;
@@ -481,14 +594,8 @@ export class SimulatorHud {
     this.btnResetMission = this.rootElement.querySelector('#btn-reset-mission')!;
     this.missionScoreText = this.rootElement.querySelector('#mission-score-text')!;
 
-    this.assetDrawer = this.rootElement.querySelector('#asset-drawer')!;
-    this.btnToggleDrawer = this.rootElement.querySelector('#btn-toggle-asset-drawer')!;
-    this.btnCloseDrawer = this.rootElement.querySelector('#btn-close-drawer')!;
     this.drawerElementsList = this.rootElement.querySelector('#drawer-elements-list')!;
     this.assetCountBadge = this.rootElement.querySelector('#asset-count-badge')!;
-    this.missionCadFileInput = this.rootElement.querySelector('#mission-cad-file-input')!;
-    this.btnTopbarResetElements = this.rootElement.querySelector('#btn-topbar-reset-elements')!;
-    this.btnDrawerResetAll = this.rootElement.querySelector('#btn-drawer-reset-all')!;
 
     // Set initial sample code
     this.codeTextarea.value = this.scriptTabs[0].code;
@@ -676,50 +783,134 @@ export class SimulatorHud {
       });
     });
 
-    // Reset All Mission Elements buttons
-    const handleResetAllElements = () => {
-      this.callbacks.onResetAllMissions?.();
-      this.callbacks.onResetMission?.();
-      this.logConsole('🔄 All mission elements reset to starting idle state.');
-    };
-    this.btnTopbarResetElements?.addEventListener('click', handleResetAllElements);
-    this.btnDrawerResetAll?.addEventListener('click', handleResetAllElements);
-
-    // Toggle Mission Asset Drawer
-    this.btnToggleDrawer?.addEventListener('click', () => {
-      this.toggleAssetDrawer();
+    // Topbar Quick Run & Stop Buttons
+    this.topbarRunBtn?.addEventListener('click', () => {
+      this.runBtn.click();
     });
-    this.btnCloseDrawer?.addEventListener('click', () => {
-      this.toggleAssetDrawer(false);
+    this.topbarStopBtn?.addEventListener('click', () => {
+      this.stopBtn.click();
     });
 
-    // Open CAD Model Inspector
-    const btnTopbarInspector = this.rootElement.querySelector('#btn-topbar-inspector');
-    btnTopbarInspector?.addEventListener('click', () => {
+    // Activity Bar View Switching
+    const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
+    actBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const view = btn.getAttribute('data-view') as 'code' | 'assets' | 'field' | 'terminal';
+        if (view === this.activeView && this.isDrawerOpen) {
+          this.toggleDrawer(false);
+        } else {
+          this.setActiveDrawerJob(view);
+        }
+      });
+    });
+
+    // Activity Bar CAD Inspector Button
+    const actBtnCad = this.rootElement.querySelector('#act-btn-cad');
+    actBtnCad?.addEventListener('click', () => {
       this.callbacks.onOpenInspector?.('M01');
     });
 
-    // Mission Model CAD file importer (.io / .ldr / .dat)
-    this.missionCadFileInput?.addEventListener('change', () => {
-      if (this.missionCadFileInput.files && this.missionCadFileInput.files[0]) {
-        this.callbacks.onImportMissionElement?.(this.missionCadFileInput.files[0]);
-        this.missionCadFileInput.value = '';
-      }
+    // Drawer Minimize Button
+    const btnMinimize = this.rootElement.querySelector('#btn-minimize-drawer');
+    btnMinimize?.addEventListener('click', () => {
+      this.toggleDrawer(false);
     });
 
-    // Mission Preset Dropdown
-    const selectPreset = this.rootElement.querySelector('#select-mission-preset') as HTMLSelectElement | null;
-    const btnApplyPreset = this.rootElement.querySelector('#btn-apply-mission-preset') as HTMLButtonElement | null;
-    const triggerPreset = () => {
-      if (selectPreset && selectPreset.value) {
-        const val = selectPreset.value;
-        const text = selectPreset.options[selectPreset.selectedIndex].text;
-        this.callbacks.onApplyMissionPreset?.(val);
-        this.logConsole(`Loading mission preset: ${text}...`);
-      }
-    };
-    btnApplyPreset?.addEventListener('click', triggerPreset);
-    selectPreset?.addEventListener('change', triggerPreset);
+    // Drawer Resizer Drag Handler
+    const resizer = this.rootElement.querySelector('#hud-panel-resizer') as HTMLElement | null;
+    if (resizer) {
+      let isResizing = false;
+      resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const newWidth = Math.max(320, Math.min(800, e.clientX - 48));
+        this.drawerPanel.style.width = `${newWidth}px`;
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      });
+    }
+
+    // Floating Terminal Window Toggles & Actions
+    const btnToggleFloatingTerm = this.rootElement.querySelector('#btn-toggle-floating-terminal');
+    btnToggleFloatingTerm?.addEventListener('click', () => {
+      this.toggleFloatingTerminal();
+    });
+
+    const btnPopoutFromPreview = this.rootElement.querySelector('#btn-open-terminal-from-preview');
+    btnPopoutFromPreview?.addEventListener('click', () => {
+      this.toggleFloatingTerminal(true);
+    });
+
+    const btnPopoutFromDrawer = this.rootElement.querySelector('#btn-popout-terminal');
+    btnPopoutFromDrawer?.addEventListener('click', () => {
+      this.toggleFloatingTerminal(true);
+    });
+
+    const btnFloatTermClose = this.rootElement.querySelector('#btn-float-term-close');
+    btnFloatTermClose?.addEventListener('click', () => {
+      this.toggleFloatingTerminal(false);
+    });
+
+    const btnFloatTermClear = this.rootElement.querySelector('#btn-float-term-clear');
+    btnFloatTermClear?.addEventListener('click', () => {
+      if (this.floatingTermLog) this.floatingTermLog.innerHTML = '';
+    });
+
+    const btnDrawerTermClear = this.rootElement.querySelector('#btn-drawer-term-clear');
+    btnDrawerTermClear?.addEventListener('click', () => {
+      if (this.drawerTermLog) this.drawerTermLog.innerHTML = '';
+    });
+
+    // Dragging Floating Terminal
+    const floatHeader = this.rootElement.querySelector('#floating-terminal-header') as HTMLElement | null;
+    if (floatHeader && this.floatingTerminal) {
+      let isDragging = false;
+      let startX = 0, startY = 0, initLeft = 0, initTop = 0;
+      floatHeader.addEventListener('mousedown', (e) => {
+        if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = this.floatingTerminal.getBoundingClientRect();
+        initLeft = rect.left;
+        initTop = rect.top;
+        this.floatingTerminal.style.right = 'auto';
+        this.floatingTerminal.style.bottom = 'auto';
+        this.floatingTerminal.style.left = `${initLeft}px`;
+        this.floatingTerminal.style.top = `${initTop}px`;
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        this.floatingTerminal.style.left = `${Math.max(10, initLeft + dx)}px`;
+        this.floatingTerminal.style.top = `${Math.max(50, initTop + dy)}px`;
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+    }
+
+    // Telemetry Panel Toggle
+    const btnToggleTelem = this.rootElement.querySelector('#btn-toggle-telemetry');
+    btnToggleTelem?.addEventListener('click', () => {
+      this.toggleTelemetryPanel();
+    });
 
     // Mode dropdown change
     this.modeSelect.addEventListener('change', () => {
@@ -756,33 +947,6 @@ export class SimulatorHud {
       this.callbacks.onResetMission?.();
       this.logConsole('Mission model reset to starting state.');
     });
-  }
-
-  public logConsole(msg: string): void {
-    const time = new Date().toLocaleTimeString();
-    this.consoleOutput.innerHTML += `<div><span style="color: #64748b;">[${time}]</span> ${msg}</div>`;
-    this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
-  }
-
-  public setExecutionState(state: ExecutionState): void {
-    const dot = this.rootElement.querySelector('#exec-status-dot')!;
-    this.statusBadge.textContent = state;
-
-    dot.className = 'status-dot';
-    if (state === 'RUNNING') {
-      dot.classList.add('status-running');
-      this.runBtn.disabled = true;
-      this.stopBtn.disabled = false;
-      this.matchTimerRunning = true;
-    } else if (state === 'ERROR') {
-      dot.classList.add('status-error');
-      this.runBtn.disabled = false;
-      this.stopBtn.disabled = true;
-    } else {
-      dot.classList.add('status-idle');
-      this.runBtn.disabled = false;
-      this.stopBtn.disabled = true;
-    }
   }
 
   private startMatchTimer(): void {
@@ -874,14 +1038,110 @@ export class SimulatorHud {
     }
   }
 
-  public toggleAssetDrawer(open?: boolean): void {
-    const isVisible = this.assetDrawer.style.display !== 'none';
-    const shouldOpen = open !== undefined ? open : !isVisible;
-    this.assetDrawer.style.display = shouldOpen ? 'flex' : 'none';
-    if (shouldOpen) {
-      this.btnToggleDrawer.classList.add('active');
+  public logConsole(msg: string): void {
+    const time = new Date().toLocaleTimeString();
+    const entryHtml = `<div><span style="color: #64748b;">[${time}]</span> ${msg}</div>`;
+
+    if (this.consoleOutput) {
+      this.consoleOutput.innerHTML += entryHtml;
+      this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
+    }
+    if (this.drawerTermLog) {
+      this.drawerTermLog.innerHTML += entryHtml;
+      this.drawerTermLog.scrollTop = this.drawerTermLog.scrollHeight;
+    }
+    if (this.floatingTermLog) {
+      this.floatingTermLog.innerHTML += entryHtml;
+      this.floatingTermLog.scrollTop = this.floatingTermLog.scrollHeight;
+    }
+  }
+
+  public setExecutionState(state: ExecutionState): void {
+    const dot = this.rootElement.querySelector('#exec-status-dot')!;
+    this.statusBadge.textContent = state;
+
+    dot.className = 'status-dot';
+    const isRunning = state === 'RUNNING';
+    const isError = state === 'ERROR';
+
+    if (isRunning) {
+      dot.classList.add('status-running');
+      this.matchTimerRunning = true;
+    } else if (isError) {
+      dot.classList.add('status-error');
     } else {
-      this.btnToggleDrawer.classList.remove('active');
+      dot.classList.add('status-idle');
+    }
+
+    this.runBtn.disabled = isRunning;
+    this.stopBtn.disabled = !isRunning;
+    if (this.topbarRunBtn) this.topbarRunBtn.disabled = isRunning;
+    if (this.topbarStopBtn) this.topbarStopBtn.disabled = !isRunning;
+  }
+
+  public setActiveDrawerJob(view: 'code' | 'assets' | 'field' | 'terminal'): void {
+    this.activeView = view;
+    this.isDrawerOpen = true;
+    this.drawerPanel.style.display = 'flex';
+
+    // Update activity buttons
+    const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
+    actBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-view') === view);
+    });
+
+    // Update view contents
+    this.viewCode.style.display = view === 'code' ? 'flex' : 'none';
+    this.viewAssets.style.display = view === 'assets' ? 'flex' : 'none';
+    this.viewField.style.display = view === 'field' ? 'flex' : 'none';
+    this.viewTerminal.style.display = view === 'terminal' ? 'flex' : 'none';
+
+    // Update header title & icon
+    const titles: Record<string, { icon: string; title: string }> = {
+      code: { icon: '💻', title: 'Python Code Editor' },
+      assets: { icon: '📦', title: 'Mission Asset Library' },
+      field: { icon: '⚙️', title: 'Field & Simulation Setup' },
+      terminal: { icon: '📟', title: 'Debug Console Output' },
+    };
+    const t = titles[view] || { icon: '⚙️', title: 'Settings' };
+    this.drawerPanelIcon.textContent = t.icon;
+    this.drawerPanelTitle.textContent = t.title;
+  }
+
+  public toggleDrawer(open?: boolean): void {
+    this.isDrawerOpen = open !== undefined ? open : !this.isDrawerOpen;
+    this.drawerPanel.style.display = this.isDrawerOpen ? 'flex' : 'none';
+    const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
+    actBtns.forEach((btn) => {
+      if (!this.isDrawerOpen) {
+        btn.classList.remove('active');
+      } else {
+        btn.classList.toggle('active', btn.getAttribute('data-view') === this.activeView);
+      }
+    });
+  }
+
+  public toggleFloatingTerminal(open?: boolean): void {
+    this.isFloatingTermOpen = open !== undefined ? open : !this.isFloatingTermOpen;
+    this.floatingTerminal.style.display = this.isFloatingTermOpen ? 'flex' : 'none';
+    const btn = this.rootElement.querySelector('#btn-toggle-floating-terminal');
+    btn?.classList.toggle('active', this.isFloatingTermOpen);
+  }
+
+  public toggleTelemetryPanel(open?: boolean): void {
+    this.isTelemetryOpen = open !== undefined ? open : !this.isTelemetryOpen;
+    this.telemetryPanel.style.display = this.isTelemetryOpen ? 'block' : 'none';
+    const btn = this.rootElement.querySelector('#btn-toggle-telemetry');
+    btn?.classList.toggle('active', this.isTelemetryOpen);
+  }
+
+  public toggleAssetDrawer(open?: boolean): void {
+    if (open === false) {
+      if (this.activeView === 'assets' && this.isDrawerOpen) {
+        this.toggleDrawer(false);
+      }
+    } else {
+      this.setActiveDrawerJob('assets');
     }
   }
 

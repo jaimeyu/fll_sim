@@ -54,7 +54,7 @@ body, html {
   flex-direction: column;
 }
 
-.hud-topbar, .hud-sidebar, .hud-telemetry-panel, .hud-sandbox-toolbar, .hud-asset-drawer {
+.hud-topbar, .hud-activity-bar, .hud-drawer-panel, .hud-floating-terminal, .hud-telemetry-panel, .hud-sandbox-toolbar {
   pointer-events: auto;
 }
 
@@ -63,41 +63,43 @@ body, html {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
-  background: rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(10px);
+  padding: 8px 18px;
+  height: 56px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
+  z-index: 30;
 }
 
 .hud-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hud-logo {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .hud-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
 }
 
 .hud-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   background: #0284c7;
   color: #fff;
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 2px 7px;
+  border-radius: 10px;
 }
 
 .hud-top-center {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .hud-timer-card {
@@ -106,19 +108,19 @@ body, html {
   gap: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  padding: 6px 14px;
+  padding: 4px 12px;
   border-radius: 8px;
 }
 
 .timer-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
   font-weight: 600;
 }
 
 .timer-value {
   font-family: monospace;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--accent-yellow);
 }
@@ -141,17 +143,7 @@ body, html {
 .hud-top-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.mode-select-container, .map-select-container {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  padding: 4px 10px;
-  border-radius: 8px;
 }
 
 .hud-label-inline {
@@ -167,11 +159,164 @@ body, html {
   border-radius: 6px;
 }
 
+/* =========================================================================
+   Left Activity Bar (Fixed 48px vertical docking bar)
+   ========================================================================= */
+.hud-activity-bar {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  background: rgba(15, 23, 42, 0.96);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 6px;
+  z-index: 25;
+  pointer-events: auto;
+  backdrop-filter: blur(14px);
+}
+
+.activity-btn {
+  width: 42px;
+  height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  padding: 2px;
+  gap: 2px;
+}
+
+.activity-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.activity-btn.active {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border-left: 3px solid #38bdf8;
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
+
+.act-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.act-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  text-transform: uppercase;
+}
+
+.act-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #0284c7;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 999px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.act-spacer {
+  flex: 1;
+}
+
+/* =========================================================================
+   Left Resizable Multi-Job Drawer Panel
+   ========================================================================= */
+.hud-drawer-panel {
+  position: absolute;
+  top: 56px;
+  left: 48px;
+  bottom: 0;
+  width: 440px;
+  min-width: 320px;
+  max-width: 800px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(14px);
+  border-right: 1px solid var(--border-color);
+  z-index: 20;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 10px 0 25px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(30, 41, 59, 0.7);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.drawer-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-panel-icon {
+  font-size: 16px;
+}
+
+.drawer-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.drawer-view-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 14px;
+  gap: 10px;
+}
+
+.hud-panel-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  bottom: 0;
+  cursor: col-resize;
+  z-index: 30;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.hud-panel-resizer:hover, .hud-panel-resizer:active {
+  background: #38bdf8;
+}
+
 /* Floating Sandbox Toolbar */
 .hud-sandbox-toolbar {
   position: absolute;
   top: 70px;
-  left: 480px;
+  left: 510px;
   right: 20px;
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -181,7 +326,7 @@ body, html {
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 20;
+  z-index: 15;
   pointer-events: auto;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
 }
@@ -197,59 +342,6 @@ body, html {
   color: var(--accent-blue);
   letter-spacing: 0.5px;
   margin-right: 6px;
-}
-
-.mission-status-chip {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #090d16;
-  border: 1px solid var(--border-color);
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.chip-label {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.chip-val {
-  font-family: monospace;
-  font-weight: 700;
-  color: var(--accent-yellow);
-}
-
-.chip-val.solved {
-  color: var(--accent-green);
-  text-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
-}
-
-/* Left Sidebar: Code Editor & Missions */
-.hud-sidebar {
-  position: absolute;
-  top: 70px;
-  left: 20px;
-  bottom: 20px;
-  width: 440px;
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  gap: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-}
-
-.sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .mission-select-container {
@@ -476,12 +568,16 @@ body, html {
   overflow: hidden;
 }
 
-.console-title {
+.console-title,
+.console-title-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
   background: #0f172a;
-  padding: 4px 10px;
+  padding: 4px 8px 4px 10px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -959,5 +1055,165 @@ body, html {
 .season-model-action {
   flex-shrink: 0;
 }
+
+/* =========================================================================
+   Field & Simulation Setup Drawer View
+   ========================================================================= */
+.field-settings-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+  padding-right: 4px;
+}
+
+.settings-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.settings-card:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.settings-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.settings-btn-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* =========================================================================
+   Terminal Drawer View
+   ========================================================================= */
+.terminal-drawer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-color);
+  border-radius: 6px 6px 0 0;
+}
+
+.terminal-status-chip {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-green);
+  letter-spacing: 0.5px;
+}
+
+.terminal-drawer-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-log-area {
+  flex: 1;
+  background: #090d16;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 10px 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #a7f3d0;
+  overflow-y: auto;
+  min-height: 250px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* =========================================================================
+   Floating Debug Terminal Modal Window
+   ========================================================================= */
+.hud-floating-terminal {
+  position: absolute;
+  top: 90px;
+  right: 420px;
+  width: 520px;
+  height: 380px;
+  min-width: 340px;
+  min-height: 200px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  z-index: 35;
+  pointer-events: auto;
+  overflow: hidden;
+  resize: both;
+}
+
+.floating-terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(30, 41, 59, 0.85);
+  border-bottom: 1px solid var(--border-color);
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-terminal-header:active {
+  cursor: grabbing;
+}
+
+.floating-terminal-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floating-terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floating-terminal-body {
+  flex: 1;
+  background: #090d16;
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #a7f3d0;
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 
 
