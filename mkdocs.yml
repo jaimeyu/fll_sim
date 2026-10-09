@@ -1,0 +1,65 @@
+site_name: FLL Robot Simulator
+site_description: Open-Source 3D WebGL Robotics Simulator for FIRST LEGO League
+site_author: Jaime Yu
+repo_name: jaimeyu/fll_sim
+repo_url: https://github.com/jaimeyu/fll_sim
+copyright: Copyright &copy; 2026 Jaime Yu - Licensed under GPL-3.0
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Guides:
+      - Advance Driving Base: guides/advance_driving_base.md
+      - SPIKE Python API: guides/spike_python.md
+      - CAD Import (.io / .ldr): guides/cad_import.md
+  - Development & Multi-Agent: development.md

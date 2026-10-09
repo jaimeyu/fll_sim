@@ -1,6 +1,7 @@
 # Dependencies & Builds
 node_modules/
 dist/
+site/
 build/
 target/
 
