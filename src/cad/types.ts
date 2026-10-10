@@ -11,6 +11,7 @@ export type PartRole =
   | 'CASTER_SKID'         // Passive ball caster or skid
   | 'SENSOR_COLOR'        // Downward facing color sensor
   | 'SENSOR_DISTANCE'     // Ultrasonic sensor
+  | 'CHAIN_LINK'          // Flexible / articulated chain or tread link
   | 'GENERIC_RIGID';
 
 export interface PartDefinition {
@@ -68,7 +69,7 @@ export interface ClusteredCompoundBody {
 export interface ExtractedJoint {
   jointId: string;
   name: string;
-  type: 'REVOLUTE';
+  type: 'REVOLUTE' | 'SPHERICAL';
   parentClusterId: string;
   childClusterId: string;
   anchorParent: [number, number, number];

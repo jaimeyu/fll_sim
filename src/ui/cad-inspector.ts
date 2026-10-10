@@ -4,7 +4,8 @@ import JSZip from 'jszip';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec, PlacedPart } from '../cad/types';
-import { LEGO_COLORS } from '../view/lego-visuals';
+import { LEGO_COLORS, createTechnicBeamGroup } from '../view/lego-visuals';
+import { isChainPart } from '../cad/part-catalog';
 import { legoAssetManager } from '../cad/lego-asset-manager';
 import {
   SEASON_MISSIONS_CONFIG,
@@ -71,7 +72,8 @@ export class CadModelInspector {
   private initialMeshPoses: Map<string, { pos: THREE.Vector3; quat: THREE.Quaternion }> = new Map();
   private selectedClusterId: string | null = null;
 
-  // Virtual Mouse Hand Tool
+  // Virtual Mouse Hand Tool & Technic Bar Probe
+  private toolMode: 'grab' | 'technic_bar' = 'grab';
   private handMesh: THREE.Mesh | null = null;
   private handLine: THREE.Line | null = null;
   private reticleMesh: THREE.Mesh | null = null;
@@ -81,6 +83,14 @@ export class CadModelInspector {
   private dragPlane: THREE.Plane = new THREE.Plane();
   private mouseRay: THREE.Raycaster = new THREE.Raycaster();
   private mouseCoords: THREE.Vector2 = new THREE.Vector2();
+  private handTargetPoint: THREE.Vector3 = new THREE.Vector3();
+
+  // Technic Bar Tool
+  private technicBarMesh: THREE.Group | null = null;
+  private technicBarBody: RAPIER.RigidBody | null = null;
+  private technicBarHeight: number = 0.035; // 35mm above mat
+  private technicBarTarget: THREE.Vector3 = new THREE.Vector3(0, 0.035, 0);
+  private isTechnicBarPushing: boolean = false;
 
   private callbacks: CadInspectorCallbacks;
 
@@ -98,13 +108,20 @@ export class CadModelInspector {
 
   constructor(callbacks: CadInspectorCallbacks = {}) {
     this.callbacks = callbacks;
-    this.overlay = document.createElement('div');
-    this.overlay.className = 'cad-inspector-overlay';
-    this.overlay.style.display = 'none';
-    document.body.appendChild(this.overlay);
+    if (typeof document !== 'undefined') {
+      this.overlay = document.createElement('div');
+      this.overlay.className = 'cad-inspector-overlay';
+      this.overlay.style.display = 'none';
+      document.body.appendChild(this.overlay);
 
-    this.renderDom();
-    this.setupEvents();
+      this.renderDom();
+      this.setupEvents();
+    } else {
+      this.overlay = {
+        querySelector: () => null,
+        querySelectorAll: () => [],
+      } as any;
+    }
   }
 
   private renderDom(): void {
@@ -148,9 +165,15 @@ export class CadModelInspector {
                 <button class="btn btn-xs btn-outline" id="btn-toggle-wireframe">🕸️ Wireframe: OFF</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-colliders">🔲 Colliders: OFF</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-physics" title="Run live Rapier physics in inspector">▶ Live Physics: OFF</button>
-                <button class="btn btn-xs btn-outline btn-hand-active" id="btn-toggle-hand" style="display: none;" title="Use mouse to push, pull, lift and test pieces">✋ Hand Tool: ACTIVE</button>
+                <div class="inspector-tool-mode-group" id="inspector-tool-mode-group" style="display: none; display: inline-flex; gap: 2px;">
+                  <button class="btn btn-xs btn-primary active" id="btn-tool-grab" title="✋ Grab & Drag: Click and pull parts with spring force">✋ Grab</button>
+                  <button class="btn btn-xs btn-outline" id="btn-tool-technic-bar" title="🥢 Technic Bar: LEGO beam probe to physically push and poke mechanisms">🥢 Technic Bar</button>
+                </div>
                 <button class="btn btn-xs btn-outline" id="btn-reset-physics" style="display: none;" title="Reset parts back to initial CAD positions">🔄 Reset Poses</button>
                 <button class="btn btn-xs btn-outline" id="btn-reset-view">🎯 Reset Camera</button>
+              </div>
+              <div class="technic-bar-badge" id="technic-bar-height-badge" style="display: none; position: absolute; bottom: 8px; right: 8px; background: rgba(15,23,42,0.85); border: 1px solid #38bdf8; border-radius: 4px; padding: 3px 8px; font-size: 11px; color: #38bdf8; pointer-events: none; z-index: 10;">
+                🥢 Technic Bar: 35mm (Scroll wheel to adjust height)
               </div>
             </div>
 
@@ -411,6 +434,11 @@ export class CadModelInspector {
     const btnResetPhysics = this.overlay.querySelector('#btn-reset-physics') as HTMLButtonElement;
     btnResetPhysics.addEventListener('click', () => this.resetPhysicsPoses());
 
+    const btnToolGrab = this.overlay.querySelector('#btn-tool-grab') as HTMLButtonElement | null;
+    const btnToolBar = this.overlay.querySelector('#btn-tool-technic-bar') as HTMLButtonElement | null;
+    btnToolGrab?.addEventListener('click', () => this.setToolMode('grab'));
+    btnToolBar?.addEventListener('click', () => this.setToolMode('technic_bar'));
+
     // Mission selector
     const missionSelect = this.overlay.querySelector('#inspector-mission-select') as HTMLSelectElement;
     missionSelect.addEventListener('change', () => {
@@ -494,7 +522,19 @@ export class CadModelInspector {
       if (!this.currentSpec) return;
       const childClusterIds = new Set(this.currentSpec.joints.map((j) => j.childClusterId));
       this.currentSpec.clusters.forEach((c) => {
-        c.isFixed = this.currentSpec!.joints.length === 0 || c.isRootChassis || !childClusterIds.has(c.clusterId);
+        const isChain = c.name.toLowerCase().includes('chain') ||
+          c.parts?.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
+        if (c.isRootChassis) {
+          c.isFixed = true;
+        } else if (isChain) {
+          c.isFixed = false;
+        } else if (childClusterIds.has(c.clusterId)) {
+          c.isFixed = false;
+        } else if (this.currentSpec!.joints.length === 0) {
+          c.isFixed = true;
+        } else {
+          c.isFixed = false;
+        }
       });
       this.saveClusterOverrides();
       this.rebuildPhysicsIfRunning();
@@ -660,6 +700,14 @@ export class CadModelInspector {
     canvas.addEventListener('pointerup', () => this.onPointerUp());
     canvas.addEventListener('pointercancel', () => this.onPointerUp());
     canvas.addEventListener('pointerleave', () => this.onPointerUp());
+    canvas.addEventListener('wheel', (e) => {
+      if (this.toolMode === 'technic_bar' && this.isPhysicsRunning) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.005 : -0.005; // 5mm vertical step
+        this.technicBarHeight = Math.max(0.005, Math.min(0.20, this.technicBarHeight + delta));
+        this.updateTechnicBarBadge();
+      }
+    }, { passive: false });
 
     window.addEventListener('resize', () => this.onResize());
   }
@@ -703,6 +751,11 @@ export class CadModelInspector {
     this.handLine = new THREE.Line(lineGeom, lineMat);
     this.handLine.visible = false;
     this.scene.add(this.handLine);
+
+    // 4. 3D Technic Beam probe
+    this.technicBarMesh = createTechnicBeamGroup(7, LEGO_COLORS.YELLOW);
+    this.technicBarMesh.visible = false;
+    this.scene.add(this.technicBarMesh);
   }
 
   private onPointerMove(e: PointerEvent, canvas: HTMLCanvasElement): void {
@@ -712,39 +765,32 @@ export class CadModelInspector {
 
     if (!this.isPhysicsRunning) return;
 
+    if (this.toolMode === 'technic_bar') {
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const hPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.technicBarHeight);
+      const hitPt = new THREE.Vector3();
+      if (this.mouseRay.ray.intersectPlane(hPlane, hitPt)) {
+        this.technicBarTarget.copy(hitPt);
+        if (this.technicBarMesh) {
+          this.technicBarMesh.position.set(hitPt.x, this.technicBarHeight, hitPt.z);
+          this.technicBarMesh.visible = this.isPhysicsRunning;
+        }
+      }
+      canvas.style.cursor = 'crosshair';
+      if (this.reticleMesh) this.reticleMesh.visible = false;
+      return;
+    }
+
     if (this.isHandDragging && this.draggedBody) {
-      // Dragging a piece with the virtual hand
+      // Dragging a piece with the virtual hand - update target point on drag plane
       this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
       const targetPoint = new THREE.Vector3();
       if (this.mouseRay.ray.intersectPlane(this.dragPlane, targetPoint)) {
+        this.handTargetPoint.copy(targetPoint);
         if (this.handMesh) {
           this.handMesh.position.copy(targetPoint);
           this.handMesh.visible = true;
         }
-
-        const bTrans = this.draggedBody.translation();
-        const bRot = this.draggedBody.rotation();
-        const bQuat = new THREE.Quaternion(bRot.x, bRot.y, bRot.z, bRot.w);
-        const worldAnchor = this.draggedLocalAnchor.clone().applyQuaternion(bQuat).add(new THREE.Vector3(bTrans.x, bTrans.y, bTrans.z));
-
-        if (this.handLine) {
-          this.handLine.geometry.setFromPoints([worldAnchor, targetPoint]);
-          this.handLine.visible = true;
-        }
-
-        // Apply physical tractor spring impulse
-        const diff = targetPoint.clone().sub(worldAnchor);
-        const linvel = this.draggedBody.linvel();
-        const forceX = diff.x * 220 - linvel.x * 12;
-        const forceY = diff.y * 220 - linvel.y * 12;
-        const forceZ = diff.z * 220 - linvel.z * 12;
-
-        this.draggedBody.applyImpulseAtPoint(
-          { x: forceX * 0.016, y: forceY * 0.016, z: forceZ * 0.016 },
-          { x: worldAnchor.x, y: worldAnchor.y, z: worldAnchor.z },
-          true
-        );
-        this.draggedBody.wakeUp();
       }
     } else {
       // Hover targeting
@@ -780,6 +826,12 @@ export class CadModelInspector {
   private onPointerDown(e: PointerEvent, canvas: HTMLCanvasElement): void {
     if (e.button !== 0 || !this.isPhysicsRunning) return;
 
+    if (this.toolMode === 'technic_bar') {
+      this.controls.enabled = false;
+      this.isTechnicBarPushing = true;
+      return;
+    }
+
     const rect = canvas.getBoundingClientRect();
     this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -796,6 +848,7 @@ export class CadModelInspector {
         this.controls.enabled = false;
         this.isHandDragging = true;
         this.draggedBody = body;
+        this.handTargetPoint.copy(hit.point);
 
         const bTrans = body.translation();
         const bRot = body.rotation();
@@ -815,6 +868,11 @@ export class CadModelInspector {
   }
 
   private onPointerUp(): void {
+    if (this.isTechnicBarPushing) {
+      this.isTechnicBarPushing = false;
+      this.controls.enabled = true;
+    }
+
     if (this.isHandDragging) {
       this.isHandDragging = false;
       this.draggedBody = null;
@@ -852,6 +910,55 @@ export class CadModelInspector {
 
       // Step Live Rapier physics and synchronize Three.js visual meshes
       if (this.isPhysicsRunning && this.physicsWorld) {
+        if (this.isHandDragging && this.draggedBody && this.draggedBody.isDynamic()) {
+          const bTrans = this.draggedBody.translation();
+          const bRot = this.draggedBody.rotation();
+          const bQuat = new THREE.Quaternion(bRot.x, bRot.y, bRot.z, bRot.w);
+          const worldAnchor = this.draggedLocalAnchor.clone().applyQuaternion(bQuat).add(new THREE.Vector3(bTrans.x, bTrans.y, bTrans.z));
+
+          if (this.handLine) {
+            this.handLine.geometry.setFromPoints([worldAnchor, this.handTargetPoint]);
+            this.handLine.visible = true;
+          }
+
+          const diff = this.handTargetPoint.clone().sub(worldAnchor);
+          const linvel = this.draggedBody.linvel();
+          const mass = Math.max(0.01, this.draggedBody.mass());
+
+          // Stable, gentle tractor spring tuned for LEGO parts (10g - 200g)
+          // Clamps maximum velocity to 0.75 m/s and limits impulse to prevent wild flying
+          const desiredVelX = Math.max(-0.75, Math.min(0.75, diff.x * 25.0));
+          const desiredVelY = Math.max(-0.75, Math.min(0.75, diff.y * 25.0));
+          const desiredVelZ = Math.max(-0.75, Math.min(0.75, diff.z * 25.0));
+
+          const maxImpulse = mass * 0.25;
+          const impX = Math.max(-maxImpulse, Math.min(maxImpulse, (desiredVelX - linvel.x) * mass * 0.7));
+          const impY = Math.max(-maxImpulse, Math.min(maxImpulse, (desiredVelY - linvel.y) * mass * 0.7));
+          const impZ = Math.max(-maxImpulse, Math.min(maxImpulse, (desiredVelZ - linvel.z) * mass * 0.7));
+
+          this.draggedBody.applyImpulseAtPoint(
+            { x: impX, y: impY, z: impZ },
+            { x: worldAnchor.x, y: worldAnchor.y, z: worldAnchor.z },
+            true
+          );
+          this.draggedBody.wakeUp();
+        }
+
+        if (this.toolMode === 'technic_bar' && this.technicBarBody) {
+          this.technicBarBody.setNextKinematicTranslation({
+            x: this.technicBarTarget.x,
+            y: this.technicBarHeight,
+            z: this.technicBarTarget.z,
+          });
+          if (this.technicBarMesh) {
+            this.technicBarMesh.position.set(
+              this.technicBarTarget.x,
+              this.technicBarHeight,
+              this.technicBarTarget.z
+            );
+          }
+        }
+
         this.physicsWorld.step();
         for (const [clusterId, body] of this.physicsBodies.entries()) {
           const grp = this.clusterMeshGroups.get(clusterId);
@@ -1146,10 +1253,11 @@ export class CadModelInspector {
       btnTogglePhysics.textContent = '⏸ Pause Physics: ON';
     }
 
-    const btnHand = this.overlay.querySelector('#btn-toggle-hand') as HTMLElement | null;
+    const toolGroup = this.overlay.querySelector('#inspector-tool-mode-group') as HTMLElement | null;
     const btnResetPhys = this.overlay.querySelector('#btn-reset-physics') as HTMLElement | null;
-    if (btnHand) btnHand.style.display = 'inline-flex';
+    if (toolGroup) toolGroup.style.display = 'inline-flex';
     if (btnResetPhys) btnResetPhys.style.display = 'inline-flex';
+    this.setToolMode(this.toolMode);
   }
 
   public stopPhysicsSandbox(): void {
@@ -1162,12 +1270,15 @@ export class CadModelInspector {
       btnTogglePhysics.textContent = '▶ Live Physics: OFF';
     }
 
-    const btnHand = this.overlay.querySelector('#btn-toggle-hand') as HTMLElement | null;
+    const toolGroup = this.overlay.querySelector('#inspector-tool-mode-group') as HTMLElement | null;
     const btnResetPhys = this.overlay.querySelector('#btn-reset-physics') as HTMLElement | null;
-    if (btnHand) btnHand.style.display = 'none';
+    const heightBadge = this.overlay.querySelector('#technic-bar-height-badge') as HTMLElement | null;
+    if (toolGroup) toolGroup.style.display = 'none';
     if (btnResetPhys) btnResetPhys.style.display = 'none';
+    if (heightBadge) heightBadge.style.display = 'none';
 
     if (this.reticleMesh) this.reticleMesh.visible = false;
+    if (this.technicBarMesh) this.technicBarMesh.visible = false;
   }
 
   private async buildPhysicsWorld(): Promise<void> {
@@ -1246,18 +1357,33 @@ export class CadModelInspector {
       const parentBody = this.physicsBodies.get(joint.parentClusterId);
       const childBody = this.physicsBodies.get(joint.childClusterId);
       if (parentBody && childBody) {
-        const j = this.physicsWorld.createImpulseJoint(
-          RAPIER.JointData.revolute(
-            { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
-            { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
-            { x: joint.axis[0], y: joint.axis[1], z: joint.axis[2] }
-          ),
-          parentBody,
-          childBody,
-          true
-        );
+        const jointData = joint.type === 'SPHERICAL'
+          ? RAPIER.JointData.spherical(
+              { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
+              { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] }
+            )
+          : RAPIER.JointData.revolute(
+              { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
+              { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
+              { x: joint.axis[0], y: joint.axis[1], z: joint.axis[2] }
+            );
+        const j = this.physicsWorld.createImpulseJoint(jointData, parentBody, childBody, true);
         j.setContactsEnabled(false);
       }
+    }
+
+    // Create Kinematic Technic Bar probe body for mechanical pushing & testing
+    const barDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(this.technicBarTarget.x, this.technicBarHeight, this.technicBarTarget.z);
+    this.technicBarBody = this.physicsWorld.createRigidBody(barDesc);
+    const barCol = RAPIER.ColliderDesc.cuboid(0.028, 0.004, 0.004)
+      .setFriction(0.7)
+      .setRestitution(0.1);
+    barCol.setCollisionGroups((0x0020 << 16) | 0xFFFF);
+    this.physicsWorld.createCollider(barCol, this.technicBarBody);
+
+    if (this.toolMode !== 'technic_bar') {
+      this.technicBarBody.setNextKinematicTranslation({ x: 0, y: -100, z: 0 });
     }
   }
 
@@ -1281,6 +1407,68 @@ export class CadModelInspector {
         grp.position.copy(initPose.pos);
         grp.quaternion.copy(initPose.quat);
       }
+    }
+
+    if (this.toolMode === 'technic_bar') {
+      this.technicBarHeight = 0.035;
+      this.technicBarTarget.set(0, 0.035, 0);
+      if (this.technicBarBody) {
+        this.technicBarBody.setTranslation({ x: 0, y: 0.035, z: 0 }, true);
+      }
+      if (this.technicBarMesh) {
+        this.technicBarMesh.position.set(0, 0.035, 0);
+      }
+      this.updateTechnicBarBadge();
+    }
+  }
+
+  public getToolMode(): 'grab' | 'technic_bar' {
+    return this.toolMode;
+  }
+
+  public setToolMode(mode: 'grab' | 'technic_bar'): void {
+    this.toolMode = mode;
+    const btnToolGrab = this.overlay.querySelector('#btn-tool-grab') as HTMLButtonElement | null;
+    const btnToolBar = this.overlay.querySelector('#btn-tool-technic-bar') as HTMLButtonElement | null;
+    const heightBadge = this.overlay.querySelector('#technic-bar-height-badge') as HTMLElement | null;
+
+    if (mode === 'grab') {
+      btnToolGrab?.classList.add('btn-primary', 'active');
+      btnToolGrab?.classList.remove('btn-outline');
+      btnToolBar?.classList.remove('btn-primary', 'active');
+      btnToolBar?.classList.add('btn-outline');
+
+      if (heightBadge) heightBadge.style.display = 'none';
+      if (this.technicBarMesh) this.technicBarMesh.visible = false;
+      if (this.technicBarBody) {
+        this.technicBarBody.setNextKinematicTranslation({ x: 0, y: -100, z: 0 });
+      }
+    } else {
+      btnToolBar?.classList.add('btn-primary', 'active');
+      btnToolBar?.classList.remove('btn-outline');
+      btnToolGrab?.classList.remove('btn-primary', 'active');
+      btnToolGrab?.classList.add('btn-outline');
+
+      if (heightBadge) {
+        heightBadge.style.display = this.isPhysicsRunning ? 'block' : 'none';
+        heightBadge.textContent = `🥢 Technic Bar: ${(this.technicBarHeight * 1000).toFixed(0)}mm (Scroll wheel to adjust height)`;
+      }
+      if (this.technicBarMesh) this.technicBarMesh.visible = this.isPhysicsRunning;
+      if (this.reticleMesh) this.reticleMesh.visible = false;
+      if (this.technicBarBody) {
+        this.technicBarBody.setNextKinematicTranslation({
+          x: this.technicBarTarget.x,
+          y: this.technicBarHeight,
+          z: this.technicBarTarget.z,
+        });
+      }
+    }
+  }
+
+  private updateTechnicBarBadge(): void {
+    const badge = this.overlay.querySelector('#technic-bar-height-badge') as HTMLElement | null;
+    if (badge) {
+      badge.textContent = `🥢 Technic Bar: ${(this.technicBarHeight * 1000).toFixed(0)}mm (Scroll wheel to adjust height)`;
     }
   }
 

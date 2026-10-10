@@ -5,6 +5,7 @@ import { RobotAssemblySpec } from '../cad/types';
 import { LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
 import { legoAssetManager } from '../cad/lego-asset-manager';
 import { DualLockMarker } from './dual-lock-marker';
+import { consolidateGroupMeshes } from '../cad/mesh-consolidator';
 
 export interface CustomElementOptions {
   id: string;
@@ -42,6 +43,8 @@ export class CustomImportedMissionElement implements MissionElement {
   private groundCorrectionY: number = 0;
   private dualLockMarker: DualLockMarker | null = null;
   private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
+  private dualLockJoint: RAPIER.ImpulseJoint | null = null;
+  private dualLockAnchorBody: RAPIER.RigidBody | null = null;
 
   // Physics Bodies
   private bodies: Map<string, RAPIER.RigidBody> = new Map();
@@ -97,7 +100,7 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   /**
-   * Sets Dual-Lock fastening status (true = fixed, false = dynamic)
+   * Sets Dual-Lock fastening status (base fixed to field, mechanisms stay dynamic)
    */
   public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }): void {
     this.isDualLocked = locked;
@@ -110,13 +113,38 @@ export class CustomImportedMissionElement implements MissionElement {
       };
     }
 
-    // Immediately update Rapier bodies without rebuilding
+    // Clean up any existing physical Dual Lock joint
+    if (this.dualLockJoint && this.world) {
+      try {
+        this.world.removeImpulseJoint(this.dualLockJoint, true);
+      } catch {
+        // ignore
+      }
+      this.dualLockJoint = null;
+    }
+    if (this.dualLockAnchorBody && this.world) {
+      try {
+        this.world.removeRigidBody(this.dualLockAnchorBody);
+      } catch {
+        // ignore
+      }
+      this.dualLockAnchorBody = null;
+    }
+
+    // Determine the base cluster ID (root frame where Dual Lock is attached to the field)
+    const baseClusterId = this.spec.clusters.find((c) => c.isRootChassis)?.clusterId || this.spec.clusters[0]?.clusterId || 'base';
+
+    // Update Rapier bodies:
+    // Only the base cluster where Dual Lock is applied is fixed to the field mat.
+    // All mechanism clusters, levers, dials, and dynamic parts REMAIN DYNAMIC!
     for (const [cid, body] of this.bodies.entries()) {
+      const isBase = cid === baseClusterId || cid === 'base' || cid === 'chassis_root';
       const cluster = this.spec.clusters.find((c) => c.clusterId === cid);
-      const isFixedCluster = cluster?.isFixed !== undefined
-        ? cluster.isFixed
-        : (cluster?.isRootChassis && this.isBaseFixed);
-      const shouldBeFixed = locked && (this.isSolidRigidMode || isFixedCluster || this.spec.clusters.length === 1);
+
+      // Only base is fixed when locked; mechanisms and dynamic clusters stay dynamic!
+      const shouldBeFixed = this.isSolidRigidMode || 
+        (locked && isBase && (cluster?.isFixed !== false));
+
       body.setBodyType(
         shouldBeFixed ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
         true
@@ -288,24 +316,44 @@ export class CustomImportedMissionElement implements MissionElement {
           partMesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
           partMesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
           clusterGroup.add(partMesh);
+        }
 
-          // Asynchronously upgrade to Draco GLB mesh when ready
-          if (legoAssetManager.getRenderMode() === 'draco_glb') {
-            legoAssetManager.loadPartMesh(part.partNumber, partColor, part.role).then((loadedMesh) => {
-              if (loadedMesh !== partMesh) {
-                loadedMesh.position.copy(partMesh.position);
-                loadedMesh.quaternion.copy(partMesh.quaternion);
-                clusterGroup.remove(partMesh);
-                clusterGroup.add(loadedMesh);
-                const idx = this.interactiveMeshes.indexOf(partMesh);
-                if (idx !== -1) this.interactiveMeshes[idx] = loadedMesh;
+        // Consolidate cluster geometries to reduce draw calls from thousands down to 1-3
+        if (cluster.parts!.length > 2) {
+          consolidateGroupMeshes(clusterGroup, { clusterId: cluster.clusterId });
+        }
+
+        if (!isFixedCluster) {
+          for (const child of clusterGroup.children) {
+            this.interactiveMeshes.push(child);
+          }
+        }
+
+        // Asynchronously upgrade to Draco GLB mesh when ready
+        if (legoAssetManager.getRenderMode() === 'draco_glb') {
+          Promise.all(
+            cluster.parts!.map(async (part) => {
+              const partColor = part.colorHex ?? clusterColor;
+              const loadedMesh = await legoAssetManager.loadPartMesh(part.partNumber, partColor, part.role);
+              loadedMesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
+              loadedMesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
+              return loadedMesh;
+            })
+          ).then((upgradedMeshes) => {
+            clusterGroup.clear();
+            for (const m of upgradedMeshes) {
+              clusterGroup.add(m);
+            }
+            if (cluster.parts!.length > 2) {
+              consolidateGroupMeshes(clusterGroup, { clusterId: cluster.clusterId });
+            }
+            if (!isFixedCluster) {
+              this.interactiveMeshes = this.interactiveMeshes.filter((m) => !clusterGroup.children.includes(m));
+              for (const child of clusterGroup.children) {
+                this.interactiveMeshes.push(child);
               }
-            });
-          }
-
-          if (!isFixedCluster) {
-            this.interactiveMeshes.push(partMesh);
-          }
+            }
+          });
         }
       } else {
         // Fallback: render collider bounding box if parts list is empty
@@ -333,16 +381,17 @@ export class CustomImportedMissionElement implements MissionElement {
       const parentBody = this.bodies.get(jointSpec.parentClusterId);
       const childBody = this.bodies.get(jointSpec.childClusterId);
       if (parentBody && childBody) {
-        const rapierJoint = this.world.createImpulseJoint(
-          RAPIER.JointData.revolute(
-            { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
-            { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
-            { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
-          ),
-          parentBody,
-          childBody,
-          true
-        );
+        const jointData = jointSpec.type === 'SPHERICAL'
+          ? RAPIER.JointData.spherical(
+              { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
+              { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] }
+            )
+          : RAPIER.JointData.revolute(
+              { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
+              { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
+              { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
+            );
+        const rapierJoint = this.world.createImpulseJoint(jointData, parentBody, childBody, true);
         rapierJoint.setContactsEnabled(false);
         this.joints.push(rapierJoint);
       }
@@ -470,6 +519,23 @@ export class CustomImportedMissionElement implements MissionElement {
     if (this.dualLockMarker) {
       this.rootGroup.remove(this.dualLockMarker.group);
       this.dualLockMarker = null;
+    }
+
+    if (this.dualLockJoint && this.world) {
+      try {
+        this.world.removeImpulseJoint(this.dualLockJoint, true);
+      } catch {
+        // ignore
+      }
+      this.dualLockJoint = null;
+    }
+    if (this.dualLockAnchorBody && this.world) {
+      try {
+        this.world.removeRigidBody(this.dualLockAnchorBody);
+      } catch {
+        // ignore
+      }
+      this.dualLockAnchorBody = null;
     }
 
     for (const joint of this.joints) {

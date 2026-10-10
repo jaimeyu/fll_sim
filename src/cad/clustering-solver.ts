@@ -5,7 +5,7 @@ import {
   ExtractedJoint,
   RobotAssemblySpec,
 } from './types';
-import { TECHNIC_PART_CATALOG } from './part-catalog';
+import { TECHNIC_PART_CATALOG, isChainPart } from './part-catalog';
 
 export interface PreSolverInput {
   name: string;
@@ -109,8 +109,14 @@ export class CadClusteringPreSolver {
       }
 
       const isRoot = clusterId === 'chassis_root';
+      const isChain = componentPartIds.some((id) => {
+        const p = partMap.get(id);
+        return p && (p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
+      });
       const clusterName = isRoot
         ? 'Chassis Main Assembly'
+        : isChain
+        ? 'Dynamic Chain Link'
         : componentPartIds.some((id) => partMap.get(id)?.role === 'WHEEL_RIM')
         ? 'Drive Wheel'
         : componentPartIds.some((id) => partMap.get(id)?.role === 'CASTER_SKID')
@@ -263,14 +269,18 @@ export class CadClusteringPreSolver {
       });
     }
 
-    // Ensure root chassis exists (pick the largest rigid assembly as root chassis/base)
+    // Ensure root chassis exists (pick the largest non-chain rigid assembly as root chassis/base)
     if (!clusters.some((c) => c.isRootChassis)) {
       if (clusters.length > 0) {
-        clusters.sort((a, b) => b.partIds.length - a.partIds.length);
-        const oldId = clusters[0].clusterId;
-        clusters[0].isRootChassis = true;
-        clusters[0].isFixed = true;
-        clusters[0].clusterId = 'chassis_root';
+        const nonChainClusters = clusters.filter(
+          (c) => !c.parts?.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel))
+        );
+        const targetList = nonChainClusters.length > 0 ? nonChainClusters : clusters;
+        targetList.sort((a, b) => b.partIds.length - a.partIds.length);
+        const oldId = targetList[0].clusterId;
+        targetList[0].isRootChassis = true;
+        targetList[0].isFixed = true;
+        targetList[0].clusterId = 'chassis_root';
         for (const [partId, cid] of partToClusterId.entries()) {
           if (cid === oldId) {
             partToClusterId.set(partId, 'chassis_root');
@@ -279,7 +289,7 @@ export class CadClusteringPreSolver {
       }
     }
 
-    // Extract 1-DOF joints from active links
+    // Extract 1-DOF and spherical joints from active links
     const joints: ExtractedJoint[] = [];
     let jointIndex = 0;
     for (const link of activeLinks) {
@@ -291,11 +301,12 @@ export class CadClusteringPreSolver {
       const fromPart = partMap.get(link.fromPartId);
       const toPart = partMap.get(link.toPartId);
       const isMotorPort = (fromPart?.meta?.port || toPart?.meta?.port) as any;
+      const isFlexible = link.connectionType === 'FREE_ROTATION';
 
       joints.push({
         jointId: `joint_${jointIndex++}`,
-        name: `Revolute Joint ${link.jointAxis ? 'Wheel' : 'Arm'}`,
-        type: 'REVOLUTE',
+        name: isFlexible ? 'Flexible Chain Joint' : `Revolute Joint ${link.jointAxis ? 'Wheel' : 'Arm'}`,
+        type: isFlexible ? 'SPHERICAL' : 'REVOLUTE',
         parentClusterId: parentCluster,
         childClusterId: childCluster,
         anchorParent: (link.anchor || [0, 0, 0]) as [number, number, number],
@@ -307,20 +318,32 @@ export class CadClusteringPreSolver {
       });
     }
 
-    // If there are no joints defined, or for any cluster not actively articulated by a joint,
-    // mark as fixed so stationary mission assemblies remain completely intact on the field
-    if (joints.length === 0) {
-      for (const cluster of clusters) {
+    // Determine cluster fixed state:
+    // - Root chassis is fixed to field mat by default (base dual lock anchor).
+    // - Articulated mechanisms (child of joints) are DYNAMIC.
+    // - Chain links and flexible linkages are ALWAYS DYNAMIC.
+    // - Free-standing game pieces / payload objects remain dynamic.
+    const childClusterIds = new Set(joints.map((j) => j.childClusterId));
+    for (const cluster of clusters) {
+      const isChain =
+        cluster.name.toLowerCase().includes('chain') ||
+        cluster.parts?.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
+
+      if (cluster.isRootChassis) {
         cluster.isFixed = true;
-      }
-    } else {
-      const childClusterIds = new Set(joints.map((j) => j.childClusterId));
-      for (const cluster of clusters) {
-        if (!childClusterIds.has(cluster.clusterId)) {
-          cluster.isFixed = true;
-        } else {
-          cluster.isFixed = false;
+      } else if (isChain) {
+        cluster.isFixed = false;
+        if (!cluster.name.toLowerCase().includes('chain')) {
+          cluster.name = 'Dynamic Chain Link';
         }
+      } else if (childClusterIds.has(cluster.clusterId)) {
+        cluster.isFixed = false;
+      } else if (joints.length === 0) {
+        // Stationary base assemblies without any joints stay intact
+        cluster.isFixed = true;
+      } else {
+        // Disconnected subassemblies / payloads in articulated assemblies stay dynamic
+        cluster.isFixed = false;
       }
     }
 

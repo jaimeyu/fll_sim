@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Authentic LEGO Dimensions & Constants (in meters)
@@ -65,49 +66,66 @@ export function createTechnicBeamGroup(
 
   const spanLength = (lengthHoles - 1) * pitch;
 
-  // 1. Center rectangular bar
+  // 1. Center rectangular bar & rounded ends (merged into 1 mesh)
+  const beamGeoms: THREE.BufferGeometry[] = [];
   if (spanLength > 0.0001) {
-    const centerGeom = new THREE.BoxGeometry(spanLength, beamThick, beamWidth);
-    const centerMesh = new THREE.Mesh(centerGeom, beamMat);
-    centerMesh.castShadow = true;
-    centerMesh.receiveShadow = true;
-    group.add(centerMesh);
+    beamGeoms.push(new THREE.BoxGeometry(spanLength, beamThick, beamWidth));
   }
+  const endCapLeft = new THREE.CylinderGeometry(beamWidth / 2, beamWidth / 2, beamThick, 16);
+  endCapLeft.rotateX(Math.PI / 2);
+  endCapLeft.translate(-spanLength / 2, 0, 0);
+  beamGeoms.push(endCapLeft);
 
-  // 2. Rounded semicircular ends
-  const endCapGeom = new THREE.CylinderGeometry(beamWidth / 2, beamWidth / 2, beamThick, 16);
-  endCapGeom.rotateX(Math.PI / 2);
+  const endCapRight = new THREE.CylinderGeometry(beamWidth / 2, beamWidth / 2, beamThick, 16);
+  endCapRight.rotateX(Math.PI / 2);
+  endCapRight.translate(spanLength / 2, 0, 0);
+  beamGeoms.push(endCapRight);
 
-  const endLeft = new THREE.Mesh(endCapGeom, beamMat);
-  endLeft.position.set(-spanLength / 2, 0, 0);
-  endLeft.castShadow = true;
-  group.add(endLeft);
+  const mergedBeamGeom = BufferGeometryUtils.mergeGeometries(beamGeoms, false);
+  if (mergedBeamGeom) {
+    const beamMesh = new THREE.Mesh(mergedBeamGeom, beamMat);
+    beamMesh.castShadow = true;
+    beamMesh.receiveShadow = true;
+    group.add(beamMesh);
+  }
+  for (const g of beamGeoms) g.dispose();
 
-  const endRight = new THREE.Mesh(endCapGeom, beamMat);
-  endRight.position.set(spanLength / 2, 0, 0);
-  endRight.castShadow = true;
-  group.add(endRight);
-
-  // 3. Technic cylindrical through-holes along beam
-  const holeGeom = new THREE.CylinderGeometry(holeRadius, holeRadius, beamThick + 0.0004, 12);
-  const pinHeadGeom = new THREE.CylinderGeometry(holeRadius * 1.25, holeRadius * 1.25, beamThick * 1.3, 12);
+  // 2. Technic holes & pins (merged per material)
+  const holeGeoms: THREE.BufferGeometry[] = [];
+  const pinGeoms: THREE.BufferGeometry[] = [];
 
   for (let i = 0; i < lengthHoles; i++) {
     const holeX = -spanLength / 2 + i * pitch;
     const isPin = options.withPinsAt?.includes(i);
 
     if (isPin) {
-      // Realistic Technic friction pin inserted into hole
-      const pinMesh = new THREE.Mesh(pinHeadGeom, pinMat);
-      pinMesh.position.set(holeX, 0, 0);
+      const pinGeom = new THREE.CylinderGeometry(holeRadius * 1.25, holeRadius * 1.25, beamThick * 1.3, 12);
+      pinGeom.translate(holeX, 0, 0);
+      pinGeoms.push(pinGeom);
+    } else {
+      const hGeom = new THREE.CylinderGeometry(holeRadius, holeRadius, beamThick + 0.0004, 12);
+      hGeom.translate(holeX, 0, 0);
+      holeGeoms.push(hGeom);
+    }
+  }
+
+  if (pinGeoms.length > 0) {
+    const mergedPins = BufferGeometryUtils.mergeGeometries(pinGeoms, false);
+    if (mergedPins) {
+      const pinMesh = new THREE.Mesh(mergedPins, pinMat);
       pinMesh.castShadow = true;
       group.add(pinMesh);
-    } else {
-      // Contrasting inner hole cylinder showing through-hole
-      const holeMesh = new THREE.Mesh(holeGeom, holeMat);
-      holeMesh.position.set(holeX, 0, 0);
+    }
+    for (const g of pinGeoms) g.dispose();
+  }
+
+  if (holeGeoms.length > 0) {
+    const mergedHoles = BufferGeometryUtils.mergeGeometries(holeGeoms, false);
+    if (mergedHoles) {
+      const holeMesh = new THREE.Mesh(mergedHoles, holeMat);
       group.add(holeMesh);
     }
+    for (const g of holeGeoms) g.dispose();
   }
 
   return group;
@@ -180,49 +198,53 @@ export function createTechnicGearGroup(
   const gearMat = getLegoMaterial(color, 0.35);
   const holeMat = getLegoMaterial(LEGO_COLORS.BLACK, 0.7);
 
-  // 1. Gear main disc
+  // 1. Gear disc & perimeter teeth (merged into 1 mesh)
+  const gearGeoms: THREE.BufferGeometry[] = [];
   const discGeom = new THREE.CylinderGeometry(radius * 0.88, radius * 0.88, thickness, 32);
-  const discMesh = new THREE.Mesh(discGeom, gearMat);
-  discMesh.castShadow = true;
-  group.add(discMesh);
+  gearGeoms.push(discGeom);
 
-  // 2. Individual teeth around perimeter
   const toothW = (2 * Math.PI * radius) / (teeth * 2.2);
   const toothH = radius * 0.18;
-  const toothGeom = new THREE.BoxGeometry(toothW, thickness * 0.95, toothH);
 
   for (let i = 0; i < teeth; i++) {
     const angle = (i * 2 * Math.PI) / teeth;
-    const toothMesh = new THREE.Mesh(toothGeom, gearMat);
-    toothMesh.position.set(
-      Math.sin(angle) * (radius * 0.94),
-      0,
-      Math.cos(angle) * (radius * 0.94)
-    );
-    toothMesh.rotation.y = angle;
-    toothMesh.castShadow = true;
-    group.add(toothMesh);
+    const toothGeom = new THREE.BoxGeometry(toothW, thickness * 0.95, toothH);
+    toothGeom.rotateY(angle);
+    toothGeom.translate(Math.sin(angle) * (radius * 0.94), 0, Math.cos(angle) * (radius * 0.94));
+    gearGeoms.push(toothGeom);
   }
 
-  // 3. Central Technic cross-axle hole (+)
+  const mergedGearGeom = BufferGeometryUtils.mergeGeometries(gearGeoms, false);
+  if (mergedGearGeom) {
+    const gearMesh = new THREE.Mesh(mergedGearGeom, gearMat);
+    gearMesh.castShadow = true;
+    gearMesh.receiveShadow = true;
+    group.add(gearMesh);
+  }
+  for (const g of gearGeoms) g.dispose();
+
+  // 2. Cross axle hole and lightening hub holes (merged into 1 hole mesh)
+  const holeGeoms: THREE.BufferGeometry[] = [];
   const crossGeom1 = new THREE.BoxGeometry(0.0048, thickness + 0.0006, 0.0016);
   const crossGeom2 = new THREE.BoxGeometry(0.0016, thickness + 0.0006, 0.0048);
-  const crossMesh1 = new THREE.Mesh(crossGeom1, holeMat);
-  const crossMesh2 = new THREE.Mesh(crossGeom2, holeMat);
-  group.add(crossMesh1);
-  group.add(crossMesh2);
+  holeGeoms.push(crossGeom1, crossGeom2);
 
-  // 4. Weight-reduction lightening holes around hub (Technic 24T gear style)
   const holeRadius = 0.0024;
-  const hubHoleGeom = new THREE.CylinderGeometry(holeRadius, holeRadius, thickness + 0.0004, 12);
   const numHubHoles = teeth >= 20 ? 4 : 3;
   for (let h = 0; h < numHubHoles; h++) {
     const ang = (h * 2 * Math.PI) / numHubHoles + Math.PI / numHubHoles;
     const dist = radius * 0.52;
-    const hMesh = new THREE.Mesh(hubHoleGeom, holeMat);
-    hMesh.position.set(Math.sin(ang) * dist, 0, Math.cos(ang) * dist);
-    group.add(hMesh);
+    const hubHoleGeom = new THREE.CylinderGeometry(holeRadius, holeRadius, thickness + 0.0004, 12);
+    hubHoleGeom.translate(Math.sin(ang) * dist, 0, Math.cos(ang) * dist);
+    holeGeoms.push(hubHoleGeom);
   }
+
+  const mergedHoles = BufferGeometryUtils.mergeGeometries(holeGeoms, false);
+  if (mergedHoles) {
+    const holesMesh = new THREE.Mesh(mergedHoles, holeMat);
+    group.add(holesMesh);
+  }
+  for (const g of holeGeoms) g.dispose();
 
   return group;
 }

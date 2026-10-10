@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { PlacedPart, ConnectionLink, RobotAssemblySpec, PartBomEntry } from './types';
-import { lookupPartRole } from './part-catalog';
+import { lookupPartRole, isChainPart } from './part-catalog';
 import { CadClusteringPreSolver } from './clustering-solver';
 import { LDRAW_COLOR_MAP, isKnownLegoPart } from '../view/lego-visuals';
 
@@ -217,7 +217,7 @@ export class LDrawImporter {
     expandSubmodel(primaryEntryName, 'root_inst0', identityMat, [0, 0, 0], 16, 0, new Set([primaryEntryName]));
 
     // 3. Connect parts:
-    // A. Parts belonging to the same Studio SubModel instance are rigidly linked (subassemblies stay together)
+    // A. Parts belonging to the same Studio SubModel instance are linked
     const byInstance = new Map<string, string[]>();
     for (const p of parts) {
       const inst = p.submodelInstance || p.submodel || 'main';
@@ -225,28 +225,75 @@ export class LDrawImporter {
       byInstance.get(inst)!.push(p.id);
     }
     for (const partIds of byInstance.values()) {
-      for (let k = 0; k < partIds.length - 1; k++) {
-        links.push({
-          fromPartId: partIds[k],
-          toPartId: partIds[k + 1],
-          connectionType: 'RIGID_PIN',
-        });
+      const pFirst = parts.find((p) => p.id === partIds[0]);
+      const isChainSub = pFirst && (pFirst.role === 'CHAIN_LINK' || isChainPart(pFirst.partNumber, pFirst.submodel));
+
+      if (isChainSub && partIds.length > 2) {
+        // Articulate chain into dynamic segments (3-5 links per segment)
+        // so chains droop, flex, and swing realistically in physics!
+        const linksPerSegment = Math.max(3, Math.ceil(partIds.length / 5));
+        for (let k = 0; k < partIds.length - 1; k++) {
+          const isSegmentBoundary = (k + 1) % linksPerSegment === 0;
+          if (isSegmentBoundary) {
+            const pk = parts.find((p) => p.id === partIds[k])!;
+            links.push({
+              fromPartId: partIds[k],
+              toPartId: partIds[k + 1],
+              connectionType: 'FREE_ROTATION',
+              anchor: [pk.position[0] / 1000, pk.position[1] / 1000, pk.position[2] / 1000],
+            });
+          } else {
+            links.push({
+              fromPartId: partIds[k],
+              toPartId: partIds[k + 1],
+              connectionType: 'RIGID_PIN',
+            });
+          }
+        }
+      } else {
+        // Standard rigid subassembly
+        for (let k = 0; k < partIds.length - 1; k++) {
+          links.push({
+            fromPartId: partIds[k],
+            toPartId: partIds[k + 1],
+            connectionType: 'RIGID_PIN',
+          });
+        }
       }
     }
 
-    // B. Selective connections across distinct submodels (fasteners and revolute joints)
+    // B. Selective connections across distinct submodels (fasteners, chains, and revolute joints)
+    const chainAnchorCandidates = new Map<string, { chainPart: PlacedPart; otherPart: PlacedPart; dist: number }>();
+
     for (let i = 0; i < parts.length; i++) {
       for (let j = i + 1; j < parts.length; j++) {
         const p1 = parts[i];
         const p2 = parts[j];
         if (p1.submodelInstance && p2.submodelInstance && p1.submodelInstance === p2.submodelInstance) {
-          continue; // Already rigidly linked in Section A
+          continue; // Already handled in Section A
         }
 
         const dx = p1.position[0] - p2.position[0];
         const dy = p1.position[1] - p2.position[1];
         const dz = p1.position[2] - p2.position[2];
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        const p1IsChain = p1.role === 'CHAIN_LINK' || isChainPart(p1.partNumber, p1.submodel);
+        const p2IsChain = p2.role === 'CHAIN_LINK' || isChainPart(p2.partNumber, p2.submodel);
+
+        // Chain connection to frame or payload: find closest anchor attachment
+        if (p1IsChain || p2IsChain) {
+          if (dist <= 36.0) {
+            const chainPart = p1IsChain ? p1 : p2;
+            const otherPart = p1IsChain ? p2 : p1;
+            const key = `${chainPart.submodelInstance || chainPart.submodel}__${otherPart.submodelInstance || otherPart.submodel}`;
+            const existing = chainAnchorCandidates.get(key);
+            if (!existing || dist < existing.dist) {
+              chainAnchorCandidates.set(key, { chainPart, otherPart, dist });
+            }
+          }
+          continue;
+        }
 
         if (dist <= 32.0 && (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM')) {
           const rimPart = p1.role === 'WHEEL_RIM' ? p1 : p2;
@@ -259,7 +306,7 @@ export class LDrawImporter {
             anchor: [rimPart.position[0] / 1000, rimPart.position[1] / 1000, rimPart.position[2] / 1000],
           });
         } else {
-          // Link distinct submodels if physically fastened with a pin/axle or in direct contact (<16mm)
+          // Link distinct submodels if physically fastened with a pin/axle or directly abutting brick walls (<16mm)
           const isFastener =
             p1.role === 'FASTENER_PIN' ||
             p2.role === 'FASTENER_PIN' ||
@@ -274,6 +321,16 @@ export class LDrawImporter {
           }
         }
       }
+    }
+
+    // Add unique chain anchor joints
+    for (const cand of chainAnchorCandidates.values()) {
+      links.push({
+        fromPartId: cand.otherPart.id,
+        toPartId: cand.chainPart.id,
+        connectionType: 'FREE_ROTATION',
+        anchor: [cand.chainPart.position[0] / 1000, cand.chainPart.position[1] / 1000, cand.chainPart.position[2] / 1000],
+      });
     }
 
     return {
