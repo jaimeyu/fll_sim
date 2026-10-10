@@ -214,6 +214,7 @@ export class RobotPhysicsBody {
    * immediate standstill without coasting or micro-creeping across the mat.
    */
   public brakeChassisAndWheels(): void {
+    this.straightTargetYaw = null;
     for (const wb of this.wheelBodies.values()) {
       wb.setAngularDamping(50.0);
       wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -236,10 +237,13 @@ export class RobotPhysicsBody {
     }
   }
 
+  public straightTargetYaw: number | null = null;
+
   /**
    * Applies motor target speeds using direct speed-governed physical torque each physics tick.
    * This accurately reflects real-world LEGO SPIKE large motors (0.25-0.45 Nm torque) without
    * triggering Rapier constraint-solver fighting on high-friction mats.
+   * Includes active straight-line gyro assist to prevent veering/turning when driving straight.
    */
   public updateMotors(dt: number): void {
     const rot = this.chassisBody.rotation();
@@ -251,10 +255,47 @@ export class RobotPhysicsBody {
     const nonRootClusters = this.spec.clusters.filter((c) => !c.isRootChassis);
     let anyDriveActive = false;
 
+    // Detect straight-line driving between Drive Motors A & B
+    const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
+    const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
+    const isDrivingStraight =
+      Math.abs(spdA) > 0.1 && Math.abs(spdB) > 0.1 && Math.abs(spdA - spdB) < 1.0;
+
+    let yawError = 0;
+    if (isDrivingStraight) {
+      const curYaw = this.getYawDegrees();
+      if (this.straightTargetYaw === null) {
+        this.straightTargetYaw = curYaw;
+      }
+      yawError = curYaw - this.straightTargetYaw;
+      while (yawError > 180) yawError -= 360;
+      while (yawError < -180) yawError += 360;
+
+      // Active Gyro Drive Assist (SPIKE Prime IMU straight-line heading lock)
+      // Restoring counter-yaw torque prevents mat contact drag or caster friction from veering
+      const Kyaw = 0.008;
+      const yawRestoringTorque = Math.max(-0.05, Math.min(0.05, -yawError * Kyaw));
+      this.chassisBody.addTorque({ x: 0, y: yawRestoringTorque, z: 0 }, true);
+    } else {
+      this.straightTargetYaw = null;
+    }
+
     for (const [port, motor] of this.motors.entries()) {
       const targetDegPerSec = motor.step(dt);
       const isIdle = Math.abs(targetDegPerSec) < 0.1;
-      const targetRadPerSec = (targetDegPerSec * Math.PI) / 180;
+      let targetRadPerSec = (targetDegPerSec * Math.PI) / 180;
+
+      // Differential wheel speed trim to keep wheels in lockstep
+      if (isDrivingStraight && !isIdle && (port === 'A' || port === 'B')) {
+        const trimGain = 0.05;
+        const trim = Math.max(-1.5, Math.min(1.5, yawError * trimGain));
+        const sign = targetDegPerSec > 0 ? 1 : -1;
+        if (port === 'A') {
+          targetRadPerSec -= trim * sign;
+        } else if (port === 'B') {
+          targetRadPerSec += trim * sign;
+        }
+      }
 
       for (const cluster of nonRootClusters) {
         if (cluster.name === 'Drive Wheel') {
@@ -343,6 +384,7 @@ export class RobotPhysicsBody {
   }
 
   public reset(pose: SpawnPose): void {
+    this.straightTargetYaw = null;
     const yawRad = (pose.yawDegrees * Math.PI) / 180;
     const halfYaw = yawRad / 2;
     const qy = Math.sin(halfYaw);

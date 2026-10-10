@@ -214,4 +214,45 @@ while True:
       expect(engine.robot.motors.get(port)?.velocityDegPerSec).toBe(0);
     }
   });
+
+  it('drives dead-straight without turning or veering when commanded with equal motor speeds', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    // Reset robot to a clean pose
+    engine.resetRobot({ x: -0.8, y: 0.035, z: 0.0, yawDegrees: 90 });
+    for (let i = 0; i < 30; i++) engine.update(1 / 60);
+
+    const initialYaw = engine.robot.getYawDegrees();
+    const initialPos = engine.robot.getPosition();
+
+    // Command straight drive (WASD W forward at 60%)
+    engine.robot.setDriveSpeeds(60, 60);
+
+    // Step physics for 2 full seconds (120 steps)
+    for (let i = 0; i < 120; i++) {
+      engine.update(1 / 60);
+    }
+
+    const finalYaw = engine.robot.getYawDegrees();
+    const finalPos = engine.robot.getPosition();
+
+    // Yaw drift should be virtually zero (less than 0.5 degrees over 2 seconds of driving)
+    const yawDrift = Math.abs(finalYaw - initialYaw);
+    expect(yawDrift).toBeLessThan(0.5);
+
+    // Distance traveled along driving axis (+X) should be substantial (> 0.4m)
+    const distanceMovedX = finalPos.x - initialPos.x;
+    expect(distanceMovedX).toBeGreaterThan(0.4);
+
+    // Lateral drift along perpendicular axis (Z) must be minimal (< 2cm)
+    const lateralDriftZ = Math.abs(finalPos.z - initialPos.z);
+    expect(lateralDriftZ).toBeLessThan(0.02);
+
+    // Both drive wheel encoders must be in near-perfect lockstep (under 1.0 deg difference)
+    const encA = engine.robot.motors.get('A')?.degrees ?? 0;
+    const encB = engine.robot.motors.get('B')?.degrees ?? 0;
+    expect(Math.abs(encA - encB)).toBeLessThan(1.0);
+  });
 });
+

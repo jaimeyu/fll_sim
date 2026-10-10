@@ -206,7 +206,12 @@ export class VirtualSpikeApi {
           let rightDone = false;
 
           const checkDone = () => {
-            if (leftDone && rightDone) resolve();
+            if (leftDone && rightDone) {
+              if (steering === 0) {
+                self.engine.robot.brakeChassisAndWheels();
+              }
+              resolve();
+            }
           };
 
           motorL?.runForDegrees(targetDeg, leftSpeed, () => {
@@ -245,7 +250,12 @@ export class VirtualSpikeApi {
           let rightDone = false;
 
           const checkDone = () => {
-            if (leftDone && rightDone) resolve();
+            if (leftDone && rightDone) {
+              if (leftSpeed === rightSpeed) {
+                self.engine.robot.brakeChassisAndWheels();
+              }
+              resolve();
+            }
           };
 
           motorL?.runForDegrees(targetDeg, leftSpeed, () => {

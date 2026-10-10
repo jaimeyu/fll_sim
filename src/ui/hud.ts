@@ -2146,7 +2146,16 @@ export class SimulatorHud {
             stateBadge.textContent = 'SPINNING REV ⟲';
             stateBadge.className = 'motor-state-badge state-rev';
           } else {
-            stateBadge.textContent = 'DRIVING (WASD)';
+            // WASD Drive base driving
+            if ((isW || isS) && !isA && !isD) {
+              stateBadge.textContent = isW ? 'STRAIGHT FWD ⬆' : 'STRAIGHT REV ⬇';
+            } else if (isA && !isD) {
+              stateBadge.textContent = 'TURNING LEFT ⬅';
+            } else if (isD && !isA) {
+              stateBadge.textContent = 'TURNING RIGHT ➡';
+            } else {
+              stateBadge.textContent = 'DRIVING (WASD)';
+            }
             stateBadge.className = 'motor-state-badge state-fwd';
           }
         }
