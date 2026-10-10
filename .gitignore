@@ -19,7 +19,3 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Untracked Mission Models
-public/missions/
-*.io
-*.ldr

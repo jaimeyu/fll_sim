@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MatColorSampler } from '../sensors/sensor-manager';
+import { resolveAssetUrl } from '../utils/asset-path';
 
 export type MatMapType = 'numbered' | 'grid' | 'procedural';
 
@@ -56,10 +57,9 @@ export class CompetitionMatTexture implements MatColorSampler {
       return;
     }
 
-    const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
     const src = mapType === 'numbered'
-      ? `${baseUrl}maps/bioglow_numbered_mat.png`
-      : `${baseUrl}maps/playing_field_grid.png`;
+      ? resolveAssetUrl('maps/bioglow_numbered_mat.png')
+      : resolveAssetUrl('maps/playing_field_grid.png');
 
     return new Promise<void>((resolve) => {
       const img = new Image();

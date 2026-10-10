@@ -8,6 +8,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { createLegoBrickMesh, getLegoMaterial } from '../view/lego-visuals';
 import { ClusteredCompoundBody, PlacedPart } from './types';
+import { resolveAssetUrl } from '../utils/asset-path';
 
 export type LegoRenderMode = 'draco_glb' | 'procedural';
 
@@ -56,7 +57,7 @@ class LegoAssetManagerImpl {
 
     // 2. Configure Three.js GLTFLoader with local Draco WASM decoder
     this.dracoLoader = new DRACOLoader();
-    this.dracoLoader.setDecoderPath('/draco/');
+    this.dracoLoader.setDecoderPath(resolveAssetUrl('draco/'));
     this.dracoLoader.setDecoderConfig({ type: 'wasm' });
 
     this.gltfLoader = new GLTFLoader();
@@ -213,7 +214,7 @@ class LegoAssetManagerImpl {
 
     const loadPromise = (async () => {
       try {
-        const url = `/parts/draco/${cleanId}.glb`;
+        const url = resolveAssetUrl(`parts/draco/${cleanId}.glb`);
         const gltf = await this.gltfLoader.loadAsync(url);
         const group = gltf.scene as THREE.Group;
         this.partTemplateCache.set(cleanId, group);

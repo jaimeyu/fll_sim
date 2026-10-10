@@ -9,6 +9,7 @@ import { CustomImportedMissionElement } from './custom-imported-element';
 import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec } from '../cad/types';
 import { decomposeMissionAssembly } from './mission-decomposer';
+import { resolveAssetUrl } from '../utils/asset-path';
 import {
   SEASON_MISSIONS_CONFIG,
   SeasonMissionSpec,
@@ -121,8 +122,7 @@ export class MissionManager {
           this.loadingMissions.delete(spec.id);
           return null;
         }
-        const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
-        const fileUrl = `${baseUrl}${spec.ioFile.replace(/^\//, '')}`;
+        const fileUrl = resolveAssetUrl(spec.ioFile);
         const res = await fetch(fileUrl);
         if (!res.ok) {
           console.warn(`[MissionManager] Failed to fetch ${fileUrl}: HTTP ${res.status}`);

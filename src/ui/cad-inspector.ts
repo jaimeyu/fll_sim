@@ -11,6 +11,7 @@ import {
   saveMissionArenaPosition,
   getMissionArenaPosition,
 } from '../missions/season-config';
+import { resolveAssetUrl } from '../utils/asset-path';
 
 export interface CadInspectorCallbacks {
   onDeployToField?: (missionId: string, customSpec?: RobotAssemblySpec) => void;
@@ -917,8 +918,7 @@ export class CadModelInspector {
     }
 
     try {
-      const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
-      const fileUrl = `${baseUrl}${specConfig.ioFile.replace(/^\//, '')}`;
+      const fileUrl = resolveAssetUrl(specConfig.ioFile);
       const res = await fetch(fileUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();

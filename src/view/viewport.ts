@@ -1026,4 +1026,15 @@ export class Viewport3D {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
+
+  public getRenderStats() {
+    return {
+      drawCalls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      points: this.renderer.info.render.points,
+      lines: this.renderer.info.render.lines,
+      geometries: this.renderer.info.memory.geometries,
+      textures: this.renderer.info.memory.textures,
+    };
+  }
 }

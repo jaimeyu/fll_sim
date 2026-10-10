@@ -13,6 +13,7 @@ import { CustomImportedMissionElement } from './missions/custom-imported-element
 import { FieldLayoutManager } from './missions/field-layout-manager';
 import { CadModelInspector } from './ui/cad-inspector';
 import './ui/cad-inspector.css';
+import { profiler } from './core/performance-profiler';
 
 async function bootstrapSimulator() {
   const viewportContainer = document.getElementById('viewport-container');
@@ -545,9 +546,6 @@ async function bootstrapSimulator() {
 
   // 7. Main Animation & Physics Loop
   let lastTime = performance.now();
-  let frameCount = 0;
-  let lastFpsUpdate = performance.now();
-  let currentFps = 60;
 
   function animate(now: number) {
     requestAnimationFrame(animate);
@@ -555,23 +553,20 @@ async function bootstrapSimulator() {
     const deltaSeconds = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
-    // FPS calculation
-    frameCount++;
-    if (now - lastFpsUpdate >= 500) {
-      currentFps = (frameCount * 1000) / (now - lastFpsUpdate);
-      frameCount = 0;
-      lastFpsUpdate = now;
-    }
+    profiler.startFrame(now);
 
     // Physics step
+    const t0 = performance.now();
     engine.update(deltaSeconds);
+    const t1 = performance.now();
+    profiler.recordPhysicsTime(t1 - t0);
 
     // Sync visual meshes with physics bodies
     robotRenderer.syncWithPhysics(engine.robot);
-
-    // Sync mission elements & sandbox interaction tool
     missionManager.update(deltaSeconds);
     interactionTool.syncVisuals();
+    const t2 = performance.now();
+    profiler.recordSyncTime(t2 - t1);
 
     // Update active mission element score chip in HUD
     const activeElem = missionManager.getActiveElement();
@@ -587,18 +582,43 @@ async function bootstrapSimulator() {
 
     // Render viewport
     viewport.render();
+    const t3 = performance.now();
+    profiler.recordRenderTime(t3 - t2);
 
-    // Push live telemetry to HUD
+    // Feed real-time render stats to profiler
+    profiler.setRenderStats(viewport.getRenderStats());
+
+    // Feed physics body counts to profiler
+    let dynamicBodies = 0;
+    let fixedBodies = 0;
+    let totalBodies = 0;
+    if (engine.world) {
+      engine.world.forEachRigidBody((b) => {
+        totalBodies++;
+        if (b.isDynamic()) dynamicBodies++;
+        else if (b.isFixed()) fixedBodies++;
+      });
+      profiler.setPhysicsStats({
+        totalBodies,
+        dynamicBodies,
+        fixedBodies,
+        colliders: engine.world.colliders.len(),
+      });
+    }
+
+    // Sensors & telemetry
     const motorA = engine.robot.motors.get('A');
     const motorB = engine.robot.motors.get('B');
     const colorC = sensors.sampleColorSensor('C');
     const colorD = sensors.sampleColorSensor('D');
     const distCm = sensors.sampleDistanceSensor();
+    const t4 = performance.now();
+    profiler.recordSensorsTime(t4 - t3);
 
     hud.updateTelemetry({
       timeSeconds: now / 1000,
       matchTimerSeconds: 150,
-      fps: currentFps,
+      fps: profiler.getCurrentFps(),
       physicsHz: 60,
       robot: {
         x: robotPos.x,

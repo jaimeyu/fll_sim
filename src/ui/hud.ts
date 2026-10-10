@@ -5,6 +5,7 @@ import { MatMapType } from '../view/mat-texture';
 
 import { SeasonMissionSpec } from '../missions/season-config';
 import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
+import { profiler } from '../core/performance-profiler';
 
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
@@ -197,6 +198,14 @@ export class SimulatorHud {
   private telemColorD!: HTMLElement;
   private telemDist!: HTMLElement;
   private telemFps!: HTMLElement;
+
+  // Bottom FPS meter & Profiler Modal
+  private bottomFpsMeter!: HTMLElement;
+  private bottomFpsDot!: HTMLElement;
+  private bottomFpsVal!: HTMLElement;
+  private bottomFpsMs!: HTMLElement;
+  private profilerModal!: HTMLElement;
+  private isProfilerModalOpen: boolean = false;
 
   // Spawn pose configuration elements
   private spawnInputX!: HTMLInputElement;
@@ -629,6 +638,142 @@ export class SimulatorHud {
           </div>
         </div>
       </div>
+
+      <!-- Always-Visible Bottom Center FPS Meter & Profiler Button -->
+      <div id="hud-bottom-fps-meter" class="hud-bottom-fps-meter" title="Click to open Render & Physics Performance Profiler">
+        <span class="fps-pulse-dot" id="bottom-fps-dot"></span>
+        <span class="fps-val" id="bottom-fps-val">60 FPS</span>
+        <span class="fps-ms" id="bottom-fps-ms">(16.6ms)</span>
+        <span class="fps-btn-tag">🔬 Profiler</span>
+      </div>
+
+      <!-- Performance & Render Profiler Diagnostic Modal -->
+      <div id="hud-profiler-modal" class="hud-profiler-modal" style="display: none;">
+        <div class="profiler-modal-backdrop" id="profiler-modal-backdrop"></div>
+        <div class="profiler-modal-card">
+          <div class="profiler-modal-header">
+            <div class="profiler-header-title">
+              <span class="profiler-header-icon">⚡</span>
+              <div>
+                <div class="profiler-title-main">Simulation & Render Performance Profiler</div>
+                <div class="profiler-subtitle">Real-time Three.js WebGL GPU & Rapier 3D physics diagnostic inspector</div>
+              </div>
+            </div>
+            <div class="profiler-header-actions">
+              <span class="profiler-fps-pill" id="prof-header-fps">60 FPS</span>
+              <button class="btn btn-xs btn-outline" id="btn-close-profiler" title="Close Profiler">✖</button>
+            </div>
+          </div>
+
+          <div class="profiler-modal-body">
+            <!-- Bottleneck Alert Banner -->
+            <div class="profiler-banner" id="prof-bottleneck-banner">
+              <span class="banner-icon" id="prof-banner-icon">🟢</span>
+              <div class="banner-content">
+                <div class="banner-title" id="prof-banner-title">Primary Subsystem: Balanced Frame Budget</div>
+                <div class="banner-desc" id="prof-banner-desc">All simulation subsystems are running smoothly within the 16.7ms frame budget.</div>
+              </div>
+            </div>
+
+            <!-- Frame Budget Stacked Bar -->
+            <div class="profiler-budget-section">
+              <div class="budget-header">
+                <span>Frame Budget Allocation (16.67ms / 60 FPS Target)</span>
+                <span id="prof-total-frame-time">Total: 16.4ms</span>
+              </div>
+              <div class="budget-bar-track">
+                <div class="budget-segment seg-render" id="bar-render" style="width: 35%;" title="Three.js WebGL Render"></div>
+                <div class="budget-segment seg-physics" id="bar-physics" style="width: 25%;" title="Rapier 3D Physics"></div>
+                <div class="budget-segment seg-sync" id="bar-sync" style="width: 15%;" title="Visual & Mesh Sync"></div>
+                <div class="budget-segment seg-sensors" id="bar-sensors" style="width: 5%;" title="Sensors & Script"></div>
+                <div class="budget-segment seg-idle" id="bar-idle" style="width: 20%;" title="Idle Headroom"></div>
+              </div>
+              <div class="budget-legend">
+                <span class="legend-item"><span class="legend-dot dot-render"></span> Three.js Render: <strong id="lbl-render-ms">5.8ms</strong> (<span id="lbl-render-pct">35%</span>)</span>
+                <span class="legend-item"><span class="legend-dot dot-physics"></span> Rapier Physics: <strong id="lbl-physics-ms">4.2ms</strong> (<span id="lbl-physics-pct">25%</span>)</span>
+                <span class="legend-item"><span class="legend-dot dot-sync"></span> Mesh Sync: <strong id="lbl-sync-ms">2.5ms</strong> (<span id="lbl-sync-pct">15%</span>)</span>
+                <span class="legend-item"><span class="legend-dot dot-sensors"></span> Sensors/Code: <strong id="lbl-sensors-ms">0.8ms</strong> (<span id="lbl-sensors-pct">5%</span>)</span>
+                <span class="legend-item"><span class="legend-dot dot-idle"></span> Idle Budget: <strong id="lbl-idle-ms">3.3ms</strong> (<span id="lbl-idle-pct">20%</span>)</span>
+              </div>
+            </div>
+
+            <!-- Metric Cards Grid -->
+            <div class="profiler-cards-grid">
+              <!-- Card 1: WebGL Render -->
+              <div class="prof-card">
+                <div class="prof-card-title">🎨 Three.js WebGL GPU</div>
+                <div class="prof-card-stat">
+                  <span class="stat-num" id="stat-draw-calls">48</span>
+                  <span class="stat-unit">Draw Calls</span>
+                </div>
+                <div class="prof-substats">
+                  <div>Triangles: <strong id="stat-triangles">38,420</strong></div>
+                  <div>Geometries: <strong id="stat-geometries">112</strong></div>
+                  <div>Textures: <strong id="stat-textures">3</strong></div>
+                </div>
+              </div>
+
+              <!-- Card 2: Rapier Physics -->
+              <div class="prof-card">
+                <div class="prof-card-title">🏎️ Rapier 3D Physics</div>
+                <div class="prof-card-stat">
+                  <span class="stat-num" id="stat-dynamic-bodies">4</span>
+                  <span class="stat-unit">Dynamic Bodies</span>
+                </div>
+                <div class="prof-substats">
+                  <div>Fixed Bodies: <strong id="stat-fixed-bodies">18</strong></div>
+                  <div>Colliders: <strong id="stat-colliders">36</strong></div>
+                  <div>Solver Hz: <strong>60 Hz (16 iters)</strong></div>
+                </div>
+              </div>
+
+              <!-- Card 3: Frame Stability -->
+              <div class="prof-card">
+                <div class="prof-card-title">📊 Frame Stability</div>
+                <div class="prof-card-stat">
+                  <span class="stat-num" id="stat-avg-fps">60</span>
+                  <span class="stat-unit">Avg FPS</span>
+                </div>
+                <div class="prof-substats">
+                  <div>1% Low FPS: <strong id="stat-low-fps">58 FPS</strong></div>
+                  <div>Min FPS: <strong id="stat-min-fps">56 FPS</strong></div>
+                  <div>Target: <strong>60.0 FPS</strong></div>
+                </div>
+              </div>
+
+              <!-- Card 4: Assets & Models -->
+              <div class="prof-card">
+                <div class="prof-card-title">📦 Active Field Models</div>
+                <div class="prof-card-stat">
+                  <span class="stat-num" id="stat-active-models">3</span>
+                  <span class="stat-unit">Missions Loaded</span>
+                </div>
+                <div class="prof-substats">
+                  <div>Fasteners: <strong id="stat-dual-locked">Anchored Bases</strong></div>
+                  <div>Format: <strong>Draco GLB + Rapier</strong></div>
+                  <div>Offline: <strong>Active (0 Net HTTP)</strong></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Optimization Tips Section -->
+            <div class="profiler-recommendations-section">
+              <div class="rec-title">💡 Optimization Insights & Actionable Fixes</div>
+              <ul class="rec-list" id="prof-rec-list">
+                <li>Frame budget is optimal. The simulation runs smoothly at 60 FPS.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="profiler-modal-footer">
+            <div class="footer-left">
+              <button class="btn btn-xs btn-outline" id="btn-reset-profiler">🔄 Reset Profiler</button>
+              <button class="btn btn-xs btn-outline" id="btn-copy-perf-report">📋 Copy Perf Report</button>
+            </div>
+            <button class="btn btn-sm btn-primary" id="btn-close-profiler-bottom">Done</button>
+          </div>
+        </div>
+      </div>
     `;
 
     // Cache elements
@@ -664,6 +809,13 @@ export class SimulatorHud {
     this.telemColorD = this.rootElement.querySelector('#telem-color-d')!;
     this.telemDist = this.rootElement.querySelector('#telem-dist')!;
     this.telemFps = this.rootElement.querySelector('#telem-fps')!;
+
+    // Bottom FPS meter & Profiler Modal
+    this.bottomFpsMeter = this.rootElement.querySelector('#hud-bottom-fps-meter')!;
+    this.bottomFpsDot = this.rootElement.querySelector('#bottom-fps-dot')!;
+    this.bottomFpsVal = this.rootElement.querySelector('#bottom-fps-val')!;
+    this.bottomFpsMs = this.rootElement.querySelector('#bottom-fps-ms')!;
+    this.profilerModal = this.rootElement.querySelector('#hud-profiler-modal')!;
 
     // Fastener & Dual Lock Toolbar
     this.fastenerToolbar = this.rootElement.querySelector('#hud-field-fastener-toolbar')!;
@@ -1135,6 +1287,198 @@ export class SimulatorHud {
         this.logConsole(`Local Offline Mode: ${chkLocalOffline.checked ? 'ENABLED (Zero external HTTP)' : 'DISABLED'}`);
       });
     }
+
+    // 4. Always-Visible Bottom FPS Meter & Profiler Modal events
+    this.bottomFpsMeter.addEventListener('click', () => {
+      this.openProfilerModal();
+    });
+
+    const btnCloseProf = this.rootElement.querySelector('#btn-close-profiler');
+    btnCloseProf?.addEventListener('click', () => this.closeProfilerModal());
+
+    const btnCloseProfBottom = this.rootElement.querySelector('#btn-close-profiler-bottom');
+    btnCloseProfBottom?.addEventListener('click', () => this.closeProfilerModal());
+
+    const profBackdrop = this.rootElement.querySelector('#profiler-modal-backdrop');
+    profBackdrop?.addEventListener('click', () => this.closeProfilerModal());
+
+    const btnResetProf = this.rootElement.querySelector('#btn-reset-profiler');
+    btnResetProf?.addEventListener('click', () => {
+      profiler.reset();
+      this.updateProfilerModal();
+      this.logConsole('🔄 Reset Performance Profiler sample metrics.');
+    });
+
+    const btnCopyPerf = this.rootElement.querySelector('#btn-copy-perf-report');
+    btnCopyPerf?.addEventListener('click', () => {
+      this.copyPerformanceReport();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isProfilerModalOpen) {
+        this.closeProfilerModal();
+      }
+    });
+  }
+
+  public openProfilerModal(): void {
+    this.isProfilerModalOpen = true;
+    this.profilerModal.style.display = 'flex';
+    this.updateProfilerModal();
+  }
+
+  public closeProfilerModal(): void {
+    this.isProfilerModalOpen = false;
+    this.profilerModal.style.display = 'none';
+  }
+
+  public updateProfilerModal(): void {
+    if (!this.isProfilerModalOpen) return;
+    const snap = profiler.getSnapshot();
+
+    const fpsEl = this.rootElement.querySelector('#prof-header-fps');
+    if (fpsEl) fpsEl.textContent = `${snap.fps} FPS`;
+
+    // Bottleneck Banner
+    const banner = this.rootElement.querySelector('#prof-bottleneck-banner') as HTMLElement | null;
+    const bannerIcon = this.rootElement.querySelector('#prof-banner-icon');
+    const bannerTitle = this.rootElement.querySelector('#prof-banner-title');
+    const bannerDesc = this.rootElement.querySelector('#prof-banner-desc');
+
+    if (banner && bannerTitle && bannerDesc && bannerIcon) {
+      banner.className = `profiler-banner banner-${snap.bottleneckSeverity.toLowerCase()}`;
+      if (snap.bottleneckSeverity === 'OPTIMAL') {
+        bannerIcon.textContent = '🟢';
+        bannerTitle.textContent = `Optimal Performance: ${snap.primaryBottleneck}`;
+        bannerDesc.textContent = `Total frame time is ${snap.avgFrameMs.toFixed(1)}ms (target: 16.7ms for 60 FPS). Smooth rendering with generous CPU headroom.`;
+      } else if (snap.bottleneckSeverity === 'MODERATE') {
+        bannerIcon.textContent = '🟡';
+        bannerTitle.textContent = `Heavy Subsystem: ${snap.primaryBottleneck}`;
+        bannerDesc.textContent = `Frame time is ${snap.avgFrameMs.toFixed(1)}ms. Subsystems are operating within tolerance, but monitor complexity.`;
+      } else {
+        bannerIcon.textContent = '🔴';
+        bannerTitle.textContent = `Primary Bottleneck: ${snap.primaryBottleneck}`;
+        bannerDesc.textContent = `Frame drops detected (${snap.fps} FPS, ${snap.avgFrameMs.toFixed(1)}ms frame time). Follow the recommendations below to restore 60 FPS.`;
+      }
+    }
+
+    // Budget allocation
+    const totalEl = this.rootElement.querySelector('#prof-total-frame-time');
+    if (totalEl) totalEl.textContent = `Total: ${snap.avgFrameMs.toFixed(1)}ms (${Math.round((snap.avgFrameMs / 16.667) * 100)}% budget)`;
+
+    const barRender = this.rootElement.querySelector('#bar-render') as HTMLElement | null;
+    if (barRender) barRender.style.width = `${snap.renderPct.toFixed(1)}%`;
+    const barPhysics = this.rootElement.querySelector('#bar-physics') as HTMLElement | null;
+    if (barPhysics) barPhysics.style.width = `${snap.physicsPct.toFixed(1)}%`;
+    const barSync = this.rootElement.querySelector('#bar-sync') as HTMLElement | null;
+    if (barSync) barSync.style.width = `${snap.syncPct.toFixed(1)}%`;
+    const barSensors = this.rootElement.querySelector('#bar-sensors') as HTMLElement | null;
+    if (barSensors) barSensors.style.width = `${snap.sensorsPct.toFixed(1)}%`;
+    const barIdle = this.rootElement.querySelector('#bar-idle') as HTMLElement | null;
+    if (barIdle) barIdle.style.width = `${snap.idlePct.toFixed(1)}%`;
+
+    // Legend values
+    const lblRenderMs = this.rootElement.querySelector('#lbl-render-ms');
+    if (lblRenderMs) lblRenderMs.textContent = `${snap.renderMs.toFixed(1)}ms`;
+    const lblRenderPct = this.rootElement.querySelector('#lbl-render-pct');
+    if (lblRenderPct) lblRenderPct.textContent = `${snap.renderPct.toFixed(0)}%`;
+
+    const lblPhysicsMs = this.rootElement.querySelector('#lbl-physics-ms');
+    if (lblPhysicsMs) lblPhysicsMs.textContent = `${snap.physicsMs.toFixed(1)}ms`;
+    const lblPhysicsPct = this.rootElement.querySelector('#lbl-physics-pct');
+    if (lblPhysicsPct) lblPhysicsPct.textContent = `${snap.physicsPct.toFixed(0)}%`;
+
+    const lblSyncMs = this.rootElement.querySelector('#lbl-sync-ms');
+    if (lblSyncMs) lblSyncMs.textContent = `${snap.syncMs.toFixed(1)}ms`;
+    const lblSyncPct = this.rootElement.querySelector('#lbl-sync-pct');
+    if (lblSyncPct) lblSyncPct.textContent = `${snap.syncPct.toFixed(0)}%`;
+
+    const lblSensorsMs = this.rootElement.querySelector('#lbl-sensors-ms');
+    if (lblSensorsMs) lblSensorsMs.textContent = `${snap.sensorsMs.toFixed(1)}ms`;
+    const lblSensorsPct = this.rootElement.querySelector('#lbl-sensors-pct');
+    if (lblSensorsPct) lblSensorsPct.textContent = `${snap.sensorsPct.toFixed(0)}%`;
+
+    const lblIdleMs = this.rootElement.querySelector('#lbl-idle-ms');
+    if (lblIdleMs) lblIdleMs.textContent = `${snap.idleMs.toFixed(1)}ms`;
+    const lblIdlePct = this.rootElement.querySelector('#lbl-idle-pct');
+    if (lblIdlePct) lblIdlePct.textContent = `${snap.idlePct.toFixed(0)}%`;
+
+    // Metric cards
+    const statDrawCalls = this.rootElement.querySelector('#stat-draw-calls');
+    if (statDrawCalls) statDrawCalls.textContent = `${snap.renderStats.drawCalls}`;
+    const statTriangles = this.rootElement.querySelector('#stat-triangles');
+    if (statTriangles) statTriangles.textContent = snap.renderStats.triangles.toLocaleString();
+    const statGeometries = this.rootElement.querySelector('#stat-geometries');
+    if (statGeometries) statGeometries.textContent = `${snap.renderStats.geometries}`;
+    const statTextures = this.rootElement.querySelector('#stat-textures');
+    if (statTextures) statTextures.textContent = `${snap.renderStats.textures}`;
+
+    const statDynamicBodies = this.rootElement.querySelector('#stat-dynamic-bodies');
+    if (statDynamicBodies) statDynamicBodies.textContent = `${snap.physicsStats.dynamicBodies}`;
+    const statFixedBodies = this.rootElement.querySelector('#stat-fixed-bodies');
+    if (statFixedBodies) statFixedBodies.textContent = `${snap.physicsStats.fixedBodies}`;
+    const statColliders = this.rootElement.querySelector('#stat-colliders');
+    if (statColliders) statColliders.textContent = `${snap.physicsStats.colliders}`;
+
+    const statAvgFps = this.rootElement.querySelector('#stat-avg-fps');
+    if (statAvgFps) statAvgFps.textContent = `${snap.avgFps}`;
+    const statLowFps = this.rootElement.querySelector('#stat-low-fps');
+    if (statLowFps) statLowFps.textContent = `${snap.onePercentLowFps} FPS`;
+    const statMinFps = this.rootElement.querySelector('#stat-min-fps');
+    if (statMinFps) statMinFps.textContent = `${snap.minFps} FPS`;
+
+    const statActiveModels = this.rootElement.querySelector('#stat-active-models');
+    if (statActiveModels) {
+      const activeCount = this.missionElementsData.filter((e) => e.isPlacedOnField !== false).length;
+      statActiveModels.textContent = `${activeCount}`;
+    }
+
+    // Recommendations list
+    const recList = this.rootElement.querySelector('#prof-rec-list');
+    if (recList) {
+      recList.innerHTML = snap.recommendations.map((r) => `<li>${r}</li>`).join('');
+    }
+  }
+
+  public copyPerformanceReport(): void {
+    const snap = profiler.getSnapshot();
+    const report = `# FLL Simulator Performance Diagnostic Report
+- **Timestamp**: ${new Date().toISOString()}
+- **FPS**: ${snap.fps} FPS (Avg: ${snap.avgFps}, 1% Low: ${snap.onePercentLowFps}, Min: ${snap.minFps})
+- **Frame Time**: ${snap.avgFrameMs.toFixed(2)} ms (Budget: 16.67 ms)
+- **Primary Bottleneck**: ${snap.primaryBottleneck} (${snap.bottleneckSeverity})
+
+## Frame Time Breakdown
+- **Three.js WebGL Render**: ${snap.renderMs.toFixed(2)} ms (${snap.renderPct.toFixed(1)}%)
+- **Rapier Physics Step**: ${snap.physicsMs.toFixed(2)} ms (${snap.physicsPct.toFixed(1)}%)
+- **Mesh / Visual Sync**: ${snap.syncMs.toFixed(2)} ms (${snap.syncPct.toFixed(1)}%)
+- **Sensors & Script**: ${snap.sensorsMs.toFixed(2)} ms (${snap.sensorsPct.toFixed(1)}%)
+- **Idle / Overhead**: ${snap.idleMs.toFixed(2)} ms (${snap.idlePct.toFixed(1)}%)
+
+## WebGL & GPU Stats
+- **Draw Calls**: ${snap.renderStats.drawCalls}
+- **Triangles**: ${snap.renderStats.triangles.toLocaleString()}
+- **Geometries in VRAM**: ${snap.renderStats.geometries}
+- **Textures in VRAM**: ${snap.renderStats.textures}
+
+## Physics Simulation Stats
+- **Dynamic Rigid Bodies**: ${snap.physicsStats.dynamicBodies}
+- **Fixed Rigid Bodies**: ${snap.physicsStats.fixedBodies}
+- **Colliders**: ${snap.physicsStats.colliders}
+
+## Recommendations
+${snap.recommendations.map((r) => `- ${r}`).join('\n')}
+`;
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(report).then(() => {
+        this.logConsole('📋 Performance Diagnostic Report copied to clipboard!');
+      }).catch(() => {
+        this.logConsole(report);
+      });
+    } else {
+      this.logConsole(report);
+    }
   }
 
   private startMatchTimer(): void {
@@ -1166,6 +1510,23 @@ export class SimulatorHud {
 
     this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
     this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz)} Hz`;
+
+    // Update always-visible bottom FPS meter
+    const fpsRound = Math.round(state.fps);
+    this.bottomFpsVal.textContent = `${fpsRound} FPS`;
+    const frameMs = state.fps > 0 ? (1000 / state.fps).toFixed(1) : '16.7';
+    this.bottomFpsMs.textContent = `(${frameMs}ms)`;
+
+    this.bottomFpsDot.classList.remove('fps-dot-yellow', 'fps-dot-red');
+    if (fpsRound < 35) {
+      this.bottomFpsDot.classList.add('fps-dot-red');
+    } else if (fpsRound < 55) {
+      this.bottomFpsDot.classList.add('fps-dot-yellow');
+    }
+
+    if (this.isProfilerModalOpen) {
+      this.updateProfilerModal();
+    }
   }
 
   public getSpawnPose(): SpawnPose {
