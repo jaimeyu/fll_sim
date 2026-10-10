@@ -346,8 +346,8 @@ async function bootstrapSimulator() {
         viewport.setRobotYaw(-90);
       }
     },
-    onToggleDualLockTool: (active) => {
-      viewport.setDualLockToolActive(active);
+    onToggleDualLockTool: (active, eraseMode) => {
+      viewport.setDualLockToolActive(active, eraseMode);
     },
     onToggleDualLockSelected: () => {
       const selected = viewport.getSelectedElement();
@@ -539,9 +539,13 @@ async function bootstrapSimulator() {
   viewport.onDualLockToggle = (elementId: string, locked: boolean) => {
     const elem = missionManager.getElement(elementId);
     hud.setSelectedElement(elementId, locked, elem?.name);
-    hud.showFastenerStatus(`${locked ? '🔒 Dual-Locked' : '🔓 Unlocked'}: "${elem?.name || elementId}"`);
-    hud.logConsole(`${locked ? '🔒 [Dual Lock] Fastened' : '🔓 [Dual Lock] Unfastened'} "${elem?.name || elementId}".`);
+    hud.showFastenerStatus(`${locked ? '🔒 Dual-Locked' : '✂️ Unfastened'}: "${elem?.name || elementId}"`);
+    hud.logConsole(`${locked ? '🔒 [Dual Lock] Fastened' : '✂️ [Dual Lock] Unfastened'} "${elem?.name || elementId}".`);
     syncHudMissionElements();
+  };
+
+  viewport.onHoverFastenerChange = (info) => {
+    hud.setPointerToolInfo(info);
   };
 
   // 7. Main Animation & Physics Loop

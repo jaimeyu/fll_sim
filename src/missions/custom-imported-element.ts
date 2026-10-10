@@ -4,6 +4,7 @@ import { MissionElement } from './types';
 import { RobotAssemblySpec } from '../cad/types';
 import { LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
 import { legoAssetManager } from '../cad/lego-asset-manager';
+import { DualLockMarker } from './dual-lock-marker';
 
 export interface CustomElementOptions {
   id: string;
@@ -39,7 +40,7 @@ export class CustomImportedMissionElement implements MissionElement {
   private isBaseFixed: boolean;
   private isSolidRigidMode: boolean;
   private groundCorrectionY: number = 0;
-  private dualLockMesh: THREE.Group | null = null;
+  private dualLockMarker: DualLockMarker | null = null;
   private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
 
   // Physics Bodies
@@ -112,7 +113,10 @@ export class CustomImportedMissionElement implements MissionElement {
     // Immediately update Rapier bodies without rebuilding
     for (const [cid, body] of this.bodies.entries()) {
       const cluster = this.spec.clusters.find((c) => c.clusterId === cid);
-      const shouldBeFixed = locked && (this.isSolidRigidMode || cluster?.isRootChassis || cluster?.isFixed !== false || this.spec.clusters.length === 1);
+      const isFixedCluster = cluster?.isFixed !== undefined
+        ? cluster.isFixed
+        : (cluster?.isRootChassis && this.isBaseFixed);
+      const shouldBeFixed = locked && (this.isSolidRigidMode || isFixedCluster || this.spec.clusters.length === 1);
       body.setBodyType(
         shouldBeFixed ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
         true
@@ -136,55 +140,25 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   private updateDualLockVisualMesh(): void {
-    if (!this.dualLockMesh) {
-      this.dualLockMesh = this.createDualLockPadMesh();
-      this.rootGroup.add(this.dualLockMesh);
+    if (!this.dualLockMarker) {
+      this.dualLockMarker = new DualLockMarker(this.id);
+      this.rootGroup.add(this.dualLockMarker.group);
     }
 
-    this.dualLockMesh.visible = this.isDualLocked;
+    this.dualLockMarker.setVisible(this.isDualLocked);
     if (this.isDualLocked) {
-      this.dualLockMesh.position.set(
-        this.dualLockAnchorOffset.x,
-        0.0015,
-        this.dualLockAnchorOffset.z
-      );
+      const worldX = this.basePos.x + this.dualLockAnchorOffset.x;
+      const worldZ = this.basePos.z + this.dualLockAnchorOffset.z;
+      this.dualLockMarker.setPosition(worldX, 0.002, worldZ);
     }
   }
 
-  private createDualLockPadMesh(): THREE.Group {
-    const padGroup = new THREE.Group();
-    padGroup.name = 'dual-lock-pad';
+  public getDualLockMarker(): DualLockMarker | null {
+    return this.dualLockMarker;
+  }
 
-    // 1. Lower base plate (3M black plastic backing)
-    const baseGeo = new THREE.BoxGeometry(0.038, 0.003, 0.038);
-    const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x18181b,
-      roughness: 0.85,
-      metalness: 0.1,
-    });
-    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-    baseMesh.position.y = 0.0015;
-    padGroup.add(baseMesh);
-
-    // 2. Interlocking Mushroom Grid Top (textured look)
-    const gridGeo = new THREE.BoxGeometry(0.034, 0.002, 0.034);
-    const gridMat = new THREE.MeshStandardMaterial({
-      color: 0x27272a,
-      roughness: 0.9,
-      metalness: 0.2,
-    });
-    const gridMesh = new THREE.Mesh(gridGeo, gridMat);
-    gridMesh.position.y = 0.0035;
-    padGroup.add(gridMesh);
-
-    // 3. Official 3M Dual Lock peel tab accent
-    const tabGeo = new THREE.BoxGeometry(0.008, 0.001, 0.008);
-    const tabMat = new THREE.MeshBasicMaterial({ color: 0xeab308 });
-    const tabMesh = new THREE.Mesh(tabGeo, tabMat);
-    tabMesh.position.set(0.015, 0.004, 0.015);
-    padGroup.add(tabMesh);
-
-    return padGroup;
+  public setDualLockHoverHighlight(isHovered: boolean, isEraseMode: boolean = false): void {
+    this.dualLockMarker?.setHoverHighlight(isHovered, isEraseMode);
   }
 
   public getSpec(): RobotAssemblySpec {
@@ -291,6 +265,13 @@ export class CustomImportedMissionElement implements MissionElement {
           colDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
         }
 
+        // Collision filtering:
+        // Group 3 (0x0008): Fixed base clusters (filters 0xFFEF, ignores dynamic mechanisms)
+        // Group 4 (0x0010): Dynamic mechanism clusters (filters 0xFFF7, ignores fixed base)
+        const membership = isFixedCluster ? 0x0008 : 0x0010;
+        const filter = isFixedCluster ? 0xFFEF : 0xFFF7;
+        colDesc.setCollisionGroups((membership << 16) | filter);
+
         colDesc
           .setTranslation(col.offset[0], col.offset[1], col.offset[2])
           .setFriction(col.friction || 0.6)
@@ -355,13 +336,14 @@ export class CustomImportedMissionElement implements MissionElement {
         const rapierJoint = this.world.createImpulseJoint(
           RAPIER.JointData.revolute(
             { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
-            { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
+            { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
             { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
           ),
           parentBody,
           childBody,
           true
         );
+        rapierJoint.setContactsEnabled(false);
         this.joints.push(rapierJoint);
       }
     }
@@ -443,6 +425,7 @@ export class CustomImportedMissionElement implements MissionElement {
       this.yawDegrees = yawDegrees;
     }
     this.reset();
+    this.updateDualLockVisualMesh();
   }
 
   public setRotation(yawDegrees: number): void {
@@ -484,9 +467,9 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public destroy(): void {
-    if (this.dualLockMesh) {
-      this.rootGroup.remove(this.dualLockMesh);
-      this.dualLockMesh = null;
+    if (this.dualLockMarker) {
+      this.rootGroup.remove(this.dualLockMarker.group);
+      this.dualLockMarker = null;
     }
 
     for (const joint of this.joints) {

@@ -7,6 +7,7 @@ import {
   createTechnicBeamGroup,
   createLegoPlateGroup,
 } from '../view/lego-visuals';
+import { DualLockMarker } from './dual-lock-marker';
 
 /**
  * 4-Axle Riser Mission Mechanism
@@ -28,8 +29,9 @@ export class AxleRiserMission implements MissionElement {
   private basePos: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
   private yawDegrees: number = 0;
   public isPlacedOnField: boolean = true;
-
-  // Physics Bodies
+  public isDualLocked: boolean = true;
+  private dualLockMarker: DualLockMarker | null = null;
+  private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
   private anchorBody!: RAPIER.RigidBody;
   private sliderBody!: RAPIER.RigidBody;
   private riserBody!: RAPIER.RigidBody;
@@ -58,6 +60,7 @@ export class AxleRiserMission implements MissionElement {
     this.createPhysicsBodies();
     this.createLegoVisuals();
     this.syncVisuals();
+    this.updateDualLockVisualMesh();
   }
 
   private getDirectionVectors(): { ux: number; uz: number; wx: number; wz: number } {
@@ -343,11 +346,71 @@ export class AxleRiserMission implements MissionElement {
       this.yawDegrees = yawDegrees;
     }
     this.reset();
+    this.updateDualLockVisualMesh();
+  }
+
+  public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }): void {
+    this.isDualLocked = locked;
+    if (anchorPoint) {
+      this.dualLockAnchorOffset = {
+        x: anchorPoint.x - this.basePos.x,
+        z: anchorPoint.z - this.basePos.z,
+      };
+    }
+    if (this.anchorBody) {
+      this.anchorBody.setBodyType(
+        locked ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
+        true
+      );
+      if (!locked) {
+        this.anchorBody.setLinearDamping(2.5);
+        this.anchorBody.setAngularDamping(3.5);
+        this.anchorBody.wakeUp();
+      }
+    }
+    this.updateDualLockVisualMesh();
+  }
+
+  public getDualLockPosition(): { x: number; z: number } | null {
+    if (!this.isDualLocked) return null;
+    return {
+      x: this.basePos.x + this.dualLockAnchorOffset.x,
+      z: this.basePos.z + this.dualLockAnchorOffset.z,
+    };
+  }
+
+  private updateDualLockVisualMesh(): void {
+    if (!this.dualLockMarker) {
+      this.dualLockMarker = new DualLockMarker(this.id);
+      this.rootGroup.add(this.dualLockMarker.group);
+    }
+    this.dualLockMarker.setVisible(this.isDualLocked);
+    if (this.isDualLocked) {
+      const { ux, uz } = this.getDirectionVectors();
+      const defaultAnchorX = this.basePos.x - 0.09 * ux;
+      const defaultAnchorZ = this.basePos.z - 0.09 * uz;
+      const posX = (this.dualLockAnchorOffset.x !== 0 || this.dualLockAnchorOffset.z !== 0)
+        ? this.basePos.x + this.dualLockAnchorOffset.x
+        : defaultAnchorX;
+      const posZ = (this.dualLockAnchorOffset.x !== 0 || this.dualLockAnchorOffset.z !== 0)
+        ? this.basePos.z + this.dualLockAnchorOffset.z
+        : defaultAnchorZ;
+      this.dualLockMarker.setPosition(posX, 0.002, posZ);
+    }
+  }
+
+  public getDualLockMarker(): DualLockMarker | null {
+    return this.dualLockMarker;
+  }
+
+  public setDualLockHoverHighlight(isHovered: boolean, isEraseMode: boolean = false): void {
+    this.dualLockMarker?.setHoverHighlight(isHovered, isEraseMode);
   }
 
   public setRotation(yawDegrees: number): void {
     this.yawDegrees = yawDegrees;
     this.reset();
+    this.updateDualLockVisualMesh();
   }
 
   public getYawDegrees(): number {
@@ -392,6 +455,7 @@ export class AxleRiserMission implements MissionElement {
     for (const b of bodies) {
       if (b) this.world.removeRigidBody(b);
     }
+    this.dualLockMarker?.destroy();
     this.rootGroup.clear();
   }
 }

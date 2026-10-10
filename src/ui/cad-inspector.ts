@@ -492,8 +492,9 @@ export class CadModelInspector {
     // Quick Presets
     this.overlay.querySelector('#btn-preset-fix-base')?.addEventListener('click', () => {
       if (!this.currentSpec) return;
+      const childClusterIds = new Set(this.currentSpec.joints.map((j) => j.childClusterId));
       this.currentSpec.clusters.forEach((c) => {
-        c.isFixed = c.isRootChassis;
+        c.isFixed = this.currentSpec!.joints.length === 0 || c.isRootChassis || !childClusterIds.has(c.clusterId);
       });
       this.saveClusterOverrides();
       this.rebuildPhysicsIfRunning();
@@ -1018,27 +1019,33 @@ export class CadModelInspector {
 
     // Centering & ground normalization
     let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
+    let minColliderBottom = Infinity;
 
     for (const cluster of spec.clusters) {
       if (cluster.parts) {
         for (const p of cluster.parts) {
           const px = p.position[0] / 1000;
-          const py = p.position[1] / 1000;
           const pz = p.position[2] / 1000;
           if (px < minX) minX = px;
           if (px > maxX) maxX = px;
-          if (py < minY) minY = py;
-          if (py > maxY) maxY = py;
           if (pz < minZ) minZ = pz;
           if (pz > maxZ) maxZ = pz;
         }
       }
+      for (const col of cluster.colliders) {
+        const cy = col.offset[1];
+        let hy = 0.015;
+        if (col.shape === 'sphere') hy = col.radius || 0.015;
+        else if (col.shape === 'cylinder') hy = col.halfHeight || 0.02;
+        else if (col.halfExtents) hy = col.halfExtents[1];
+        const bottom = cy - hy;
+        if (bottom < minColliderBottom) minColliderBottom = bottom;
+      }
     }
 
     const offsetX = minX !== Infinity ? -(minX + maxX) / 2 : 0;
-    const offsetY = minY !== Infinity ? -minY : 0;
+    const offsetY = minColliderBottom !== Infinity ? -minColliderBottom : 0;
     const offsetZ = minZ !== Infinity ? -(minZ + maxZ) / 2 : 0;
 
     for (const cluster of spec.clusters) {
@@ -1177,10 +1184,15 @@ export class CadModelInspector {
     // Static ground plane at workbench floor level (Y = 0)
     const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0);
     const groundBody = this.physicsWorld.createRigidBody(groundDesc);
-    this.physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(5.0, 0.05, 5.0), groundBody);
+    const groundCol = RAPIER.ColliderDesc.cuboid(5.0, 0.05, 5.0)
+      .setFriction(0.8)
+      .setRestitution(0.0);
+    this.physicsWorld.createCollider(groundCol, groundBody);
 
     for (const cluster of this.currentSpec.clusters) {
-      const isFixed = cluster.isFixed !== undefined ? cluster.isFixed : cluster.isRootChassis;
+      const isFixed = cluster.isFixed !== undefined
+        ? cluster.isFixed
+        : (this.currentSpec.joints.length === 0 || cluster.isRootChassis);
       const clusterGroup = this.clusterMeshGroups.get(cluster.clusterId);
       const initPos = clusterGroup?.position || new THREE.Vector3();
       const initQuat = clusterGroup?.quaternion || new THREE.Quaternion();
@@ -1214,6 +1226,14 @@ export class CadModelInspector {
           const hz = col.halfExtents ? col.halfExtents[2] : 0.03;
           colDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
         }
+
+        // Collision filtering:
+        // Group 3 (0x0008): Fixed base clusters (filters 0xFFEF, ignores dynamic mechanisms)
+        // Group 4 (0x0010): Dynamic mechanism clusters (filters 0xFFF7, ignores fixed base)
+        const membership = (isFixed || this.isSolidMode) ? 0x0008 : 0x0010;
+        const filter = (isFixed || this.isSolidMode) ? 0xFFEF : 0xFFF7;
+        colDesc.setCollisionGroups((membership << 16) | filter);
+
         colDesc.setTranslation(col.offset[0], col.offset[1], col.offset[2])
           .setFriction(col.friction || 0.6)
           .setRestitution(col.restitution || 0.05);
@@ -1226,7 +1246,7 @@ export class CadModelInspector {
       const parentBody = this.physicsBodies.get(joint.parentClusterId);
       const childBody = this.physicsBodies.get(joint.childClusterId);
       if (parentBody && childBody) {
-        this.physicsWorld.createImpulseJoint(
+        const j = this.physicsWorld.createImpulseJoint(
           RAPIER.JointData.revolute(
             { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
             { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
@@ -1236,6 +1256,7 @@ export class CadModelInspector {
           childBody,
           true
         );
+        j.setContactsEnabled(false);
       }
     }
   }
@@ -1274,7 +1295,9 @@ export class CadModelInspector {
     const cluster = this.currentSpec.clusters.find((c) => c.clusterId === clusterId);
     if (!cluster) return;
 
-    const currentFixed = cluster.isFixed !== undefined ? cluster.isFixed : cluster.isRootChassis;
+    const currentFixed = cluster.isFixed !== undefined
+      ? cluster.isFixed
+      : (this.currentSpec.joints.length === 0 || cluster.isRootChassis);
     cluster.isFixed = !currentFixed;
 
     this.saveClusterOverrides();
@@ -1404,7 +1427,9 @@ export class CadModelInspector {
 
     clusterList.innerHTML = this.currentSpec.clusters
       .map((c, i) => {
-        const isFixed = c.isFixed !== undefined ? c.isFixed : c.isRootChassis;
+        const isFixed = c.isFixed !== undefined
+          ? c.isFixed
+          : (this.currentSpec?.joints.length === 0 || c.isRootChassis);
         const pCount = c.parts?.length || c.partIds.length;
         const isSelected = this.selectedClusterId === c.clusterId;
 

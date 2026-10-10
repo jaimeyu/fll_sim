@@ -267,9 +267,15 @@ export class CadClusteringPreSolver {
     if (!clusters.some((c) => c.isRootChassis)) {
       if (clusters.length > 0) {
         clusters.sort((a, b) => b.partIds.length - a.partIds.length);
+        const oldId = clusters[0].clusterId;
         clusters[0].isRootChassis = true;
         clusters[0].isFixed = true;
         clusters[0].clusterId = 'chassis_root';
+        for (const [partId, cid] of partToClusterId.entries()) {
+          if (cid === oldId) {
+            partToClusterId.set(partId, 'chassis_root');
+          }
+        }
       }
     }
 
@@ -293,12 +299,29 @@ export class CadClusteringPreSolver {
         parentClusterId: parentCluster,
         childClusterId: childCluster,
         anchorParent: (link.anchor || [0, 0, 0]) as [number, number, number],
-        anchorChild: [0, 0, 0],
+        anchorChild: (link.anchor || [0, 0, 0]) as [number, number, number],
         axis: (link.jointAxis || [1, 0, 0]) as [number, number, number],
         motorPort: isMotorPort,
         maxTorqueNm: 0.25, // SPIKE large motor rated torque
         maxVelocityDegPerSec: 1000,
       });
+    }
+
+    // If there are no joints defined, or for any cluster not actively articulated by a joint,
+    // mark as fixed so stationary mission assemblies remain completely intact on the field
+    if (joints.length === 0) {
+      for (const cluster of clusters) {
+        cluster.isFixed = true;
+      }
+    } else {
+      const childClusterIds = new Set(joints.map((j) => j.childClusterId));
+      for (const cluster of clusters) {
+        if (!childClusterIds.has(cluster.clusterId)) {
+          cluster.isFixed = true;
+        } else {
+          cluster.isFixed = false;
+        }
+      }
     }
 
     // Extract sensors from placed parts

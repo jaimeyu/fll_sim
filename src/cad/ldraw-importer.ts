@@ -249,20 +249,23 @@ export class LDrawImporter {
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         if (dist <= 32.0 && (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM')) {
+          const rimPart = p1.role === 'WHEEL_RIM' ? p1 : p2;
+          const chassisPart = p1.role === 'WHEEL_RIM' ? p2 : p1;
           links.push({
-            fromPartId: p1.role === 'WHEEL_RIM' ? p2.id : p1.id,
-            toPartId: p1.role === 'WHEEL_RIM' ? p1.id : p2.id,
+            fromPartId: chassisPart.id,
+            toPartId: rimPart.id,
             connectionType: 'REVOLUTE_AXLE',
             jointAxis: [1, 0, 0],
+            anchor: [rimPart.position[0] / 1000, rimPart.position[1] / 1000, rimPart.position[2] / 1000],
           });
-        } else if (dist <= 9.0) {
-          // Only link distinct submodels if physically fastened with a pin/axle or in direct contact (<8.5mm)
+        } else {
+          // Link distinct submodels if physically fastened with a pin/axle or in direct contact (<16mm)
           const isFastener =
             p1.role === 'FASTENER_PIN' ||
             p2.role === 'FASTENER_PIN' ||
             p1.role === 'FASTENER_AXLE' ||
             p2.role === 'FASTENER_AXLE';
-          if (isFastener || dist <= 8.5) {
+          if ((isFastener && dist <= 24.0) || dist <= 16.0) {
             links.push({
               fromPartId: p1.id,
               toPartId: p2.id,

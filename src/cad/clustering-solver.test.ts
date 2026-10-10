@@ -84,4 +84,85 @@ describe('CAD Ingestion & Pin Clustering Pre-Solver', () => {
     // Largest cluster (3 parts) is assigned isRootChassis
     expect(cartCluster!.isRootChassis).toBe(true);
   });
+
+  it('marks all clusters as isFixed=true for stationary assemblies without active joints to prevent model shattering', async () => {
+    const { CadClusteringPreSolver } = await import('./clustering-solver');
+    const stationaryAssembly = {
+      name: 'Stationary Goal Frame',
+      parts: [
+        {
+          id: 'base_1',
+          partNumber: '3020',
+          position: [0, 0, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'GENERIC_RIGID' as const,
+          submodel: 'Base',
+        },
+        {
+          id: 'post_1',
+          partNumber: '32524',
+          position: [0, 50, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'STRUCTURAL_BEAM' as const,
+          submodel: 'Post',
+        },
+      ],
+      links: [], // No joints
+    };
+
+    const spec = CadClusteringPreSolver.solve(stationaryAssembly);
+    expect(spec.joints.length).toBe(0);
+    expect(spec.clusters.length).toBe(2);
+    // Both clusters should be marked isFixed: true so they never fall apart
+    for (const cluster of spec.clusters) {
+      expect(cluster.isFixed).toBe(true);
+    }
+  });
+
+  it('preserves revolute joint anchorParent and anchorChild alignment for articulated mechanisms', async () => {
+    const { CadClusteringPreSolver } = await import('./clustering-solver');
+    const mechanismAssembly = {
+      name: 'Articulated Lever',
+      parts: [
+        {
+          id: 'stand',
+          partNumber: '32524',
+          position: [0, 0, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'STRUCTURAL_BEAM' as const,
+          submodel: 'Stand',
+        },
+        {
+          id: 'arm',
+          partNumber: '32524',
+          position: [50, 20, 0] as [number, number, number],
+          rotation: [0, 0, 0, 1] as [number, number, number, number],
+          role: 'STRUCTURAL_BEAM' as const,
+          submodel: 'Arm',
+        },
+      ],
+      links: [
+        {
+          fromPartId: 'stand',
+          toPartId: 'arm',
+          connectionType: 'REVOLUTE_AXLE' as const,
+          jointAxis: [0, 0, 1] as [number, number, number],
+          anchor: [0.05, 0.02, 0] as [number, number, number],
+        },
+      ],
+    };
+
+    const spec = CadClusteringPreSolver.solve(mechanismAssembly);
+    expect(spec.joints.length).toBe(1);
+    const joint = spec.joints[0];
+    expect(joint.anchorParent).toEqual([0.05, 0.02, 0]);
+    // anchorChild must match anchorParent to avoid violent coordinate snap displacement
+    expect(joint.anchorChild).toEqual([0.05, 0.02, 0]);
+
+    // Parent cluster should be fixed, child articulated cluster can be dynamic
+    const parentCluster = spec.clusters.find((c) => c.clusterId === joint.parentClusterId);
+    const childCluster = spec.clusters.find((c) => c.clusterId === joint.childClusterId);
+    expect(parentCluster?.isFixed).toBe(true);
+    expect(childCluster?.isFixed).toBe(false);
+  });
 });

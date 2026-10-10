@@ -591,119 +591,207 @@ body, html {
   line-height: 1.4;
 }
 
-/* Field Fastener & Dual Lock Toolbar (Above Telemetry Panel) */
-.hud-field-fastener-toolbar {
-  position: absolute;
-  right: 20px;
-  bottom: 245px;
-  width: 380px;
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 8px 12px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-  z-index: 25;
-  transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hud-field-fastener-toolbar.telemetry-collapsed {
-  bottom: 20px;
-}
-
-.fastener-toolbar-content {
+/* Drawer Camera Focus Quick Bar */
+.drawer-camera-focus-bar {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(30, 41, 59, 0.7);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.focus-bar-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+/* Topbar Program Selector */
+.hud-program-selector {
+  display: flex;
   align-items: center;
   gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: 8px;
 }
 
-.fastener-tool-group {
+/* 3M Dual Lock & Field Fasteners Utility View */
+.fastener-utility-container {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  height: 100%;
 }
 
-.fastener-layout-group {
+.fastener-mode-toggle-group {
   display: flex;
-  align-items: center;
   gap: 6px;
+  margin-bottom: 8px;
 }
 
-.btn-fastener {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.fastener-tool-status-banner {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
   transition: all 0.2s ease;
 }
 
-.btn-fastener:hover {
-  background: linear-gradient(135deg, #0369a1, #1d4ed8);
+.fastener-tool-status-banner.banner-erase {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
 }
 
-.btn-fastener.active {
-  background: linear-gradient(135deg, #10b981, #059669);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
-  border-color: #34d399;
+.fastener-tool-status-banner.banner-off {
+  background: rgba(71, 85, 105, 0.2);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #94a3b8;
 }
 
-.fastener-tip-bar {
-  margin-top: 6px;
-  padding: 5px 8px;
-  background: rgba(14, 165, 233, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  border-radius: 6px;
-  font-size: 11px;
-  color: #7dd3fc;
+.fastener-batch-btn-row, .fastener-layout-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.fastener-batch-btn-row .btn, .fastener-layout-actions-row .btn {
+  flex: 1;
+}
+
+.fastener-layout-file-row {
+  display: flex;
+  gap: 8px;
+}
+
+.fastener-elements-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.fastener-roster-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.layout-dropdown-menu {
-  position: absolute;
-  right: 0;
-  bottom: 35px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
-  padding: 6px 0;
-  min-width: 195px;
-  z-index: 30;
-}
-
-.layout-dropdown-menu .dropdown-item {
-  display: block;
-  width: 100%;
-  padding: 7px 12px;
-  background: transparent;
-  border: none;
-  color: #cbd5e1;
-  text-align: left;
-  font-size: 12px;
-  cursor: pointer;
+  padding: 6px 10px;
   transition: background 0.15s ease;
 }
 
-.layout-dropdown-menu .dropdown-item:hover {
-  background: #1e293b;
-  color: #fff;
+.fastener-roster-item:hover {
+  background: rgba(30, 41, 59, 0.8);
 }
 
-.layout-dropdown-menu .dropdown-item.file-label {
-  margin: 0;
-  cursor: pointer;
+.roster-item-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  flex: 1;
 }
 
-.layout-dropdown-menu .dropdown-divider {
-  height: 1px;
-  background: #334155;
-  margin: 4px 0;
+.roster-item-name {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.roster-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.roster-item-status-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.fastener-roster-item.item-locked {
+  border-left: 3px solid #06b6d4;
+}
+
+.fastener-roster-item.item-dynamic {
+  border-left: 3px solid #64748b;
+}
+
+.btn-erase-item {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.btn-erase-item:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+}
+
+.roster-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Floating Mouse Cursor Badge Tooltip */
+.hud-pointer-tool-badge {
+  position: fixed;
+  pointer-events: none;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid #38bdf8;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #38bdf8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  transform: translate(12px, 12px);
+  transition: opacity 0.1s ease;
+}
+
+.hud-pointer-tool-badge.badge-erase {
+  border-color: #ef4444;
+  color: #f87171;
+  background: rgba(30, 10, 15, 0.95);
+}
+
+.btn-erase-all {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.btn-erase-all:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
 }
 
 .btn-fixed {

@@ -32,7 +32,7 @@ export interface HudCallbacks {
   onToggleSeasonMission?: (id: string, enable: boolean) => void;
   onApplyMissionPreset?: (presetKey: string) => void;
   onOpenInspector?: (missionId?: string) => void;
-  onToggleDualLockTool?: (active: boolean) => void;
+  onToggleDualLockTool?: (active: boolean, eraseMode?: boolean) => void;
   onToggleDualLockSelected?: () => void;
   onToggleDualLockElement?: (id: string) => void;
   onSaveFieldLayout?: () => void;
@@ -156,13 +156,14 @@ export class SimulatorHud {
   private topbarStopBtn!: HTMLButtonElement;
 
   // Activity Bar & Drawer state
-  private activeView: 'code' | 'assets' | 'field' | 'terminal' = 'code';
+  private activeView: 'code' | 'assets' | 'fastener' | 'field' | 'terminal' = 'code';
   private isDrawerOpen: boolean = true;
 
   // Drawer Panel & Views DOM elements
   private drawerPanel!: HTMLElement;
   private viewCode!: HTMLElement;
   private viewAssets!: HTMLElement;
+  private viewFastener!: HTMLElement;
   private viewField!: HTMLElement;
   private viewTerminal!: HTMLElement;
   private drawerPanelTitle!: HTMLElement;
@@ -178,16 +179,38 @@ export class SimulatorHud {
   private telemetryPanel!: HTMLElement;
   private isTelemetryOpen: boolean = true;
 
-  // Fastener & Dual Lock Toolbar
-  private fastenerToolbar!: HTMLElement;
-  private dualLockBadge!: HTMLElement;
-  private btnToggleDualLock!: HTMLElement;
-  private btnToggleSelectedLock!: HTMLButtonElement;
-  private btnSelLockIcon!: HTMLElement;
-  private btnSelLockText!: HTMLElement;
-  private fastenerTipBar!: HTMLElement;
-  private fastenerTipText!: HTMLElement;
+  // Fastener & Dual Lock Sidebar Utility
+  private fastenerCountBadge!: HTMLElement;
+  private btnFastenerModeAnchor!: HTMLButtonElement;
+  private btnFastenerModeErase!: HTMLButtonElement;
+  private btnFastenerModeOff!: HTMLButtonElement;
+  private fastenerStatusBanner!: HTMLElement;
+  private fastenerBannerIcon!: HTMLElement;
+  private fastenerBannerText!: HTMLElement;
+  private btnFastenerLockAll!: HTMLButtonElement;
+  private btnFastenerUnlockAll!: HTMLButtonElement;
+  private btnFastenerSaveLayout!: HTMLButtonElement;
+  private btnFastenerLoadLayout!: HTMLButtonElement;
+  private btnFastenerExportJson!: HTMLButtonElement;
+  private fastenerImportJsonFile!: HTMLInputElement;
+  private fastenerElementsRoster!: HTMLElement;
+  private fastenerRosterCount!: HTMLElement;
   private isDualLockToolActive: boolean = false;
+  private isDualLockEraseMode: boolean = false;
+
+  // Floating mouse cursor badge for tooltips
+  private pointerToolBadge!: HTMLElement;
+  private pointerBadgeIcon!: HTMLElement;
+  private pointerBadgeText!: HTMLElement;
+
+  // Sidebar Camera Focus quick bar
+  private btnFocusRobot!: HTMLButtonElement;
+  private btnFocusCenter!: HTMLButtonElement;
+  private cameraFocusSelect!: HTMLSelectElement;
+
+  // Topbar Program selector and Reset
+  private topbarProgramSelect!: HTMLSelectElement;
+  private topbarResetBtn!: HTMLButtonElement;
 
   // Telemetry DOM elements
   private telemPosX!: HTMLElement;
@@ -289,18 +312,21 @@ export class SimulatorHud {
             <button class="btn btn-sm btn-outline" data-cam="TOP_DOWN">🗺️ Top-Down</button>
             <button class="btn btn-sm btn-outline" data-cam="FOLLOW">🎥 Follow</button>
           </div>
-          <div class="hud-focus-container">
-            <label for="camera-focus-select" class="hud-label-inline">🔍 Focus:</label>
-            <select id="camera-focus-select" class="hud-select hud-select-sm" title="Focus camera view on robot, mat center, or any mission model">
-              <option value="robot" selected>🤖 Robot</option>
-              <option value="center">🎯 Field Center</option>
-            </select>
-          </div>
         </div>
 
         <div class="hud-top-right">
+          <div class="hud-program-selector" id="hud-program-selector">
+            <label for="topbar-program-select" class="hud-label-inline">📜 Program:</label>
+            <select id="topbar-program-select" class="hud-select hud-select-sm" title="Select Python robot script">
+              <option value="drive_straight">Mission 1: Drive Straight (30 cm)</option>
+              <option value="gyro_turn">Mission 2: Gyro 90° Turn</option>
+              <option value="line_follower">Mission 3: Proportional Line Follower</option>
+              <option value="line_squaring">Mission 4: Dual-Sensor Line Squaring</option>
+            </select>
+          </div>
           <button id="btn-topbar-run" class="btn btn-sm btn-primary" title="Run Active Python Script">▶ RUN</button>
           <button id="btn-topbar-stop" class="btn btn-sm btn-danger" disabled title="Stop Execution">⏹ STOP</button>
+          <button id="btn-topbar-reset" class="btn btn-sm btn-warning" title="Reset Robot to Start Pose">↺ RESET</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-floating-terminal" title="Toggle Floating Debug Terminal Window">📟 Terminal</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-telemetry" title="Toggle Live Telemetry Card">📡 Telemetry</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
@@ -317,6 +343,11 @@ export class SimulatorHud {
           <span class="act-icon">📦</span>
           <span class="act-label">Assets</span>
           <span class="act-badge" id="asset-count-badge">3</span>
+        </button>
+        <button class="activity-btn" id="act-btn-fastener" title="🔒 3M Dual Lock & Field Fasteners Utility" data-view="fastener">
+          <span class="act-icon">🔒</span>
+          <span class="act-label">Fastener</span>
+          <span class="act-badge" id="fastener-count-badge">0</span>
         </button>
         <button class="activity-btn" id="act-btn-field" title="⚙️ Field & Simulation Setup" data-view="field">
           <span class="act-icon">⚙️</span>
@@ -343,6 +374,16 @@ export class SimulatorHud {
           <div class="drawer-panel-header-actions">
             <button class="btn btn-xs btn-outline" id="btn-minimize-drawer" title="Minimize Drawer (or click active icon)">◀</button>
           </div>
+        </div>
+
+        <!-- Sidebar Camera Focus Quick Bar -->
+        <div class="drawer-camera-focus-bar" id="drawer-camera-focus-bar">
+          <span class="focus-bar-label">🔍 Focus:</span>
+          <button class="btn btn-xs btn-outline active" id="btn-focus-robot" title="Focus Camera on Robot">🤖 Robot</button>
+          <button class="btn btn-xs btn-outline" id="btn-focus-center" title="Focus Camera on Field Center">🎯 Center</button>
+          <select id="camera-focus-select" class="hud-select hud-select-xs" title="Focus camera view on any mission model">
+            <option value="" disabled selected>Element...</option>
+          </select>
         </div>
 
         <!-- View 1: Python Code Editor -->
@@ -528,6 +569,70 @@ export class SimulatorHud {
           </div>
         </div>
 
+        <!-- View 5: 3M Dual Lock & Field Fasteners Utility -->
+        <div class="drawer-view-content" id="view-content-fastener" style="display: none;">
+          <div class="fastener-utility-container">
+            <div class="settings-card">
+              <div class="settings-card-title">🔒 Fastener Interactive Tool Mode</div>
+              <p class="settings-card-desc">Click any element or sub-piece directly on the 3D field to stick or remove 3M Dual Lock.</p>
+              <div class="fastener-mode-toggle-group">
+                <button id="btn-fastener-mode-anchor" class="btn btn-sm btn-outline active" title="Anchor Mode: Click element on field to place 3M Dual Lock">
+                  🔒 Anchor Mode
+                </button>
+                <button id="btn-fastener-mode-erase" class="btn btn-sm btn-outline" title="Erase Mode: Click anchored element or Dual Lock marker to remove fastener">
+                  ✂️ Erase Dual Lock
+                </button>
+                <button id="btn-fastener-mode-off" class="btn btn-sm btn-ghost" title="Turn off fastener pointer tool">
+                  👁️ Tool Off
+                </button>
+              </div>
+              <div class="fastener-tool-status-banner" id="fastener-tool-status-banner">
+                <span class="banner-icon" id="fastener-banner-icon">🔒</span>
+                <span class="banner-text" id="fastener-banner-text">Anchor Mode Active: Click any element on the field mat to fasten it with 3M Dual Lock.</span>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">⚡ Batch Fastener Actions</div>
+              <div class="fastener-batch-btn-row">
+                <button id="btn-fastener-lock-all" class="btn btn-sm btn-outline" title="Dual-Lock all station baseplates to the mat">
+                  🔒 Dual Lock All Bases
+                </button>
+                <button id="btn-fastener-unlock-all" class="btn btn-sm btn-outline btn-erase-all" title="Remove all Dual Locks and make all models dynamic">
+                  ✂️ Erase All Dual Locks
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">💾 Competition Field Layout & Anchors</div>
+              <p class="settings-card-desc">Persist all element coordinates and Dual Lock anchor points in browser local storage.</p>
+              <div class="fastener-layout-actions-row">
+                <button id="btn-fastener-save-layout" class="btn btn-sm btn-primary" title="Save layout and dual lock points to browser storage">
+                  💾 Save Layout
+                </button>
+                <button id="btn-fastener-load-layout" class="btn btn-sm btn-secondary" title="Restore saved layout from browser storage">
+                  📂 Load Layout
+                </button>
+              </div>
+              <div class="fastener-layout-file-row">
+                <button id="btn-fastener-export-json" class="btn btn-xs btn-outline">📥 Export JSON</button>
+                <label class="btn btn-xs btn-outline file-upload-btn">
+                  📤 Import JSON
+                  <input type="file" id="fastener-import-json-file" accept=".json" style="display: none;">
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">📋 Field Fastener Roster (<span id="fastener-roster-count">0</span> Anchored)</div>
+              <div class="fastener-elements-roster" id="fastener-elements-roster">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Resizer handle on right edge -->
         <div class="hud-panel-resizer" id="hud-panel-resizer" title="Drag to resize panel"></div>
       </aside>
@@ -554,50 +659,6 @@ export class SimulatorHud {
         <div class="mission-status-chip">
           <span class="chip-label">STATUS:</span>
           <span class="chip-val" id="mission-score-text">UNSOLVED (0%)</span>
-        </div>
-      </div>
-
-      <!-- Field Fastener & Dual Lock Toolbar (Above Telemetry Panel) -->
-      <div class="hud-field-fastener-toolbar" id="hud-field-fastener-toolbar">
-        <div class="fastener-toolbar-content">
-          <div class="fastener-tool-group">
-            <button id="btn-toggle-dual-lock-tool" class="btn btn-sm btn-fastener" title="Dual Lock Tool: Click any object on field to toggle 3M mat anchor">
-              <span class="fastener-icon">🔒</span>
-              <span class="fastener-title">Dual Lock</span>
-              <span class="badge badge-xs" id="dual-lock-badge">OFF</span>
-            </button>
-            <button id="btn-toggle-selected-lock" class="btn btn-sm btn-outline" title="Toggle Dual Lock for currently selected element" disabled>
-              <span id="btn-sel-lock-icon">📌</span>
-              <span id="btn-sel-lock-text">Lock Selected</span>
-            </button>
-          </div>
-          <div class="fastener-layout-group">
-            <button id="btn-save-layout" class="btn btn-sm btn-outline" title="Save current field layout & Dual Lock anchors (Local Storage)">
-              💾 Save
-            </button>
-            <button id="btn-load-layout" class="btn btn-sm btn-outline" title="Load saved layout from Local Storage">
-              📂 Load
-            </button>
-            <div class="dropdown-wrapper" style="position: relative;">
-              <button id="btn-layout-menu" class="btn btn-sm btn-outline" style="padding: 4px 8px;" title="Layout Options">
-                ⚙️
-              </button>
-              <div class="layout-dropdown-menu" id="layout-dropdown-menu" style="display: none;">
-                <button class="dropdown-item" id="menu-export-layout">📥 Export Layout JSON</button>
-                <label class="dropdown-item file-label">
-                  📤 Import Layout JSON
-                  <input type="file" id="menu-import-layout-file" accept=".json" style="display: none;">
-                </label>
-                <div class="dropdown-divider"></div>
-                <button class="dropdown-item" id="menu-lock-all-bases">🔒 Dual Lock All Bases</button>
-                <button class="dropdown-item" id="menu-unlock-all">🔓 Unlock All (Make Dynamic)</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="fastener-tip-bar" id="fastener-tip-bar" style="display: none;">
-          <span class="tip-icon">🎯</span>
-          <span class="tip-text" id="fastener-tip-text">Dual Lock Tool Active: Click an object on the field to anchor it.</span>
         </div>
       </div>
 
@@ -774,6 +835,12 @@ export class SimulatorHud {
           </div>
         </div>
       </div>
+
+      <!-- Floating Pointer Tool Badge for 3D Viewport Hover Indicators -->
+      <div id="hud-pointer-tool-badge" class="hud-pointer-tool-badge" style="display: none;">
+        <span id="pointer-badge-icon">🔒</span>
+        <span id="pointer-badge-text">Click to Anchor</span>
+      </div>
     `;
 
     // Cache elements
@@ -785,16 +852,24 @@ export class SimulatorHud {
     this.stopBtn = this.rootElement.querySelector('#btn-stop')!;
     this.topbarRunBtn = this.rootElement.querySelector('#btn-topbar-run')!;
     this.topbarStopBtn = this.rootElement.querySelector('#btn-topbar-stop')!;
+    this.topbarProgramSelect = this.rootElement.querySelector('#topbar-program-select')!;
+    this.topbarResetBtn = this.rootElement.querySelector('#btn-topbar-reset')!;
 
     // Drawer and view elements
     this.drawerPanel = this.rootElement.querySelector('#hud-drawer-panel')!;
     this.viewCode = this.rootElement.querySelector('#view-content-code')!;
     this.viewAssets = this.rootElement.querySelector('#view-content-assets')!;
+    this.viewFastener = this.rootElement.querySelector('#view-content-fastener')!;
     this.viewField = this.rootElement.querySelector('#view-content-field')!;
     this.viewTerminal = this.rootElement.querySelector('#view-content-terminal')!;
     this.drawerPanelTitle = this.rootElement.querySelector('#drawer-panel-title')!;
     this.drawerPanelIcon = this.rootElement.querySelector('#drawer-panel-icon')!;
     this.drawerTermLog = this.rootElement.querySelector('#terminal-drawer-log')!;
+
+    // Sidebar Camera Focus quick bar
+    this.btnFocusRobot = this.rootElement.querySelector('#btn-focus-robot')!;
+    this.btnFocusCenter = this.rootElement.querySelector('#btn-focus-center')!;
+    this.cameraFocusSelect = this.rootElement.querySelector('#camera-focus-select')!;
 
     // Floating Terminal elements
     this.floatingTerminal = this.rootElement.querySelector('#hud-floating-terminal')!;
@@ -817,15 +892,27 @@ export class SimulatorHud {
     this.bottomFpsMs = this.rootElement.querySelector('#bottom-fps-ms')!;
     this.profilerModal = this.rootElement.querySelector('#hud-profiler-modal')!;
 
-    // Fastener & Dual Lock Toolbar
-    this.fastenerToolbar = this.rootElement.querySelector('#hud-field-fastener-toolbar')!;
-    this.dualLockBadge = this.rootElement.querySelector('#dual-lock-badge')!;
-    this.btnToggleDualLock = this.rootElement.querySelector('#btn-toggle-dual-lock-tool')!;
-    this.btnToggleSelectedLock = this.rootElement.querySelector('#btn-toggle-selected-lock')!;
-    this.btnSelLockIcon = this.rootElement.querySelector('#btn-sel-lock-icon')!;
-    this.btnSelLockText = this.rootElement.querySelector('#btn-sel-lock-text')!;
-    this.fastenerTipBar = this.rootElement.querySelector('#fastener-tip-bar')!;
-    this.fastenerTipText = this.rootElement.querySelector('#fastener-tip-text')!;
+    // Fastener & Dual Lock Sidebar Utility
+    this.fastenerCountBadge = this.rootElement.querySelector('#fastener-count-badge')!;
+    this.btnFastenerModeAnchor = this.rootElement.querySelector('#btn-fastener-mode-anchor')!;
+    this.btnFastenerModeErase = this.rootElement.querySelector('#btn-fastener-mode-erase')!;
+    this.btnFastenerModeOff = this.rootElement.querySelector('#btn-fastener-mode-off')!;
+    this.fastenerStatusBanner = this.rootElement.querySelector('#fastener-tool-status-banner')!;
+    this.fastenerBannerIcon = this.rootElement.querySelector('#fastener-banner-icon')!;
+    this.fastenerBannerText = this.rootElement.querySelector('#fastener-banner-text')!;
+    this.btnFastenerLockAll = this.rootElement.querySelector('#btn-fastener-lock-all')!;
+    this.btnFastenerUnlockAll = this.rootElement.querySelector('#btn-fastener-unlock-all')!;
+    this.btnFastenerSaveLayout = this.rootElement.querySelector('#btn-fastener-save-layout')!;
+    this.btnFastenerLoadLayout = this.rootElement.querySelector('#btn-fastener-load-layout')!;
+    this.btnFastenerExportJson = this.rootElement.querySelector('#btn-fastener-export-json')!;
+    this.fastenerImportJsonFile = this.rootElement.querySelector('#fastener-import-json-file')!;
+    this.fastenerElementsRoster = this.rootElement.querySelector('#fastener-elements-roster')!;
+    this.fastenerRosterCount = this.rootElement.querySelector('#fastener-roster-count')!;
+
+    // Floating pointer tool badge
+    this.pointerToolBadge = this.rootElement.querySelector('#hud-pointer-tool-badge')!;
+    this.pointerBadgeIcon = this.rootElement.querySelector('#pointer-badge-icon')!;
+    this.pointerBadgeText = this.rootElement.querySelector('#pointer-badge-text')!;
 
     this.spawnInputX = this.rootElement.querySelector('#spawn-x')!;
     this.spawnInputZ = this.rootElement.querySelector('#spawn-z')!;
@@ -862,15 +949,30 @@ export class SimulatorHud {
       this.saveScriptTabsToStorage();
     });
 
-    // 2. Camera Focus Dropdown
-    const cameraFocusSelect = this.rootElement.querySelector('#camera-focus-select') as HTMLSelectElement | null;
-    cameraFocusSelect?.addEventListener('change', () => {
-      const val = cameraFocusSelect.value;
+    // 2. Sidebar Camera Focus Quick Bar
+    this.btnFocusRobot?.addEventListener('click', () => {
+      this.callbacks.onFocusTarget?.('robot');
+      this.btnFocusRobot.classList.add('active');
+      this.btnFocusCenter.classList.remove('active');
+      if (this.cameraFocusSelect) this.cameraFocusSelect.value = 'robot';
+    });
+
+    this.btnFocusCenter?.addEventListener('click', () => {
+      this.callbacks.onFocusTarget?.('center');
+      this.btnFocusCenter.classList.add('active');
+      this.btnFocusRobot.classList.remove('active');
+      if (this.cameraFocusSelect) this.cameraFocusSelect.value = 'center';
+    });
+
+    this.cameraFocusSelect?.addEventListener('change', () => {
+      const val = this.cameraFocusSelect.value;
       if (val === 'robot' || val === 'center') {
         this.callbacks.onFocusTarget?.(val);
       } else if (val) {
         this.callbacks.onElementFocus?.(val);
       }
+      this.btnFocusRobot?.classList.toggle('active', val === 'robot');
+      this.btnFocusCenter?.classList.toggle('active', val === 'center');
     });
 
     // Mission dropdown change
@@ -1030,19 +1132,55 @@ export class SimulatorHud {
       });
     });
 
-    // Topbar Quick Run & Stop Buttons
+    // Topbar Quick Run, Stop & Reset Buttons
     this.topbarRunBtn?.addEventListener('click', () => {
       this.runBtn.click();
     });
     this.topbarStopBtn?.addEventListener('click', () => {
       this.stopBtn.click();
     });
+    this.topbarResetBtn?.addEventListener('click', () => {
+      this.callbacks.onResetRobot();
+      this.logConsole('↺ Robot reset to starting pose.');
+    });
+
+    // Topbar Program Dropdown selector
+    this.topbarProgramSelect?.addEventListener('change', () => {
+      const val = this.topbarProgramSelect.value;
+      if (val.startsWith('tab_')) {
+        const idx = parseInt(val.replace('tab_', ''), 10);
+        this.switchScriptTab(idx);
+      } else if (val.startsWith('sample_')) {
+        const key = val.replace('sample_', '');
+        const sample = SAMPLE_MISSIONS[key];
+        if (sample) {
+          this.codeTextarea.value = sample.code;
+          if (this.scriptTabs[this.activeTabIndex]) {
+            this.scriptTabs[this.activeTabIndex].code = sample.code;
+            this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
+            this.renderScriptTabs();
+            this.saveScriptTabsToStorage();
+          }
+          this.logConsole(`Loaded ${sample.title} into active editor.`);
+        }
+      } else if (SAMPLE_MISSIONS[val]) {
+        const sample = SAMPLE_MISSIONS[val];
+        this.codeTextarea.value = sample.code;
+        if (this.scriptTabs[this.activeTabIndex]) {
+          this.scriptTabs[this.activeTabIndex].code = sample.code;
+          this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
+          this.renderScriptTabs();
+          this.saveScriptTabsToStorage();
+        }
+        this.logConsole(`Loaded ${sample.title} into active editor.`);
+      }
+    });
 
     // Activity Bar View Switching
     const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
     actBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
-        const view = btn.getAttribute('data-view') as 'code' | 'assets' | 'field' | 'terminal';
+        const view = btn.getAttribute('data-view') as 'code' | 'assets' | 'fastener' | 'field' | 'terminal';
         if (view === this.activeView && this.isDrawerOpen) {
           this.toggleDrawer(false);
         } else {
@@ -1169,66 +1307,53 @@ export class SimulatorHud {
       this.toggleTelemetryPanel();
     });
 
-    // Fastener & Dual Lock Toolbar
-    this.btnToggleDualLock.addEventListener('click', () => {
-      this.isDualLockToolActive = !this.isDualLockToolActive;
-      this.setDualLockToolActive(this.isDualLockToolActive);
-      this.callbacks.onToggleDualLockTool?.(this.isDualLockToolActive);
-      this.logConsole(`Dual Lock Tool: ${this.isDualLockToolActive ? 'ENABLED (Click object on mat to anchor/unanchor)' : 'DISABLED'}`);
+    // Fastener & Dual Lock Sidebar Utility Controls
+    this.btnFastenerModeAnchor?.addEventListener('click', () => {
+      this.setDualLockToolMode('anchor');
     });
 
-    this.btnToggleSelectedLock.addEventListener('click', () => {
-      this.callbacks.onToggleDualLockSelected?.();
+    this.btnFastenerModeErase?.addEventListener('click', () => {
+      this.setDualLockToolMode('erase');
     });
 
-    const btnSaveLayout = this.rootElement.querySelector('#btn-save-layout');
-    btnSaveLayout?.addEventListener('click', () => {
+    this.btnFastenerModeOff?.addEventListener('click', () => {
+      this.setDualLockToolMode('off');
+    });
+
+    this.btnFastenerLockAll?.addEventListener('click', () => {
+      this.callbacks.onDualLockAllBases?.();
+    });
+
+    this.btnFastenerUnlockAll?.addEventListener('click', () => {
+      this.callbacks.onUnlockAllElements?.();
+    });
+
+    this.btnFastenerSaveLayout?.addEventListener('click', () => {
       this.callbacks.onSaveFieldLayout?.();
     });
 
-    const btnLoadLayout = this.rootElement.querySelector('#btn-load-layout');
-    btnLoadLayout?.addEventListener('click', () => {
+    this.btnFastenerLoadLayout?.addEventListener('click', () => {
       this.callbacks.onLoadFieldLayout?.();
     });
 
-    const btnLayoutMenu = this.rootElement.querySelector('#btn-layout-menu');
-    const layoutDropdown = this.rootElement.querySelector('#layout-dropdown-menu') as HTMLElement;
-    btnLayoutMenu?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = layoutDropdown.style.display !== 'none';
-      layoutDropdown.style.display = isOpen ? 'none' : 'block';
-    });
-
-    window.addEventListener('click', () => {
-      if (layoutDropdown) layoutDropdown.style.display = 'none';
-    });
-
-    const menuExport = this.rootElement.querySelector('#menu-export-layout');
-    menuExport?.addEventListener('click', () => {
+    this.btnFastenerExportJson?.addEventListener('click', () => {
       this.callbacks.onExportFieldLayout?.();
-      layoutDropdown.style.display = 'none';
     });
 
-    const menuImportFile = this.rootElement.querySelector('#menu-import-layout-file') as HTMLInputElement;
-    menuImportFile?.addEventListener('change', (e: any) => {
+    this.fastenerImportJsonFile?.addEventListener('change', (e: any) => {
       const file = e.target.files?.[0];
       if (file) {
         this.callbacks.onImportFieldLayout?.(file);
       }
-      menuImportFile.value = '';
-      layoutDropdown.style.display = 'none';
+      this.fastenerImportJsonFile.value = '';
     });
 
-    const menuLockAll = this.rootElement.querySelector('#menu-lock-all-bases');
-    menuLockAll?.addEventListener('click', () => {
-      this.callbacks.onDualLockAllBases?.();
-      layoutDropdown.style.display = 'none';
-    });
-
-    const menuUnlockAll = this.rootElement.querySelector('#menu-unlock-all');
-    menuUnlockAll?.addEventListener('click', () => {
-      this.callbacks.onUnlockAllElements?.();
-      layoutDropdown.style.display = 'none';
+    // Window pointermove listener for floating cursor badge
+    window.addEventListener('pointermove', (e: PointerEvent) => {
+      if (this.isDualLockToolActive && this.pointerToolBadge) {
+        this.pointerToolBadge.style.left = `${e.clientX}px`;
+        this.pointerToolBadge.style.top = `${e.clientY}px`;
+      }
     });
 
     // Mode dropdown change
@@ -1628,7 +1753,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     if (this.topbarStopBtn) this.topbarStopBtn.disabled = !isRunning;
   }
 
-  public setActiveDrawerJob(view: 'code' | 'assets' | 'field' | 'terminal'): void {
+  public setActiveDrawerJob(view: 'code' | 'assets' | 'fastener' | 'field' | 'terminal'): void {
     this.activeView = view;
     this.isDrawerOpen = true;
     this.drawerPanel.style.display = 'flex';
@@ -1642,6 +1767,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     // Update view contents
     this.viewCode.style.display = view === 'code' ? 'flex' : 'none';
     this.viewAssets.style.display = view === 'assets' ? 'flex' : 'none';
+    this.viewFastener.style.display = view === 'fastener' ? 'flex' : 'none';
     this.viewField.style.display = view === 'field' ? 'flex' : 'none';
     this.viewTerminal.style.display = view === 'terminal' ? 'flex' : 'none';
 
@@ -1649,12 +1775,17 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     const titles: Record<string, { icon: string; title: string }> = {
       code: { icon: '💻', title: 'Python Code Editor' },
       assets: { icon: '📦', title: 'Mission Asset Library' },
+      fastener: { icon: '🔒', title: '3M Dual Lock & Field Fasteners' },
       field: { icon: '⚙️', title: 'Field & Simulation Setup' },
       terminal: { icon: '📟', title: 'Debug Console Output' },
     };
     const t = titles[view] || { icon: '⚙️', title: 'Settings' };
     this.drawerPanelIcon.textContent = t.icon;
     this.drawerPanelTitle.textContent = t.title;
+
+    if (view === 'fastener') {
+      this.renderFastenerRoster();
+    }
   }
 
   public toggleDrawer(open?: boolean): void {
@@ -1682,41 +1813,191 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     this.telemetryPanel.style.display = this.isTelemetryOpen ? 'block' : 'none';
     const btn = this.rootElement.querySelector('#btn-toggle-telemetry');
     btn?.classList.toggle('active', this.isTelemetryOpen);
-    this.fastenerToolbar?.classList.toggle('telemetry-collapsed', !this.isTelemetryOpen);
   }
 
-  public setSelectedElement(id: string | null, isDualLocked = false, name = ''): void {
-    if (id) {
-      this.btnToggleSelectedLock.disabled = false;
-      this.btnSelLockIcon.textContent = isDualLocked ? '🔓' : '🔒';
-      this.btnSelLockText.textContent = isDualLocked ? 'Unfasten' : 'Lock Selected';
-      this.btnToggleSelectedLock.title = `${isDualLocked ? 'Unfasten from mat (make dynamic)' : 'Dual Lock to mat (anchor)'}: ${name || id}`;
+  public setDualLockToolMode(mode: 'anchor' | 'erase' | 'off'): void {
+    if (mode === 'anchor') {
+      this.isDualLockToolActive = true;
+      this.isDualLockEraseMode = false;
+      this.btnFastenerModeAnchor?.classList.add('active');
+      this.btnFastenerModeErase?.classList.remove('active');
+      this.btnFastenerModeOff?.classList.remove('active');
+      if (this.fastenerStatusBanner) {
+        this.fastenerStatusBanner.className = 'fastener-tool-status-banner banner-anchor';
+      }
+      if (this.fastenerBannerIcon) this.fastenerBannerIcon.textContent = '🔒';
+      if (this.fastenerBannerText) {
+        this.fastenerBannerText.textContent = 'Anchor Mode Active: Click any element or baseplate on the field mat to fasten it with 3M Dual Lock.';
+      }
+      this.callbacks.onToggleDualLockTool?.(true, false);
+      if (this.pointerToolBadge) this.pointerToolBadge.style.display = 'flex';
+      this.setPointerToolInfo(null);
+      this.logConsole('🔒 Fastener Tool: ANCHOR MODE (Click elements on field mat to fasten)');
+    } else if (mode === 'erase') {
+      this.isDualLockToolActive = true;
+      this.isDualLockEraseMode = true;
+      this.btnFastenerModeAnchor?.classList.remove('active');
+      this.btnFastenerModeErase?.classList.add('active');
+      this.btnFastenerModeOff?.classList.remove('active');
+      if (this.fastenerStatusBanner) {
+        this.fastenerStatusBanner.className = 'fastener-tool-status-banner banner-erase';
+      }
+      if (this.fastenerBannerIcon) this.fastenerBannerIcon.textContent = '✂️';
+      if (this.fastenerBannerText) {
+        this.fastenerBannerText.textContent = 'Erase Mode Active: Click any anchored element or 3D Dual Lock marker to remove fastener.';
+      }
+      this.callbacks.onToggleDualLockTool?.(true, true);
+      if (this.pointerToolBadge) this.pointerToolBadge.style.display = 'flex';
+      this.setPointerToolInfo(null);
+      this.logConsole('✂️ Fastener Tool: ERASE MODE (Click fasteners or anchored pieces to remove)');
     } else {
-      this.btnToggleSelectedLock.disabled = true;
-      this.btnSelLockIcon.textContent = '📌';
-      this.btnSelLockText.textContent = 'Lock Selected';
-      this.btnToggleSelectedLock.title = 'No element currently selected';
+      this.isDualLockToolActive = false;
+      this.isDualLockEraseMode = false;
+      this.btnFastenerModeAnchor?.classList.remove('active');
+      this.btnFastenerModeErase?.classList.remove('active');
+      this.btnFastenerModeOff?.classList.add('active');
+      if (this.fastenerStatusBanner) {
+        this.fastenerStatusBanner.className = 'fastener-tool-status-banner banner-off';
+      }
+      if (this.fastenerBannerIcon) this.fastenerBannerIcon.textContent = '👁️';
+      if (this.fastenerBannerText) {
+        this.fastenerBannerText.textContent = 'Tool Inactive: Normal pointer mode. Click Anchor or Erase above to modify fasteners.';
+      }
+      this.callbacks.onToggleDualLockTool?.(false, false);
+      if (this.pointerToolBadge) this.pointerToolBadge.style.display = 'none';
+      this.logConsole('👁️ Fastener Tool: DEACTIVATED');
     }
   }
 
-  public setDualLockToolActive(active: boolean): void {
-    this.isDualLockToolActive = active;
-    this.btnToggleDualLock.classList.toggle('active', active);
-    this.dualLockBadge.textContent = active ? 'ACTIVE' : 'OFF';
-    this.dualLockBadge.className = `badge badge-xs ${active ? 'badge-success' : ''}`;
-    this.fastenerTipBar.style.display = active ? 'flex' : 'none';
+  public setDualLockToolActive(active: boolean, eraseMode: boolean = false): void {
+    if (!active) {
+      this.setDualLockToolMode('off');
+    } else if (eraseMode) {
+      this.setDualLockToolMode('erase');
+    } else {
+      this.setDualLockToolMode('anchor');
+    }
+  }
+
+  public setPointerToolInfo(info: { elementId: string | null; name?: string; isLocked: boolean; isEraseMode: boolean } | null): void {
+    if (!this.pointerToolBadge) return;
+    if (!this.isDualLockToolActive) {
+      this.pointerToolBadge.style.display = 'none';
+      return;
+    }
+    this.pointerToolBadge.style.display = 'flex';
+    if (info) {
+      const displayName = info.name || info.elementId || 'Element';
+      if (info.isEraseMode) {
+        this.pointerToolBadge.classList.add('badge-erase');
+        this.pointerBadgeIcon.textContent = '✂️';
+        this.pointerBadgeText.textContent = info.isLocked
+          ? `Remove Fastener: ${displayName}`
+          : `Not Anchored: ${displayName}`;
+      } else {
+        this.pointerToolBadge.classList.remove('badge-erase');
+        this.pointerBadgeIcon.textContent = info.isLocked ? '🔒' : '➕';
+        this.pointerBadgeText.textContent = info.isLocked
+          ? `Anchored: ${displayName}`
+          : `Fasten: ${displayName}`;
+      }
+    } else {
+      if (this.isDualLockEraseMode) {
+        this.pointerToolBadge.classList.add('badge-erase');
+        this.pointerBadgeIcon.textContent = '✂️';
+        this.pointerBadgeText.textContent = 'Click anchored model to remove';
+      } else {
+        this.pointerToolBadge.classList.remove('badge-erase');
+        this.pointerBadgeIcon.textContent = '🔒';
+        this.pointerBadgeText.textContent = 'Click model to anchor with Dual Lock';
+      }
+    }
+  }
+
+  public setSelectedElement(_id: string | null, _isDualLocked = false, _name = ''): void {
+    if (this.activeView === 'fastener') {
+      this.renderFastenerRoster();
+    }
   }
 
   public showFastenerStatus(text: string, durationMs = 3000): void {
-    this.fastenerTipText.textContent = text;
-    this.fastenerTipBar.style.display = 'flex';
-    if (!this.isDualLockToolActive) {
+    if (this.fastenerBannerText) {
+      this.fastenerBannerText.textContent = text;
       setTimeout(() => {
-        if (!this.isDualLockToolActive) {
-          this.fastenerTipBar.style.display = 'none';
+        if (this.fastenerBannerText) {
+          if (this.isDualLockToolActive) {
+            this.fastenerBannerText.textContent = this.isDualLockEraseMode
+              ? 'Erase Mode Active: Click any anchored element or Dual Lock marker to remove fastener.'
+              : 'Anchor Mode Active: Click any element on the field mat to fasten it with 3M Dual Lock.';
+          } else {
+            this.fastenerBannerText.textContent = 'Tool Inactive: Normal pointer mode. Click Anchor or Erase above to modify fasteners.';
+          }
         }
       }, durationMs);
     }
+  }
+
+  public renderFastenerRoster(): void {
+    if (!this.fastenerElementsRoster) return;
+
+    const placedElements = this.missionElementsData.filter((e) => e.isPlacedOnField !== false);
+    const lockedCount = placedElements.filter((e) => e.isDualLocked).length;
+
+    if (this.fastenerRosterCount) {
+      this.fastenerRosterCount.textContent = lockedCount.toString();
+    }
+    if (this.fastenerCountBadge) {
+      this.fastenerCountBadge.textContent = lockedCount.toString();
+    }
+
+    if (placedElements.length === 0) {
+      this.fastenerElementsRoster.innerHTML = `
+        <div style="color:var(--text-muted);font-size:11px;padding:8px;text-align:center;">
+          No active mission models on the mat.<br/>
+          Load a mission preset or deploy models from the Asset Library.
+        </div>
+      `;
+      return;
+    }
+
+    this.fastenerElementsRoster.innerHTML = placedElements
+      .map((elem) => {
+        const isLocked = !!elem.isDualLocked;
+        return `
+          <div class="fastener-roster-item ${isLocked ? 'item-locked' : 'item-dynamic'}" data-element-id="${elem.id}">
+            <div class="roster-item-info">
+              <span class="roster-item-status-icon">${isLocked ? '🔒' : '🌀'}</span>
+              <div class="roster-item-details">
+                <span class="roster-item-name" title="${elem.name}">${elem.name}</span>
+                <span class="roster-item-status-label">${isLocked ? 'Anchored to Mat (Fixed Base)' : 'Dynamic (Free to slide/fall)'}</span>
+              </div>
+            </div>
+            <div class="roster-item-actions">
+              <button class="btn btn-xs ${isLocked ? 'btn-outline btn-erase-item' : 'btn-primary'}" data-action="toggle-lock" data-id="${elem.id}" title="${isLocked ? 'Remove 3M Dual Lock' : 'Fasten with 3M Dual Lock'}">
+                ${isLocked ? '✂️ Unfasten' : '🔒 Anchor'}
+              </button>
+              <button class="btn btn-xs btn-ghost" data-action="focus" data-id="${elem.id}" title="Focus camera on ${elem.name}">
+                🔍
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    this.fastenerElementsRoster.querySelectorAll('[data-action="toggle-lock"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onToggleDualLockElement?.(id);
+      });
+    });
+
+    this.fastenerElementsRoster.querySelectorAll('[data-action="focus"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onElementFocus?.(id);
+      });
+    });
   }
 
   public toggleAssetDrawer(open?: boolean): void {
@@ -1754,6 +2035,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     const activeCount = elements.filter((e) => e.isPlacedOnField !== false).length;
     this.assetCountBadge.textContent = activeCount.toString();
     this.renderDrawerElements();
+    this.renderFastenerRoster();
     this.updateFocusDropdown();
   }
 
@@ -1987,37 +2269,71 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     }
   }
 
+  public updateTopbarProgramSelect(): void {
+    if (!this.topbarProgramSelect) return;
+
+    const currentVal = this.topbarProgramSelect.value;
+    let html = '';
+
+    // 1. Open Editor Scripts
+    if (this.scriptTabs.length > 0) {
+      html += `<optgroup label="📜 Open Editor Tabs">`;
+      this.scriptTabs.forEach((tab, idx) => {
+        const isSel = idx === this.activeTabIndex;
+        html += `<option value="tab_${idx}" ${isSel ? 'selected' : ''}>${tab.title}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    // 2. Sample Season Missions
+    html += `<optgroup label="🎯 Sample Missions">`;
+    Object.entries(SAMPLE_MISSIONS).forEach(([key, sample]) => {
+      html += `<option value="sample_${key}">${sample.title}</option>`;
+    });
+    html += `</optgroup>`;
+
+    this.topbarProgramSelect.innerHTML = html;
+
+    if (this.topbarProgramSelect.querySelector(`option[value="${currentVal}"]`)) {
+      this.topbarProgramSelect.value = currentVal;
+    } else {
+      this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
+    }
+  }
+
   public renderScriptTabs(): void {
     const list = this.rootElement.querySelector('#script-tabs-list');
-    if (!list) return;
+    if (list) {
+      list.innerHTML = this.scriptTabs
+        .map((tab, idx) => {
+          const isActive = idx === this.activeTabIndex;
+          const canClose = this.scriptTabs.length > 1;
+          return `
+            <div class="script-tab ${isActive ? 'active' : ''}" data-tab-idx="${idx}" title="${tab.title}">
+              <span class="tab-title">${tab.title}</span>
+              ${canClose ? `<button class="tab-close-btn" data-close-tab="${idx}" title="Close tab">✕</button>` : ''}
+            </div>
+          `;
+        })
+        .join('');
 
-    list.innerHTML = this.scriptTabs
-      .map((tab, idx) => {
-        const isActive = idx === this.activeTabIndex;
-        const canClose = this.scriptTabs.length > 1;
-        return `
-          <div class="script-tab ${isActive ? 'active' : ''}" data-tab-idx="${idx}" title="${tab.title}">
-            <span class="tab-title">${tab.title}</span>
-            ${canClose ? `<button class="tab-close-btn" data-close-tab="${idx}" title="Close tab">✕</button>` : ''}
-          </div>
-        `;
-      })
-      .join('');
-
-    // Tab click handlers
-    list.querySelectorAll('.script-tab').forEach((tabEl) => {
-      tabEl.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.classList.contains('tab-close-btn')) {
-          e.stopPropagation();
-          const closeIdx = parseInt(target.getAttribute('data-close-tab') || '0', 10);
-          this.closeScriptTab(closeIdx);
-          return;
-        }
-        const idx = parseInt(tabEl.getAttribute('data-tab-idx') || '0', 10);
-        this.switchScriptTab(idx);
+      // Tab click handlers
+      list.querySelectorAll('.script-tab').forEach((tabEl) => {
+        tabEl.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement;
+          if (target.classList.contains('tab-close-btn')) {
+            e.stopPropagation();
+            const closeIdx = parseInt(target.getAttribute('data-close-tab') || '0', 10);
+            this.closeScriptTab(closeIdx);
+            return;
+          }
+          const idx = parseInt(tabEl.getAttribute('data-tab-idx') || '0', 10);
+          this.switchScriptTab(idx);
+        });
       });
-    });
+    }
+
+    this.updateTopbarProgramSelect();
   }
 
   public switchScriptTab(idx: number): void {

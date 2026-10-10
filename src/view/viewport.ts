@@ -22,9 +22,14 @@ export class Viewport3D {
   public onElementDrop?: (elementId: string, x: number, z: number, yawDegrees: number) => void;
   public onElementSelected?: (elementId: string | null) => void;
   public onDualLockToggle?: (elementId: string, locked: boolean, point: { x: number; z: number }) => void;
+  public onHoverFastenerChange?: (info: { elementId: string | null; name?: string; isLocked: boolean; isEraseMode: boolean } | null) => void;
 
   private isDualLockToolActive: boolean = false;
+  private isDualLockEraseMode: boolean = false;
   private dualLockHoverPad!: THREE.Group;
+  private hoverRingMat!: THREE.MeshBasicMaterial;
+  private hoverBoxMat!: THREE.MeshBasicMaterial;
+  private lastHoveredDualLockElem: any = null;
 
   private tableMesh!: THREE.Group;
   private container: HTMLElement;
@@ -460,30 +465,48 @@ export class Viewport3D {
     this.dualLockHoverPad = new THREE.Group();
     this.dualLockHoverPad.visible = false;
 
-    // Outer cyan highlight frame
+    // Outer highlight ring frame
     const ringGeo = new THREE.RingGeometry(0.025, 0.040, 24);
     ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({
+    this.hoverRingMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.85,
     });
-    this.dualLockHoverPad.add(new THREE.Mesh(ringGeo, ringMat));
+    this.dualLockHoverPad.add(new THREE.Mesh(ringGeo, this.hoverRingMat));
 
     // 3D Pad box preview
     const boxGeo = new THREE.BoxGeometry(0.040, 0.004, 0.040);
-    const boxMat = new THREE.MeshBasicMaterial({
+    this.hoverBoxMat = new THREE.MeshBasicMaterial({
       color: 0x0284c7,
       transparent: true,
       opacity: 0.65,
       wireframe: true,
     });
-    const box = new THREE.Mesh(boxGeo, boxMat);
+    const box = new THREE.Mesh(boxGeo, this.hoverBoxMat);
     box.position.y = 0.002;
     this.dualLockHoverPad.add(box);
 
     this.scene.add(this.dualLockHoverPad);
+  }
+
+  private updateDualLockHoverPadStyle(): void {
+    if (!this.hoverRingMat || !this.hoverBoxMat) return;
+    if (this.isDualLockEraseMode) {
+      this.hoverRingMat.color.setHex(0xef4444);
+      this.hoverBoxMat.color.setHex(0xdc2626);
+    } else {
+      this.hoverRingMat.color.setHex(0x38bdf8);
+      this.hoverBoxMat.color.setHex(0x0284c7);
+    }
+  }
+
+  private clearAllDualLockHighlights(): void {
+    if (this.lastHoveredDualLockElem?.setDualLockHoverHighlight) {
+      this.lastHoveredDualLockElem.setDualLockHoverHighlight(false, false);
+      this.lastHoveredDualLockElem = null;
+    }
   }
 
   private createRobotHitProxy(): void {
@@ -575,16 +598,31 @@ export class Viewport3D {
     }
   }
 
-  public setDualLockToolActive(active: boolean): void {
+  public setDualLockToolActive(active: boolean, eraseMode: boolean = false): void {
     this.isDualLockToolActive = active;
+    this.isDualLockEraseMode = eraseMode;
     if (!active && this.dualLockHoverPad) {
       this.dualLockHoverPad.visible = false;
+      this.clearAllDualLockHighlights();
     }
-    this.container.style.cursor = active ? 'crosshair' : 'default';
+    this.updateDualLockHoverPadStyle();
+    this.container.style.cursor = active ? (eraseMode ? 'pointer' : 'crosshair') : 'default';
   }
 
   public isDualLockToolActiveMode(): boolean {
     return this.isDualLockToolActive;
+  }
+
+  public isDualLockEraseModeActive(): boolean {
+    return this.isDualLockEraseMode;
+  }
+
+  public getHoveredFastenerTarget(): { element: any | null; isLocked: boolean; isEraseMode: boolean } {
+    return {
+      element: this.lastHoveredDualLockElem,
+      isLocked: this.lastHoveredDualLockElem?.isDualLocked ?? false,
+      isEraseMode: this.isDualLockEraseMode,
+    };
   }
 
   private setupDragAndDrop(): void {
@@ -672,6 +710,56 @@ export class Viewport3D {
           curr = curr.parent;
         }
       }
+      return null;
+    };
+
+    const getDualLockTarget = (coords: { x: number; y: number }): { element: any; clickPoint: { x: number; z: number } } | null => {
+      if (!this.missionManager) return null;
+      this.mouse.set(coords.x, coords.y);
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+
+      // 1. Direct hit on Dual Lock marker beacons / pads
+      for (const elem of this.missionManager.elements.values()) {
+        if (!elem.rootGroup.visible) continue;
+        const marker = elem.getDualLockMarker ? elem.getDualLockMarker() : null;
+        if (marker && marker.isVisible()) {
+          const hits = this.raycaster.intersectObjects(marker.getRaycastTargets(), true);
+          if (hits.length > 0) {
+            const pos = elem.getDualLockPosition?.() || elem.getPosition();
+            return { element: elem, clickPoint: { x: pos.x, z: pos.z } };
+          }
+        }
+      }
+
+      // 2. Direct hit on mission element LEGO geometry
+      const entireElemHit = getMissionElementEntireHit(coords);
+      if (entireElemHit) {
+        const groundHit = getGroundIntersection(coords);
+        const clickPoint = groundHit ? { x: groundHit.x, z: groundHit.z } : entireElemHit.getPosition();
+        return { element: entireElemHit, clickPoint };
+      }
+
+      // 3. Proximity hit on ground: if user clicked near an element's base on the mat (within 15cm)
+      const groundHit = getGroundIntersection(coords);
+      if (groundHit) {
+        let closestElem: any = null;
+        let closestDistSq = 0.15 * 0.15;
+        for (const elem of this.missionManager.elements.values()) {
+          if (!elem.rootGroup.visible) continue;
+          const pos = elem.getPosition();
+          const dx = groundHit.x - pos.x;
+          const dz = groundHit.z - pos.z;
+          const distSq = dx * dx + dz * dz;
+          if (distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestElem = elem;
+          }
+        }
+        if (closestElem) {
+          return { element: closestElem, clickPoint: { x: groundHit.x, z: groundHit.z } };
+        }
+      }
+
       return null;
     };
 
@@ -780,16 +868,15 @@ export class Viewport3D {
 
       // 0. Check if Dual Lock Toolpoint mode is active
       if (this.isDualLockToolActive) {
-        const entireElemHit = getMissionElementEntireHit(coords);
-        if (entireElemHit) {
-          const groundHit = getGroundIntersection(coords);
-          const clickPoint = groundHit ? { x: groundHit.x, z: groundHit.z } : entireElemHit.getPosition();
-          const willLock = !entireElemHit.isDualLocked;
-          if (entireElemHit.setDualLocked) {
-            entireElemHit.setDualLocked(willLock, clickPoint);
+        const target = getDualLockTarget(coords);
+        if (target) {
+          const { element, clickPoint } = target;
+          const willLock = this.isDualLockEraseMode ? false : true;
+          if (element.setDualLocked) {
+            element.setDualLocked(willLock, clickPoint);
           }
-          this.selectMissionElement(entireElemHit.id);
-          this.onDualLockToggle?.(entireElemHit.id, willLock, clickPoint);
+          this.selectMissionElement(element.id);
+          this.onDualLockToggle?.(element.id, willLock, clickPoint);
           e.stopPropagation();
           e.preventDefault();
           return;
@@ -952,15 +1039,32 @@ export class Viewport3D {
         this.hoveredElement = getMissionElementEntireHit(coords);
 
         if (this.isDualLockToolActive) {
-          this.container.style.cursor = 'crosshair';
-          if (this.hoveredElement) {
+          const target = getDualLockTarget(coords);
+          this.clearAllDualLockHighlights();
+          if (target) {
+            this.lastHoveredDualLockElem = target.element;
+            if (target.element.setDualLockHoverHighlight) {
+              target.element.setDualLockHoverHighlight(true, this.isDualLockEraseMode);
+            }
+            this.dualLockHoverPad.position.set(target.clickPoint.x, 0.002, target.clickPoint.z);
+            this.dualLockHoverPad.visible = true;
+            this.container.style.cursor = this.isDualLockEraseMode ? 'pointer' : 'crosshair';
+            this.onHoverFastenerChange?.({
+              elementId: target.element.id,
+              name: target.element.name,
+              isLocked: target.element.isDualLocked ?? false,
+              isEraseMode: this.isDualLockEraseMode,
+            });
+          } else {
             const groundHit = getGroundIntersection(coords);
             if (groundHit) {
               this.dualLockHoverPad.position.set(groundHit.x, 0.002, groundHit.z);
               this.dualLockHoverPad.visible = true;
+            } else {
+              this.dualLockHoverPad.visible = false;
             }
-          } else {
-            this.dualLockHoverPad.visible = false;
+            this.container.style.cursor = this.isDualLockEraseMode ? 'not-allowed' : 'crosshair';
+            this.onHoverFastenerChange?.(null);
           }
         } else if (
           isPusherHit(coords) ||
