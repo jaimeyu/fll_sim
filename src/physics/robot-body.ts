@@ -144,6 +144,52 @@ export class RobotPhysicsBody {
         }
       }
     }
+
+    // Ensure all 6 standard SPIKE Prime ports (A-F) are initialized
+    const allPorts: MotorPort[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const p of allPorts) {
+      if (!this.motors.has(p)) {
+        this.motors.set(p, new VirtualMotor(p));
+      }
+    }
+  }
+
+  /**
+   * Set continuous driving speeds for left (Port A) and right (Port B) drivebase
+   */
+  public setDriveSpeeds(leftPercent: number, rightPercent: number): void {
+    const motorL = this.motors.get('A');
+    const motorR = this.motors.get('B');
+    if (Math.abs(leftPercent) < 0.1) {
+      motorL?.stop('BRAKE');
+    } else {
+      motorL?.start(leftPercent);
+    }
+    if (Math.abs(rightPercent) < 0.1) {
+      motorR?.stop('BRAKE');
+    } else {
+      motorR?.start(rightPercent);
+    }
+  }
+
+  /**
+   * Set continuous speed for a specific motor port
+   */
+  public setMotorSpeed(port: MotorPort, speedPercent: number): void {
+    const motor = this.motors.get(port);
+    if (!motor) return;
+    if (Math.abs(speedPercent) < 0.1) {
+      motor.stop('BRAKE');
+    } else {
+      motor.start(speedPercent);
+    }
+  }
+
+  /**
+   * Stop an individual motor port with electromagnetic brake
+   */
+  public stopMotor(port: MotorPort): void {
+    this.motors.get(port)?.stop('BRAKE');
   }
 
   /**

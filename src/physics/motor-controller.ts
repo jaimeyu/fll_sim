@@ -30,6 +30,7 @@ export class VirtualMotor {
    */
   public start(speedPercent: number = 50): void {
     const degPerSec = (speedPercent / 100) * this.maxSpeedDegPerSec;
+    this.targetSpeedDegPerSec = degPerSec;
     this.activeTarget = {
       type: 'CONTINUOUS',
       targetSpeedDegPerSec: degPerSec,

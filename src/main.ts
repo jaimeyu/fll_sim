@@ -435,6 +435,28 @@ async function bootstrapSimulator() {
       hud.showFastenerStatus(`🔓 Released all ${count} objects (Dynamic)`);
       hud.logConsole(`🔓 [Dual Lock] Released all ${count} objects to dynamic physics.`);
     },
+    onManualDriveBase: (leftSpeed: number, rightSpeed: number) => {
+      engine.robot.setDriveSpeeds(leftSpeed, rightSpeed);
+    },
+    onManualDriveBaseStop: () => {
+      engine.robot.setDriveSpeeds(0, 0);
+    },
+    onManualMotorSpeed: (port, speed) => {
+      engine.robot.setMotorSpeed(port, speed);
+    },
+    onManualMotorStop: (port) => {
+      engine.robot.stopMotor(port);
+    },
+    onResetEncoders: () => {
+      for (const m of engine.robot.motors.values()) {
+        m.resetDegrees();
+      }
+      hud.logConsole('🔄 Zeroed all virtual motor encoders.');
+    },
+    onResetGyro: () => {
+      sensors.resetYaw();
+      hud.logConsole('🧭 Zeroed Gyro heading to 0.0°.');
+    },
   });
 
   // 7. Initialize CAD Model Inspector & Diagnostic Validator
@@ -616,8 +638,18 @@ async function bootstrapSimulator() {
     const colorC = sensors.sampleColorSensor('C');
     const colorD = sensors.sampleColorSensor('D');
     const distCm = sensors.sampleDistanceSensor();
+    const gyroYaw = sensors.getYaw();
     const t4 = performance.now();
     profiler.recordSensorsTime(t4 - t3);
+
+    const allMotorsState: Record<string, { port: any; degrees: number; speed: number }> = {};
+    for (const [port, m] of engine.robot.motors.entries()) {
+      allMotorsState[port] = {
+        port,
+        degrees: Math.round(m.degrees || 0),
+        speed: Math.round(m.velocityDegPerSec || 0),
+      };
+    }
 
     hud.updateTelemetry({
       timeSeconds: now / 1000,
@@ -641,6 +673,7 @@ async function bootstrapSimulator() {
           degrees: Math.round(motorB?.degrees || 0),
           speed: Math.round(motorB?.velocityDegPerSec || 0),
         },
+        all: allMotorsState,
       },
       sensors: {
         colorC: {
@@ -654,6 +687,7 @@ async function bootstrapSimulator() {
           rgb: colorD.rgb,
         },
         distanceCm: distCm,
+        gyroYaw,
       },
     });
   }

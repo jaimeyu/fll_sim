@@ -1,4 +1,5 @@
 import { DetectedColorName } from '../sensors/sensor-manager';
+import { MotorPort } from '../physics/motor-controller';
 
 export interface TelemetryState {
   timeSeconds: number;
@@ -22,6 +23,7 @@ export interface TelemetryState {
       degrees: number;
       speed: number;
     };
+    all?: Record<string, { port: MotorPort; degrees: number; speed: number }>;
   };
   sensors: {
     colorC: {
@@ -35,6 +37,7 @@ export interface TelemetryState {
       rgb: [number, number, number];
     };
     distanceCm: number;
+    gyroYaw?: number;
   };
 }
 

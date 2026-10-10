@@ -1832,3 +1832,561 @@ body, html {
   display: flex;
   gap: 8px;
 }
+
+/* ========================================================
+   MANUAL DRIVER MODE (WASD & MOTOR KEYBOARD CONTROLS)
+   ======================================================== */
+
+.driver-header-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.driver-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.driver-mode-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.3px;
+}
+
+.driver-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #64748b;
+}
+
+.driver-banner-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 6px 9px;
+  border-radius: 6px;
+  border-left: 3px solid #38bdf8;
+}
+
+.driver-banner-info b {
+  color: #38bdf8;
+}
+
+.driver-scrollable-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.driver-scrollable-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.driver-scrollable-body::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.driver-section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+
+.driver-section-card.active-section-card {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+}
+
+.driver-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.2px;
+}
+
+.drive-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.drive-speed-control input[type="range"] {
+  width: 75px;
+  height: 4px;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.speed-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  min-width: 32px;
+  text-align: right;
+  font-family: monospace;
+}
+
+.driver-section-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.driver-section-hint b {
+  color: #facc15;
+}
+
+.wasd-pad-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.wasd-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.driver-key-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 48px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  color: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.1s ease;
+  box-shadow: 0 3px 0 #0f172a, 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.driver-key-btn:hover {
+  background: #334155;
+  border-color: #64748b;
+  transform: translateY(-1px);
+}
+
+.driver-key-btn:active,
+.driver-key-btn.active-pressed {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.85) !important;
+  transform: translateY(2px) scale(0.97) !important;
+}
+
+.driver-key-btn.active-pressed .key-letter {
+  color: #ffffff;
+  text-shadow: 0 0 8px #fff;
+}
+
+.key-letter {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+}
+
+.key-sub {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-top: 3px;
+  letter-spacing: 0.3px;
+}
+
+.driver-key-btn.active-pressed .key-sub {
+  color: #e0f2fe;
+}
+
+.driver-space-btn {
+  width: 174px;
+  height: 38px;
+}
+
+.drive-telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 6px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 6px;
+}
+
+.drive-telemetry-row b {
+  color: #38bdf8;
+  font-family: monospace;
+}
+
+.motor-actions-header {
+  display: flex;
+  gap: 6px;
+}
+
+.driver-motors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.driver-motor-card {
+  background: #1e293b;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.driver-motor-card.active-motor-card {
+  border-color: #38bdf8;
+  background: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+.motor-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.motor-port-tag {
+  font-size: 10px;
+  font-weight: 800;
+  background: #0284c7;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.motor-role-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  margin-left: 8px;
+}
+
+.motor-state-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #334155;
+  color: #94a3b8;
+}
+
+.motor-state-badge.state-fwd {
+  background: #15803d;
+  color: #bbf7d0;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+}
+
+.motor-state-badge.state-rev {
+  background: #b45309;
+  color: #fef08a;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.motor-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.motor-keys-group {
+  display: flex;
+  gap: 6px;
+}
+
+.motor-dir-btn {
+  min-width: 44px;
+  height: 40px;
+}
+
+.motor-dir-btn[data-dir="fwd"].active-pressed {
+  background: #15803d !important;
+  border-color: #22c55e !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.8) !important;
+}
+
+.motor-dir-btn[data-dir="rev"].active-pressed {
+  background: #b45309 !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.8) !important;
+}
+
+.motor-slider-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.motor-slider-val {
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: monospace;
+}
+
+.motor-speed-slider {
+  width: 100%;
+  height: 4px;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.motor-encoder-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: monospace;
+  padding-top: 2px;
+  border-top: 1px dashed rgba(51, 65, 85, 0.6);
+}
+
+.motor-encoder-row b {
+  color: #e2e8f0;
+}
+
+.driver-sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.driver-sensor-card {
+  background: #1e293b;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sensor-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.sensor-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+.badge-color-black {
+  background: #09090b;
+  color: #fafafa;
+  border: 1px solid #52525b;
+}
+
+.badge-color-white {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.badge-color-red {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.badge-color-green {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.badge-color-blue {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.badge-color-yellow {
+  background: #ca8a04;
+  color: #ffffff;
+}
+
+.badge-dist {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+.badge-gyro {
+  background: #0d9488;
+  color: #ffffff;
+}
+
+.sensor-meter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sensor-meter-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sensor-meter-track {
+  width: 100%;
+  height: 6px;
+  background: #334155;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sensor-meter-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 3px;
+  transition: width 0.08s linear;
+}
+
+.sensor-meter-fill.fill-color-light {
+  background: linear-gradient(to right, #0284c7, #38bdf8);
+}
+
+.sensor-meter-fill.fill-dist {
+  background: linear-gradient(to right, #ef4444, #eab308, #22c55e);
+}
+
+.sensor-color-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sensor-swatch-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #64748b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.sensor-rgb-text {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+}
+
+.sensor-field-hint {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.gyro-compass-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gyro-compass-dial {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #475569;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.compass-needle {
+  position: absolute;
+  width: 3px;
+  height: 22px;
+  background: linear-gradient(to top, #64748b 50%, #ef4444 50%);
+  border-radius: 2px;
+  transform-origin: center center;
+  transition: transform 0.05s linear;
+}
+
+.compass-n {
+  position: absolute;
+  top: 1px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #ef4444;
+}
+
+.gyro-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.gyro-info-text strong {
+  color: #e2e8f0;
+  font-family: monospace;
+}

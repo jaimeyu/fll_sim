@@ -2,6 +2,7 @@ import { TelemetryState, ExecutionState, SpawnPose } from '../runtime/types';
 import { CameraViewPreset } from '../view/viewport';
 import { SimulatorAppMode } from '../missions/mission-manager';
 import { MatMapType } from '../view/mat-texture';
+import { MotorPort } from '../physics/motor-controller';
 
 import { SeasonMissionSpec } from '../missions/season-config';
 import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
@@ -41,6 +42,12 @@ export interface HudCallbacks {
   onImportFieldLayout?: (file: File) => void;
   onDualLockAllBases?: () => void;
   onUnlockAllElements?: () => void;
+  onManualDriveBase?: (leftSpeed: number, rightSpeed: number) => void;
+  onManualDriveBaseStop?: () => void;
+  onManualMotorSpeed?: (port: MotorPort, speed: number) => void;
+  onManualMotorStop?: (port: MotorPort) => void;
+  onResetEncoders?: () => void;
+  onResetGyro?: () => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -156,12 +163,13 @@ export class SimulatorHud {
   private topbarStopBtn!: HTMLButtonElement;
 
   // Activity Bar & Drawer state
-  private activeView: 'code' | 'assets' | 'fastener' | 'field' | 'terminal' = 'code';
+  private activeView: 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal' = 'code';
   private isDrawerOpen: boolean = true;
 
   // Drawer Panel & Views DOM elements
   private drawerPanel!: HTMLElement;
   private viewCode!: HTMLElement;
+  private viewDriver!: HTMLElement;
   private viewAssets!: HTMLElement;
   private viewFastener!: HTMLElement;
   private viewField!: HTMLElement;
@@ -169,6 +177,22 @@ export class SimulatorHud {
   private drawerPanelTitle!: HTMLElement;
   private drawerPanelIcon!: HTMLElement;
   private drawerTermLog!: HTMLElement;
+
+  // Manual Driver State & Controls
+  private isDriverArmed: boolean = true;
+  private driveBaseSpeedPercent: number = 50;
+  private motorSpeeds: Map<MotorPort, number> = new Map([
+    ['A', 50],
+    ['B', 50],
+    ['C', 50],
+    ['D', 50],
+    ['E', 50],
+    ['F', 50],
+  ]);
+  private heldDriverKeys: Set<string> = new Set();
+  private btnToggleDriverArm!: HTMLButtonElement;
+  private driverStatusDot!: HTMLElement;
+  private driverStatusLabel!: HTMLElement;
 
   // Floating Terminal DOM elements
   private floatingTerminal!: HTMLElement;
@@ -339,6 +363,10 @@ export class SimulatorHud {
           <span class="act-icon">💻</span>
           <span class="act-label">Code</span>
         </button>
+        <button class="activity-btn" id="act-btn-driver" title="🎮 Manual Driver Mode (WASD & Motors)" data-view="driver">
+          <span class="act-icon">🎮</span>
+          <span class="act-label">Driver</span>
+        </button>
         <button class="activity-btn" id="act-btn-assets" title="📦 Mission Asset Library & Presets" data-view="assets">
           <span class="act-icon">📦</span>
           <span class="act-label">Assets</span>
@@ -419,6 +447,179 @@ export class SimulatorHud {
               <button class="btn btn-xs btn-ghost" id="btn-open-terminal-from-preview" title="Open full floating terminal">📟 Pop Out ↗</button>
             </div>
             <div id="console-output" class="console-text">System ready. Select a mission or write Python code, then click RUN.</div>
+          </div>
+        </div>
+
+        <!-- View: Manual Driver Mode -->
+        <div class="drawer-view-content" id="view-content-driver" style="display: none;">
+          <!-- Driver Arm Header -->
+          <div class="driver-header-card">
+            <div class="driver-status-row">
+              <div class="driver-mode-badge" id="driver-mode-badge">
+                <span class="driver-status-dot status-running" id="driver-status-dot"></span>
+                <span id="driver-status-label">🎮 ARMED &amp; ACTIVE</span>
+              </div>
+              <button class="btn btn-xs btn-outline" id="btn-toggle-driver-arm" title="Toggle Keyboard Manual Driving">
+                🟢 Armed (Click to Disarm)
+              </button>
+            </div>
+            <div class="driver-banner-info">
+              🕹️ <b>WASD</b> steers drivebase. <b>UIOP</b> (Fwd) &amp; <b>JKL;</b> (Rev) spin individual motors. Adjust sliders to dial in speed.
+            </div>
+          </div>
+
+          <div class="driver-scrollable-body">
+            <!-- SECTION 1: Drive Base (WASD) -->
+            <div class="driver-section-card" id="card-drivebase">
+              <div class="driver-section-header">
+                <span class="section-title">🕹️ Drive Base (WASD)</span>
+                <div class="drive-speed-control">
+                  <label for="slider-drivebase-speed">Drive Speed:</label>
+                  <input type="range" id="slider-drivebase-speed" min="10" max="100" value="50" step="5">
+                  <span class="speed-val" id="val-drivebase-speed">50%</span>
+                </div>
+              </div>
+
+              <div class="wasd-pad-container">
+                <div class="wasd-row">
+                  <button class="driver-key-btn" data-key="w" title="Drive Forward (W)">
+                    <span class="key-letter">W</span>
+                    <span class="key-sub">▲ FWD</span>
+                  </button>
+                </div>
+                <div class="wasd-row">
+                  <button class="driver-key-btn" data-key="a" title="Spin Left (A)">
+                    <span class="key-letter">A</span>
+                    <span class="key-sub">◀ LEFT</span>
+                  </button>
+                  <button class="driver-key-btn" data-key="s" title="Drive Backward (S)">
+                    <span class="key-letter">S</span>
+                    <span class="key-sub">▼ REV</span>
+                  </button>
+                  <button class="driver-key-btn" data-key="d" title="Spin Right (D)">
+                    <span class="key-letter">D</span>
+                    <span class="key-sub">▶ RIGHT</span>
+                  </button>
+                </div>
+                <div class="wasd-row">
+                  <button class="driver-key-btn driver-space-btn" data-key=" " title="Emergency Brake (Space)">
+                    <span class="key-letter">SPACE</span>
+                    <span class="key-sub">⏹ BRAKE</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="drive-telemetry-row">
+                <span>Left Motor (Port A): <b id="driver-live-spd-a">0%</b></span>
+                <span>Right Motor (Port B): <b id="driver-live-spd-b">0%</b></span>
+              </div>
+            </div>
+
+            <!-- SECTION 2: Motors & Bindings (UIOP / JKL;) -->
+            <div class="driver-section-card">
+              <div class="driver-section-header">
+                <span class="section-title">⚙️ Motors &amp; Keyboard Controls</span>
+                <div class="motor-actions-header">
+                  <button class="btn btn-xs btn-outline" id="btn-stop-all-driver-motors" title="Stop all motors">⏹ Stop All</button>
+                  <button class="btn btn-xs btn-outline" id="btn-reset-driver-encoders" title="Zero all encoders">↺ Zero Encoders</button>
+                </div>
+              </div>
+              <div class="driver-section-hint">
+                Key pairs: <b>U / J</b> (Port A) • <b>I / K</b> (Port B) • <b>O / L</b> (Port C) • <b>P / ;</b> (Port D)
+              </div>
+
+              <div class="driver-motors-list" id="driver-motors-list">
+                ${this.renderMotorCardsHtml()}
+              </div>
+            </div>
+
+            <!-- SECTION 3: Live Sensor Dashboard -->
+            <div class="driver-section-card">
+              <div class="driver-section-header">
+                <span class="section-title">📡 Live Sensors &amp; Readings</span>
+                <button class="btn btn-xs btn-outline" id="btn-driver-zero-gyro" title="Reset Gyro Yaw Heading to 0°">🧭 Zero Gyro</button>
+              </div>
+
+              <div class="driver-sensors-grid">
+                <!-- Color Sensor C (Left) -->
+                <div class="driver-sensor-card">
+                  <div class="sensor-card-title">
+                    <span>🎨 Color Sensor C (Left)</span>
+                    <span class="sensor-badge" id="driver-badge-color-c">WHITE</span>
+                  </div>
+                  <div class="sensor-meter-container">
+                    <div class="sensor-meter-label">
+                      <span>Reflected Light:</span>
+                      <strong id="driver-val-light-c">0%</strong>
+                    </div>
+                    <div class="sensor-meter-track">
+                      <div class="sensor-meter-fill fill-color-light" id="driver-meter-light-c" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                  <div class="sensor-color-swatch-row">
+                    <div class="sensor-swatch-box" id="driver-swatch-c" style="background-color: #ffffff;"></div>
+                    <span class="sensor-rgb-text" id="driver-rgb-c">RGB: (255, 255, 255)</span>
+                  </div>
+                </div>
+
+                <!-- Color Sensor D (Right) -->
+                <div class="driver-sensor-card">
+                  <div class="sensor-card-title">
+                    <span>🎨 Color Sensor D (Right)</span>
+                    <span class="sensor-badge" id="driver-badge-color-d">WHITE</span>
+                  </div>
+                  <div class="sensor-meter-container">
+                    <div class="sensor-meter-label">
+                      <span>Reflected Light:</span>
+                      <strong id="driver-val-light-d">0%</strong>
+                    </div>
+                    <div class="sensor-meter-track">
+                      <div class="sensor-meter-fill fill-color-light" id="driver-meter-light-d" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                  <div class="sensor-color-swatch-row">
+                    <div class="sensor-swatch-box" id="driver-swatch-d" style="background-color: #ffffff;"></div>
+                    <span class="sensor-rgb-text" id="driver-rgb-d">RGB: (255, 255, 255)</span>
+                  </div>
+                </div>
+
+                <!-- Distance Sensor -->
+                <div class="driver-sensor-card">
+                  <div class="sensor-card-title">
+                    <span>📏 Distance / Sonar</span>
+                    <span class="sensor-badge badge-dist" id="driver-val-dist">0 cm</span>
+                  </div>
+                  <div class="sensor-meter-container">
+                    <div class="sensor-meter-label">
+                      <span>Proximity:</span>
+                      <strong id="driver-dist-prox-label">Clear</strong>
+                    </div>
+                    <div class="sensor-meter-track">
+                      <div class="sensor-meter-fill fill-dist" id="driver-meter-dist" style="width: 50%;"></div>
+                    </div>
+                  </div>
+                  <div class="sensor-field-hint">Range to field borders &amp; obstacles</div>
+                </div>
+
+                <!-- Gyro Sensor -->
+                <div class="driver-sensor-card">
+                  <div class="sensor-card-title">
+                    <span>🧭 Gyro / Motion IMU</span>
+                    <span class="sensor-badge badge-gyro" id="driver-val-gyro">0.0°</span>
+                  </div>
+                  <div class="gyro-compass-row">
+                    <div class="gyro-compass-dial">
+                      <div class="compass-needle" id="driver-compass-needle" style="transform: rotate(0deg);"></div>
+                      <span class="compass-n">N</span>
+                    </div>
+                    <div class="gyro-info-text">
+                      <div>Heading: <strong id="driver-yaw-text">0.0°</strong></div>
+                      <div>Field Pose: <strong id="driver-pos-text">0.00m, 0.00m</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -855,9 +1056,9 @@ export class SimulatorHud {
     this.topbarProgramSelect = this.rootElement.querySelector('#topbar-program-select')!;
     this.topbarResetBtn = this.rootElement.querySelector('#btn-topbar-reset')!;
 
-    // Drawer and view elements
     this.drawerPanel = this.rootElement.querySelector('#hud-drawer-panel')!;
     this.viewCode = this.rootElement.querySelector('#view-content-code')!;
+    this.viewDriver = this.rootElement.querySelector('#view-content-driver')!;
     this.viewAssets = this.rootElement.querySelector('#view-content-assets')!;
     this.viewFastener = this.rootElement.querySelector('#view-content-fastener')!;
     this.viewField = this.rootElement.querySelector('#view-content-field')!;
@@ -865,6 +1066,11 @@ export class SimulatorHud {
     this.drawerPanelTitle = this.rootElement.querySelector('#drawer-panel-title')!;
     this.drawerPanelIcon = this.rootElement.querySelector('#drawer-panel-icon')!;
     this.drawerTermLog = this.rootElement.querySelector('#terminal-drawer-log')!;
+
+    // Driver controls caching
+    this.btnToggleDriverArm = this.rootElement.querySelector('#btn-toggle-driver-arm')!;
+    this.driverStatusDot = this.rootElement.querySelector('#driver-status-dot')!;
+    this.driverStatusLabel = this.rootElement.querySelector('#driver-status-label')!;
 
     // Sidebar Camera Focus quick bar
     this.btnFocusRobot = this.rootElement.querySelector('#btn-focus-robot')!;
@@ -1444,6 +1650,416 @@ export class SimulatorHud {
         this.closeProfilerModal();
       }
     });
+
+    this.setupDriverModeEvents();
+  }
+
+  private renderMotorCardsHtml(): string {
+    const motorDefs = [
+      { port: 'A' as MotorPort, name: 'Left Drive Wheel', fwdKey: 'U', revKey: 'J' },
+      { port: 'B' as MotorPort, name: 'Right Drive Wheel', fwdKey: 'I', revKey: 'K' },
+      { port: 'C' as MotorPort, name: 'Aux Attachment 1', fwdKey: 'O', revKey: 'L' },
+      { port: 'D' as MotorPort, name: 'Aux Attachment 2', fwdKey: 'P', revKey: ';' },
+      { port: 'E' as MotorPort, name: 'Aux Attachment 3', fwdKey: 'Y', revKey: 'H' },
+      { port: 'F' as MotorPort, name: 'Aux Attachment 4', fwdKey: 'T', revKey: 'G' },
+    ];
+    return motorDefs
+      .map(
+        (m) => `
+      <div class="driver-motor-card" data-port="${m.port}">
+        <div class="motor-card-header">
+          <div class="motor-port-tag">PORT ${m.port}</div>
+          <div class="motor-role-title">${m.name}</div>
+          <div class="motor-state-badge" id="motor-state-${m.port}">IDLE</div>
+        </div>
+        <div class="motor-card-controls">
+          <div class="motor-keys-group">
+            <button class="driver-key-btn motor-dir-btn" data-key="${m.fwdKey.toLowerCase()}" data-port="${m.port}" data-dir="fwd" title="Rotate Forward (${m.fwdKey})">
+              <span class="key-letter">${m.fwdKey}</span>
+              <span class="key-sub">⟳ FWD</span>
+            </button>
+            <button class="driver-key-btn motor-dir-btn" data-key="${m.revKey.toLowerCase()}" data-port="${m.port}" data-dir="rev" title="Rotate Reverse (${m.revKey})">
+              <span class="key-letter">${m.revKey}</span>
+              <span class="key-sub">⟲ REV</span>
+            </button>
+          </div>
+          <div class="motor-slider-group">
+            <div class="slider-label-row">
+              <span>Speed:</span>
+              <span class="motor-slider-val" id="val-motor-speed-${m.port}">50%</span>
+            </div>
+            <input type="range" class="motor-speed-slider" data-port="${m.port}" min="10" max="100" value="50" step="5">
+          </div>
+        </div>
+        <div class="motor-encoder-row">
+          <span>Angle: <b id="motor-enc-deg-${m.port}">0°</b></span>
+          <span>Vel: <b id="motor-enc-spd-${m.port}">0°/s</b></span>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+  }
+
+  private setupDriverModeEvents(): void {
+    if (!this.viewDriver) return;
+
+    // Toggle arm button
+    this.btnToggleDriverArm?.addEventListener('click', () => {
+      this.isDriverArmed = !this.isDriverArmed;
+      if (this.isDriverArmed) {
+        this.btnToggleDriverArm.textContent = '🟢 Armed (Click to Disarm)';
+        this.btnToggleDriverArm.className = 'btn btn-xs btn-outline';
+        this.driverStatusDot.className = 'driver-status-dot status-running';
+        this.driverStatusLabel.textContent = '🎮 ARMED & ACTIVE';
+        this.logConsole('🎮 Manual Driver Mode: ARMED (WASD / UIOP / JKL active)');
+      } else {
+        this.btnToggleDriverArm.textContent = '🔴 Disarmed (Click to Arm)';
+        this.btnToggleDriverArm.className = 'btn btn-xs btn-warning';
+        this.driverStatusDot.className = 'driver-status-dot status-idle';
+        this.driverStatusLabel.textContent = '⏸ STANDBY (DISARMED)';
+        this.stopAllManualDriving();
+        this.logConsole('⏸ Manual Driver Mode: DISARMED');
+      }
+    });
+
+    // Drive base speed slider
+    const driveSlider = this.viewDriver.querySelector('#slider-drivebase-speed') as HTMLInputElement | null;
+    const driveVal = this.viewDriver.querySelector('#val-drivebase-speed');
+    driveSlider?.addEventListener('input', () => {
+      this.driveBaseSpeedPercent = parseInt(driveSlider.value, 10) || 50;
+      if (driveVal) driveVal.textContent = `${this.driveBaseSpeedPercent}%`;
+      this.updateDriverKeyOutputs();
+    });
+
+    // Individual motor speed sliders
+    const motorSliders = this.viewDriver.querySelectorAll('.motor-speed-slider');
+    motorSliders.forEach((slider) => {
+      slider.addEventListener('input', () => {
+        const input = slider as HTMLInputElement;
+        const port = input.getAttribute('data-port') as MotorPort;
+        const val = parseInt(input.value, 10) || 50;
+        this.motorSpeeds.set(port, val);
+        const valLabel = this.viewDriver.querySelector(`#val-motor-speed-${port}`);
+        if (valLabel) valLabel.textContent = `${val}%`;
+        this.updateDriverKeyOutputs();
+      });
+    });
+
+    // Quick stop and reset buttons
+    const btnStopAll = this.viewDriver.querySelector('#btn-stop-all-driver-motors');
+    btnStopAll?.addEventListener('click', () => {
+      this.stopAllManualDriving();
+      this.logConsole('⏹ Stopped all virtual motors.');
+    });
+
+    const btnResetEnc = this.viewDriver.querySelector('#btn-reset-driver-encoders');
+    btnResetEnc?.addEventListener('click', () => {
+      this.callbacks.onResetEncoders?.();
+    });
+
+    const btnZeroGyro = this.viewDriver.querySelector('#btn-driver-zero-gyro');
+    btnZeroGyro?.addEventListener('click', () => {
+      this.callbacks.onResetGyro?.();
+    });
+
+    // Mouse / Touch pointer button handlers for interactive key pad
+    const allKeyButtons = this.viewDriver.querySelectorAll('.driver-key-btn[data-key]');
+    allKeyButtons.forEach((btn) => {
+      const handlePress = (e: Event) => {
+        e.preventDefault();
+        const key = btn.getAttribute('data-key');
+        if (key) this.pressDriverKey(key);
+      };
+      const handleRelease = (e: Event) => {
+        e.preventDefault();
+        const key = btn.getAttribute('data-key');
+        if (key) this.releaseDriverKey(key);
+      };
+
+      btn.addEventListener('pointerdown', handlePress);
+      btn.addEventListener('pointerup', handleRelease);
+      btn.addEventListener('pointercancel', handleRelease);
+      btn.addEventListener('pointerleave', handleRelease);
+    });
+
+    // Global keyboard listeners
+    window.addEventListener('keydown', (e) => this.handleDriverKeyDown(e));
+    window.addEventListener('keyup', (e) => this.handleDriverKeyUp(e));
+    window.addEventListener('blur', () => this.stopAllManualDriving());
+  }
+
+  private handleDriverKeyDown(e: KeyboardEvent): void {
+    if (!this.isDriverArmed) return;
+    // Don't intercept typing in input boxes or code editor
+    const activeEl = document.activeElement;
+    const tagName = activeEl?.tagName?.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+      return;
+    }
+
+    const key = e.key.toLowerCase();
+    const validDriverKeys = ['w', 'a', 's', 'd', ' ', 'u', 'i', 'o', 'p', 'j', 'k', 'l', ';', 'h', 'y', 't', 'g'];
+    if (validDriverKeys.includes(key)) {
+      if (key === ' ' || key === 'w' || key === 's' || key === 'a' || key === 'd') {
+        e.preventDefault();
+      }
+      this.pressDriverKey(key);
+    }
+  }
+
+  private handleDriverKeyUp(e: KeyboardEvent): void {
+    const activeEl = document.activeElement;
+    const tagName = activeEl?.tagName?.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+      return;
+    }
+
+    const key = e.key.toLowerCase();
+    this.releaseDriverKey(key);
+  }
+
+  private pressDriverKey(key: string): void {
+    const k = key.toLowerCase();
+    if (this.heldDriverKeys.has(k)) return;
+    this.heldDriverKeys.add(k);
+    this.updateDriverKeyOutputs();
+    this.updateDriverKeyHighlights();
+  }
+
+  private releaseDriverKey(key: string): void {
+    const k = key.toLowerCase();
+    this.heldDriverKeys.delete(k);
+    this.updateDriverKeyOutputs();
+    this.updateDriverKeyHighlights();
+  }
+
+  private updateDriverKeyOutputs(): void {
+    if (!this.isDriverArmed) {
+      this.callbacks.onManualDriveBaseStop?.();
+      return;
+    }
+
+    // 1. Compute Drive Base (WASD)
+    const isW = this.heldDriverKeys.has('w');
+    const isS = this.heldDriverKeys.has('s');
+    const isA = this.heldDriverKeys.has('a');
+    const isD = this.heldDriverKeys.has('d');
+    const isSpace = this.heldDriverKeys.has(' ');
+
+    let left = 0;
+    let right = 0;
+    const spd = this.driveBaseSpeedPercent;
+
+    if (isSpace) {
+      left = 0;
+      right = 0;
+    } else if (isW && !isS) {
+      if (isA && !isD) {
+        left = spd * 0.4;
+        right = spd;
+      } else if (isD && !isA) {
+        left = spd;
+        right = spd * 0.4;
+      } else {
+        left = spd;
+        right = spd;
+      }
+    } else if (isS && !isW) {
+      if (isA && !isD) {
+        left = -spd * 0.4;
+        right = -spd;
+      } else if (isD && !isA) {
+        left = -spd;
+        right = -spd * 0.4;
+      } else {
+        left = -spd;
+        right = -spd;
+      }
+    } else if (isA && !isD) {
+      left = -spd;
+      right = spd;
+    } else if (isD && !isA) {
+      left = spd;
+      right = -spd;
+    }
+
+    const isWasdActive = left !== 0 || right !== 0;
+
+    // 2. Individual motor key pairs
+    // U/J (Port A), I/K (Port B), O/L (Port C), P/; or P/H (Port D), Y/H (Port E), T/G (Port F)
+    const motorBindings: Array<{ port: MotorPort; fwd: string[]; rev: string[] }> = [
+      { port: 'A', fwd: ['u'], rev: ['j'] },
+      { port: 'B', fwd: ['i'], rev: ['k'] },
+      { port: 'C', fwd: ['o'], rev: ['l'] },
+      { port: 'D', fwd: ['p'], rev: [';', 'h'] },
+      { port: 'E', fwd: ['y'], rev: ['h'] },
+      { port: 'F', fwd: ['t'], rev: ['g'] },
+    ];
+
+    let explicitA = false;
+    let explicitB = false;
+
+    for (const b of motorBindings) {
+      const isFwd = b.fwd.some((k) => this.heldDriverKeys.has(k));
+      const isRev = b.rev.some((k) => this.heldDriverKeys.has(k));
+      const portSpeed = this.motorSpeeds.get(b.port) ?? 50;
+
+      if (b.port === 'A') explicitA = isFwd || isRev;
+      if (b.port === 'B') explicitB = isFwd || isRev;
+
+      if (isFwd && !isRev) {
+        this.callbacks.onManualMotorSpeed?.(b.port, portSpeed);
+      } else if (isRev && !isFwd) {
+        this.callbacks.onManualMotorSpeed?.(b.port, -portSpeed);
+      } else if (!isFwd && !isRev) {
+        // If not driving via WASD, stop
+        if (b.port !== 'A' && b.port !== 'B') {
+          this.callbacks.onManualMotorStop?.(b.port);
+        }
+      }
+    }
+
+    // Apply Drivebase outputs to A and B if individual keys are not overriding them
+    if (!explicitA && !explicitB) {
+      if (isWasdActive) {
+        this.callbacks.onManualDriveBase?.(left, right);
+      } else {
+        this.callbacks.onManualDriveBaseStop?.();
+      }
+    } else {
+      if (!explicitA) {
+        if (isWasdActive) this.callbacks.onManualMotorSpeed?.('A', left);
+        else this.callbacks.onManualMotorStop?.('A');
+      }
+      if (!explicitB) {
+        if (isWasdActive) this.callbacks.onManualMotorSpeed?.('B', right);
+        else this.callbacks.onManualMotorStop?.('B');
+      }
+    }
+  }
+
+  private updateDriverKeyHighlights(): void {
+    if (!this.viewDriver) return;
+
+    // 1. Highlight all active buttons
+    const allKeyBtns = this.viewDriver.querySelectorAll('.driver-key-btn[data-key]');
+    allKeyBtns.forEach((btn) => {
+      const k = btn.getAttribute('data-key')?.toLowerCase();
+      if (k && this.heldDriverKeys.has(k)) {
+        btn.classList.add('active-pressed');
+      } else {
+        btn.classList.remove('active-pressed');
+      }
+    });
+
+    // 2. Update drivebase speed readout
+    const liveSpdALabel = this.viewDriver.querySelector('#driver-live-spd-a');
+    const liveSpdBLabel = this.viewDriver.querySelector('#driver-live-spd-b');
+    const isW = this.heldDriverKeys.has('w');
+    const isS = this.heldDriverKeys.has('s');
+    const isA = this.heldDriverKeys.has('a');
+    const isD = this.heldDriverKeys.has('d');
+    const isSpace = this.heldDriverKeys.has(' ');
+    let l = 0,
+      r = 0;
+    const spd = this.driveBaseSpeedPercent;
+    if (!isSpace) {
+      if (isW && !isS) {
+        if (isA) {
+          l = spd * 0.4;
+          r = spd;
+        } else if (isD) {
+          l = spd;
+          r = spd * 0.4;
+        } else {
+          l = spd;
+          r = spd;
+        }
+      } else if (isS && !isW) {
+        if (isA) {
+          l = -spd * 0.4;
+          r = -spd;
+        } else if (isD) {
+          l = -spd;
+          r = -spd * 0.4;
+        } else {
+          l = -spd;
+          r = -spd;
+        }
+      } else if (isA && !isD) {
+        l = -spd;
+        r = spd;
+      } else if (isD && !isA) {
+        l = spd;
+        r = -spd;
+      }
+    }
+    if (liveSpdALabel) liveSpdALabel.textContent = `${l.toFixed(0)}%`;
+    if (liveSpdBLabel) liveSpdBLabel.textContent = `${r.toFixed(0)}%`;
+
+    // 3. Highlight drivebase card
+    const cardDrivebase = this.viewDriver.querySelector('#card-drivebase');
+    if (cardDrivebase) {
+      if (isW || isS || isA || isD || isSpace) {
+        cardDrivebase.classList.add('active-section-card');
+      } else {
+        cardDrivebase.classList.remove('active-section-card');
+      }
+    }
+
+    // 4. Highlight individual motor cards
+    const motorBindings: Array<{ port: MotorPort; fwd: string[]; rev: string[] }> = [
+      { port: 'A', fwd: ['u'], rev: ['j'] },
+      { port: 'B', fwd: ['i'], rev: ['k'] },
+      { port: 'C', fwd: ['o'], rev: ['l'] },
+      { port: 'D', fwd: ['p'], rev: [';', 'h'] },
+      { port: 'E', fwd: ['y'], rev: ['h'] },
+      { port: 'F', fwd: ['t'], rev: ['g'] },
+    ];
+
+    const motorCards = this.viewDriver.querySelectorAll('.driver-motor-card');
+    motorCards.forEach((card) => {
+      const port = card.getAttribute('data-port') as MotorPort;
+      const stateBadge = card.querySelector(`#motor-state-${port}`);
+      const binding = motorBindings.find((b) => b.port === port);
+      if (!binding) return;
+
+      const isFwd = binding.fwd.some((k) => this.heldDriverKeys.has(k));
+      const isRev = binding.rev.some((k) => this.heldDriverKeys.has(k));
+      const isWasdDriving = (port === 'A' || port === 'B') && (isW || isS || isA || isD);
+
+      if (isFwd || isRev || isWasdDriving) {
+        card.classList.add('active-motor-card');
+        if (stateBadge) {
+          if (isFwd) {
+            stateBadge.textContent = 'SPINNING FWD ⟳';
+            stateBadge.className = 'motor-state-badge state-fwd';
+          } else if (isRev) {
+            stateBadge.textContent = 'SPINNING REV ⟲';
+            stateBadge.className = 'motor-state-badge state-rev';
+          } else {
+            stateBadge.textContent = 'DRIVING (WASD)';
+            stateBadge.className = 'motor-state-badge state-fwd';
+          }
+        }
+      } else {
+        card.classList.remove('active-motor-card');
+        if (stateBadge) {
+          stateBadge.textContent = 'IDLE';
+          stateBadge.className = 'motor-state-badge';
+        }
+      }
+    });
+  }
+
+  public stopAllManualDriving(): void {
+    this.heldDriverKeys.clear();
+    this.updateDriverKeyHighlights();
+    this.callbacks.onManualDriveBaseStop?.();
+    for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
+      this.callbacks.onManualMotorStop?.(port);
+    }
   }
 
   public openProfilerModal(): void {
@@ -1652,6 +2268,87 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     if (this.isProfilerModalOpen) {
       this.updateProfilerModal();
     }
+
+    // Update live sensor & motor readings in Driver Mode drawer view
+    if (this.viewDriver) {
+      // Color C
+      const badgeC = this.viewDriver.querySelector('#driver-badge-color-c');
+      if (badgeC) {
+        badgeC.textContent = state.sensors.colorC.color.toUpperCase();
+        badgeC.className = `sensor-badge badge-color-${state.sensors.colorC.color}`;
+      }
+      const valLightC = this.viewDriver.querySelector('#driver-val-light-c');
+      if (valLightC) valLightC.textContent = `${state.sensors.colorC.reflectedLight}%`;
+      const meterC = this.viewDriver.querySelector('#driver-meter-light-c') as HTMLElement | null;
+      if (meterC) meterC.style.width = `${state.sensors.colorC.reflectedLight}%`;
+      const swatchC = this.viewDriver.querySelector('#driver-swatch-c') as HTMLElement | null;
+      if (swatchC) swatchC.style.backgroundColor = `rgb(${state.sensors.colorC.rgb.join(',')})`;
+      const rgbC = this.viewDriver.querySelector('#driver-rgb-c');
+      if (rgbC) rgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
+
+      // Color D
+      const badgeD = this.viewDriver.querySelector('#driver-badge-color-d');
+      if (badgeD) {
+        badgeD.textContent = state.sensors.colorD.color.toUpperCase();
+        badgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
+      }
+      const valLightD = this.viewDriver.querySelector('#driver-val-light-d');
+      if (valLightD) valLightD.textContent = `${state.sensors.colorD.reflectedLight}%`;
+      const meterD = this.viewDriver.querySelector('#driver-meter-light-d') as HTMLElement | null;
+      if (meterD) meterD.style.width = `${state.sensors.colorD.reflectedLight}%`;
+      const swatchD = this.viewDriver.querySelector('#driver-swatch-d') as HTMLElement | null;
+      if (swatchD) swatchD.style.backgroundColor = `rgb(${state.sensors.colorD.rgb.join(',')})`;
+      const rgbD = this.viewDriver.querySelector('#driver-rgb-d');
+      if (rgbD) rgbD.textContent = `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
+
+      // Distance
+      const valDist = this.viewDriver.querySelector('#driver-val-dist');
+      if (valDist) valDist.textContent = `${state.sensors.distanceCm} cm`;
+      const meterDist = this.viewDriver.querySelector('#driver-meter-dist') as HTMLElement | null;
+      if (meterDist) {
+        const pct = Math.min(100, Math.max(0, (state.sensors.distanceCm / 150) * 100));
+        meterDist.style.width = `${pct}%`;
+      }
+      const lblProx = this.viewDriver.querySelector('#driver-dist-prox-label');
+      if (lblProx) {
+        if (state.sensors.distanceCm < 10) lblProx.textContent = '⚠️ Obstacle (<10cm)';
+        else if (state.sensors.distanceCm < 25) lblProx.textContent = '🔶 Close';
+        else if (state.sensors.distanceCm < 60) lblProx.textContent = '🟡 Approaching';
+        else lblProx.textContent = '🟢 Clear';
+      }
+
+      // Gyro & Odometry
+      const gyroYaw = state.sensors.gyroYaw !== undefined ? state.sensors.gyroYaw : state.robot.yawDegrees;
+      const valGyro = this.viewDriver.querySelector('#driver-val-gyro');
+      if (valGyro) valGyro.textContent = `${gyroYaw.toFixed(1)}°`;
+      const yawText = this.viewDriver.querySelector('#driver-yaw-text');
+      if (yawText) yawText.textContent = `${gyroYaw.toFixed(1)}°`;
+      const needle = this.viewDriver.querySelector('#driver-compass-needle') as HTMLElement | null;
+      if (needle) needle.style.transform = `rotate(${gyroYaw}deg)`;
+      const posText = this.viewDriver.querySelector('#driver-pos-text');
+      if (posText) posText.textContent = `${state.robot.x.toFixed(2)}m, ${state.robot.z.toFixed(2)}m`;
+
+      // Encoders
+      const encDegA = this.viewDriver.querySelector('#motor-enc-deg-A');
+      const encSpdA = this.viewDriver.querySelector('#motor-enc-spd-A');
+      if (encDegA) encDegA.textContent = `${state.motors.left.degrees}°`;
+      if (encSpdA) encSpdA.textContent = `${state.motors.left.speed}°/s`;
+
+      const encDegB = this.viewDriver.querySelector('#motor-enc-deg-B');
+      const encSpdB = this.viewDriver.querySelector('#motor-enc-spd-B');
+      if (encDegB) encDegB.textContent = `${state.motors.right.degrees}°`;
+      if (encSpdB) encSpdB.textContent = `${state.motors.right.speed}°/s`;
+
+      if (state.motors.all) {
+        for (const [p, m] of Object.entries(state.motors.all)) {
+          if (p === 'A' || p === 'B') continue;
+          const ed = this.viewDriver.querySelector(`#motor-enc-deg-${p}`);
+          const es = this.viewDriver.querySelector(`#motor-enc-spd-${p}`);
+          if (ed) ed.textContent = `${m.degrees}°`;
+          if (es) es.textContent = `${m.speed}°/s`;
+        }
+      }
+    }
   }
 
   public getSpawnPose(): SpawnPose {
@@ -1753,7 +2450,11 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     if (this.topbarStopBtn) this.topbarStopBtn.disabled = !isRunning;
   }
 
-  public setActiveDrawerJob(view: 'code' | 'assets' | 'fastener' | 'field' | 'terminal'): void {
+  public setActiveDrawerJob(view: 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal'): void {
+    if (this.activeView === 'driver' && view !== 'driver') {
+      this.stopAllManualDriving();
+    }
+
     this.activeView = view;
     this.isDrawerOpen = true;
     this.drawerPanel.style.display = 'flex';
@@ -1766,6 +2467,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
 
     // Update view contents
     this.viewCode.style.display = view === 'code' ? 'flex' : 'none';
+    if (this.viewDriver) this.viewDriver.style.display = view === 'driver' ? 'flex' : 'none';
     this.viewAssets.style.display = view === 'assets' ? 'flex' : 'none';
     this.viewFastener.style.display = view === 'fastener' ? 'flex' : 'none';
     this.viewField.style.display = view === 'field' ? 'flex' : 'none';
@@ -1774,6 +2476,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     // Update header title & icon
     const titles: Record<string, { icon: string; title: string }> = {
       code: { icon: '💻', title: 'Python Code Editor' },
+      driver: { icon: '🎮', title: 'Manual Driver Mode (WASD & Motors)' },
       assets: { icon: '📦', title: 'Mission Asset Library' },
       fastener: { icon: '🔒', title: '3M Dual Lock & Field Fasteners' },
       field: { icon: '⚙️', title: 'Field & Simulation Setup' },
