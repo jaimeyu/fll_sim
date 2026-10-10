@@ -191,6 +191,9 @@ export class PythonScriptRunner {
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move\(/g, 'await $1.move(');
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move_tank\(/g, 'await $1.move_tank(');
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.run_for_degrees\(/g, 'await $1.run_for_degrees(');
+      transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.run_for_rotations\(/g, 'await $1.run_for_rotations(');
+      transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.run_for_seconds\(/g, 'await $1.run_for_seconds(');
+      transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.run_to_position\(/g, 'await $1.run_to_position(');
       transformed = transformed.replace(/\bcontrol\.wait_for_seconds\(/g, 'wait_for_seconds(');
       transformed = transformed.replace(/\bwait_for_seconds\(/g, 'await wait_for_seconds(');
       transformed = transformed.replace(/\btime\.sleep\(/g, 'await wait_for_seconds(');

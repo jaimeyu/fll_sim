@@ -207,6 +207,9 @@ async function bootstrapSimulator() {
         hud.logConsole(`Mission Model Import Failed: ${err.message || err}`);
       }
     },
+    onImportSpikeScratch: async (file: File) => {
+      hud.logConsole(`🎯 Loaded SPIKE program "${file.name}" into Word Blocks editor.`);
+    },
     onResetAllMissions: () => {
       missionManager.resetAll();
       interactionTool.resetAll();

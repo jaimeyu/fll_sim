@@ -90,12 +90,16 @@ export class VirtualSpikeApi {
   public createMotor(port: MotorPort) {
     const self = this;
     const motor = self.engine.robot.motors.get(port);
+    let defaultSpeed = 50;
 
     return {
       port,
-      start: (speed = 50) => {
+      set_default_speed: (speed: number) => {
+        defaultSpeed = speed;
+      },
+      start: (speed?: number) => {
         self.checkAborted();
-        motor?.start(speed);
+        motor?.start(speed !== undefined ? speed : defaultSpeed);
       },
       stop: () => {
         motor?.stop();
@@ -103,14 +107,52 @@ export class VirtualSpikeApi {
       get_degrees_counted: () => {
         return Math.round(motor?.degrees || 0);
       },
+      get_position: () => {
+        return Math.round(motor?.degrees || 0);
+      },
       get_speed: () => {
         return Math.round(motor?.velocityDegPerSec || 0);
       },
-      run_for_degrees: async (degrees: number, speed = 50) => {
+      run_for_degrees: async (degrees: number, speed?: number) => {
         self.checkAborted();
         if (!motor) return;
+        const spd = speed !== undefined ? speed : defaultSpeed;
         return new Promise<void>((resolve, reject) => {
-          motor.runForDegrees(degrees, speed, () => {
+          motor.runForDegrees(degrees, spd, () => {
+            resolve();
+          });
+          const checkInterval = setInterval(() => {
+            if (self.abortSignal?.aborted) {
+              clearInterval(checkInterval);
+              motor.stop();
+              reject(new Error('Aborted'));
+            }
+          }, 50);
+        });
+      },
+      run_for_rotations: async (rotations: number, speed?: number) => {
+        self.checkAborted();
+        if (!motor) return;
+        const spd = speed !== undefined ? speed : defaultSpeed;
+        return new Promise<void>((resolve, reject) => {
+          motor.runForDegrees(rotations * 360, spd, () => {
+            resolve();
+          });
+          const checkInterval = setInterval(() => {
+            if (self.abortSignal?.aborted) {
+              clearInterval(checkInterval);
+              motor.stop();
+              reject(new Error('Aborted'));
+            }
+          }, 50);
+        });
+      },
+      run_for_seconds: async (seconds: number, speed?: number) => {
+        self.checkAborted();
+        if (!motor) return;
+        const spd = speed !== undefined ? speed : defaultSpeed;
+        return new Promise<void>((resolve, reject) => {
+          motor.runForTime(seconds, spd, () => {
             resolve();
           });
           const checkInterval = setInterval(() => {

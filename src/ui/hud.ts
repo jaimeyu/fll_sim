@@ -7,6 +7,7 @@ import { MotorPort } from '../physics/motor-controller';
 import { SeasonMissionSpec } from '../missions/season-config';
 import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
 import { profiler } from '../core/performance-profiler';
+import { SpikeScratchImporter, VisualBlock } from '../runtime/spike-scratch-importer';
 
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
@@ -15,6 +16,7 @@ export interface HudCallbacks {
   onCameraChange: (preset: CameraViewPreset) => void;
   onImportFile: (file: File) => void;
   onImportMissionElement?: (file: File) => void;
+  onImportSpikeScratch?: (file: File) => Promise<void> | void;
   onMapChange?: (mapType: MatMapType) => void;
   onSpawnPoseChange?: (pose: SpawnPose) => void;
   onMoveRobotToPose?: (pose: SpawnPose, label?: string) => void;
@@ -50,7 +52,7 @@ export interface HudCallbacks {
   onResetGyro?: () => void;
 }
 
-export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
+export const SAMPLE_MISSIONS: Record<string, { title: string; code: string; visualBlocks?: VisualBlock[] }> = {
   drive_straight: {
     title: 'Mission 1: Drive Straight (30 cm)',
     code: `from spike import PrimeHub, MotorPair
@@ -63,6 +65,44 @@ print("Starting 30 cm straight drive...")
 motors.move(30, 'cm')
 print("Successfully reached target position!")
 `,
+    visualBlocks: [
+      {
+        id: 'ds-hat',
+        opcode: 'event_whenprogramstarts',
+        category: 'event',
+        icon: '🚩',
+        label: 'When Program Starts',
+        params: {},
+        colorHex: '#eab308',
+      },
+      {
+        id: 'ds-pair',
+        opcode: 'flippermove_setMovementPair',
+        category: 'movement',
+        icon: '🚗',
+        label: 'Set movement motors to [A+B]',
+        params: { left: 'A', right: 'B' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'ds-spd',
+        opcode: 'flippermove_movementSpeed',
+        category: 'movement',
+        icon: '⚡',
+        label: 'Set movement speed to [50%]',
+        params: { speed: '50' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'ds-move',
+        opcode: 'flippermove_move',
+        category: 'movement',
+        icon: '⬆️',
+        label: 'Move [forward] for [30] [cm]',
+        params: { direction: 'forward', value: '30', unit: 'cm' },
+        colorHex: '#0284c7',
+      },
+    ],
   },
   gyro_turn: {
     title: 'Mission 2: Gyro 90° Turn',
@@ -85,6 +125,71 @@ while hub.motion_sensor.get_yaw_angle() < 90:
 motors.stop()
 print("Turn completed! Final heading:", hub.motion_sensor.get_yaw_angle())
 `,
+    visualBlocks: [
+      {
+        id: 'gt-hat',
+        opcode: 'event_whenprogramstarts',
+        category: 'event',
+        icon: '🚩',
+        label: 'When Program Starts',
+        params: {},
+        colorHex: '#eab308',
+      },
+      {
+        id: 'gt-pair',
+        opcode: 'flippermove_setMovementPair',
+        category: 'movement',
+        icon: '🚗',
+        label: 'Set movement motors to [A+B]',
+        params: { left: 'A', right: 'B' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'gt-reset-yaw',
+        opcode: 'flippersensors_resetYaw',
+        category: 'sensor',
+        icon: '🧭',
+        label: 'Reset Yaw angle to 0°',
+        params: {},
+        colorHex: '#a855f7',
+      },
+      {
+        id: 'gt-wait',
+        opcode: 'control_wait',
+        category: 'control',
+        icon: '⏳',
+        label: 'Wait [0.2] seconds',
+        params: { duration: '0.2' },
+        colorHex: '#f97316',
+      },
+      {
+        id: 'gt-tank',
+        opcode: 'flippermoremove_startDualSpeed',
+        category: 'movement',
+        icon: '🎛️',
+        label: 'Start moving tank Left: [35%], Right: [-35%]',
+        params: { left: '35', right: '-35' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'gt-wait-until',
+        opcode: 'control_wait_until',
+        category: 'control',
+        icon: '⏳',
+        label: 'Wait until <YAW Angle > 90>',
+        params: { condition: 'YAW Angle > 90' },
+        colorHex: '#f97316',
+      },
+      {
+        id: 'gt-stop',
+        opcode: 'flippermove_stopMove',
+        category: 'movement',
+        icon: '⏹️',
+        label: 'Stop moving',
+        params: {},
+        colorHex: '#0284c7',
+      },
+    ],
   },
   line_follower: {
     title: 'Mission 3: Proportional Line Follower (P-Controller)',
@@ -110,6 +215,64 @@ for step in range(250):
 motors.stop()
 print("Line following sequence finished!")
 `,
+    visualBlocks: [
+      {
+        id: 'lf-hat',
+        opcode: 'event_whenprogramstarts',
+        category: 'event',
+        icon: '🚩',
+        label: 'When Program Starts',
+        params: {},
+        colorHex: '#eab308',
+      },
+      {
+        id: 'lf-pair',
+        opcode: 'flippermove_setMovementPair',
+        category: 'movement',
+        icon: '🚗',
+        label: 'Set movement motors to [A+B]',
+        params: { left: 'A', right: 'B' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'lf-repeat',
+        opcode: 'control_repeat',
+        category: 'control',
+        icon: '🔁',
+        label: 'Repeat [250] times',
+        params: { times: '250' },
+        colorHex: '#f97316',
+        children: [
+          {
+            id: 'lf-steer',
+            opcode: 'flippermove_startSteer',
+            category: 'movement',
+            icon: '🔄',
+            label: 'Start steering [(50 - Reflected Light) * 0.85] at [35%]',
+            params: { steering: '(50 - Light) * 0.85', speed: '35' },
+            colorHex: '#0284c7',
+          },
+          {
+            id: 'lf-wait',
+            opcode: 'control_wait',
+            category: 'control',
+            icon: '⏳',
+            label: 'Wait [0.02] seconds',
+            params: { duration: '0.02' },
+            colorHex: '#f97316',
+          },
+        ],
+      },
+      {
+        id: 'lf-stop',
+        opcode: 'flippermove_stopMove',
+        category: 'movement',
+        icon: '⏹️',
+        label: 'Stop moving',
+        params: {},
+        colorHex: '#0284c7',
+      },
+    ],
   },
   line_squaring: {
     title: 'Mission 4: Dual-Sensor Line Squaring',
@@ -147,6 +310,53 @@ for i in range(100):
 motors.stop()
 print("Robot perfectly squared to line!")
 `,
+    visualBlocks: [
+      {
+        id: 'ls-hat',
+        opcode: 'event_whenprogramstarts',
+        category: 'event',
+        icon: '🚩',
+        label: 'When Program Starts',
+        params: {},
+        colorHex: '#eab308',
+      },
+      {
+        id: 'ls-pair',
+        opcode: 'flippermove_setMovementPair',
+        category: 'movement',
+        icon: '🚗',
+        label: 'Set movement motors to [A+B]',
+        params: { left: 'A', right: 'B' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'ls-start',
+        opcode: 'flippermove_startMove',
+        category: 'movement',
+        icon: '▶️',
+        label: 'Start moving [forward]',
+        params: { direction: 'forward' },
+        colorHex: '#0284c7',
+      },
+      {
+        id: 'ls-wait-until',
+        opcode: 'control_wait_until',
+        category: 'control',
+        icon: '⏳',
+        label: 'Wait until <Reflected Light C < 30 or Reflected Light D < 30>',
+        params: { condition: 'Light < 30' },
+        colorHex: '#f97316',
+      },
+      {
+        id: 'ls-stop',
+        opcode: 'flippermove_stopMove',
+        category: 'movement',
+        icon: '⏹️',
+        label: 'Stop moving',
+        params: {},
+        colorHex: '#0284c7',
+      },
+    ],
   },
 };
 
@@ -296,8 +506,20 @@ export class SimulatorHud {
   private matchSeconds = 150; // 2:30 match timer
   private matchTimerRunning = false;
 
-  private scriptTabs: Array<{ id: string; title: string; code: string }> = [
-    { id: 'tab-1', title: 'Mission 1', code: SAMPLE_MISSIONS.drive_straight.code },
+  // Word Blocks vs Python mode
+  private editorViewMode: 'blocks' | 'python' = 'blocks';
+  private wordBlocksContainer!: HTMLElement;
+  private btnViewModeBlocks!: HTMLButtonElement;
+  private btnViewModePython!: HTMLButtonElement;
+  private spikeScratchFileInput!: HTMLInputElement;
+
+  private scriptTabs: Array<{ id: string; title: string; code: string; visualBlocks?: VisualBlock[] }> = [
+    {
+      id: 'tab-1',
+      title: 'Mission 1',
+      code: SAMPLE_MISSIONS.drive_straight.code,
+      visualBlocks: SAMPLE_MISSIONS.drive_straight.visualBlocks,
+    },
   ];
   private activeTabIndex: number = 0;
   private readonly SCRIPT_STORAGE_KEY = 'fll_sim_user_scripts_v1';
@@ -399,7 +621,7 @@ export class SimulatorHud {
         <div class="drawer-panel-header">
           <div class="drawer-panel-title-group">
             <span class="drawer-panel-icon" id="drawer-panel-icon">💻</span>
-            <span class="drawer-panel-title" id="drawer-panel-title">Python Code Editor</span>
+            <span class="drawer-panel-title" id="drawer-panel-title">Code &amp; Word Blocks</span>
           </div>
           <div class="drawer-panel-header-actions">
             <button class="btn btn-xs btn-outline" id="btn-minimize-drawer" title="Minimize Drawer (or click active icon)">◀</button>
@@ -416,7 +638,7 @@ export class SimulatorHud {
           </select>
         </div>
 
-        <!-- View 1: Python Code Editor -->
+        <!-- View 1: Python Code & Word Blocks Editor -->
         <div class="drawer-view-content" id="view-content-code">
           <div class="mission-select-container">
             <label for="mission-select">Sample Mission:</label>
@@ -433,8 +655,22 @@ export class SimulatorHud {
             <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page">➕ New Script</button>
           </div>
 
-          <div class="code-editor-container">
-            <textarea id="python-code-editor" spellcheck="false"></textarea>
+          <div class="code-editor-header-bar">
+            <div class="editor-view-mode-toggle">
+              <button class="btn btn-xs btn-outline active" id="btn-view-mode-blocks" title="View as Visual SPIKE Word Blocks">🧩 Word Blocks</button>
+              <button class="btn btn-xs btn-outline" id="btn-view-mode-python" title="View as SPIKE Python Code">💻 Python</button>
+            </div>
+            <div class="editor-import-actions">
+              <label class="btn btn-xs btn-secondary file-upload-btn" title="Import LEGO SPIKE Prime App Word Blocks (.llsp, .llsp3, .sb3, .json)">
+                📥 Import SPIKE (.llsp3)
+                <input type="file" id="spike-scratch-file-input" accept=".llsp,.llsp3,.sb3,.json" style="display: none;">
+              </label>
+            </div>
+          </div>
+
+          <div class="code-editor-container" id="code-editor-container">
+            <div id="word-blocks-container" class="word-blocks-container"></div>
+            <textarea id="python-code-editor" spellcheck="false" style="display: none;"></textarea>
           </div>
 
           <div class="hud-action-bar">
@@ -1048,6 +1284,10 @@ export class SimulatorHud {
 
     // Cache elements
     this.codeTextarea = this.rootElement.querySelector('#python-code-editor')!;
+    this.wordBlocksContainer = this.rootElement.querySelector('#word-blocks-container')!;
+    this.btnViewModeBlocks = this.rootElement.querySelector('#btn-view-mode-blocks')!;
+    this.btnViewModePython = this.rootElement.querySelector('#btn-view-mode-python')!;
+    this.spikeScratchFileInput = this.rootElement.querySelector('#spike-scratch-file-input')!;
     this.consoleOutput = this.rootElement.querySelector('#console-output')!;
     this.statusBadge = this.rootElement.querySelector('#exec-status-text')!;
     this.timerDisplay = this.rootElement.querySelector('#hud-match-timer')!;
@@ -1137,13 +1377,61 @@ export class SimulatorHud {
     this.drawerElementsList = this.rootElement.querySelector('#drawer-elements-list')!;
     this.assetCountBadge = this.rootElement.querySelector('#asset-count-badge')!;
 
-    // Set initial sample code
+    // Set initial sample code & render word blocks view
     this.codeTextarea.value = this.scriptTabs[0].code;
+    this.setEditorViewMode('blocks');
   }
 
   private setupEvents(): void {
     // 1. Script Tabs and Code Editor bindings
     this.renderScriptTabs();
+    this.renderVisualBlocks();
+
+    // Word Blocks vs Python mode view toggle
+    this.btnViewModeBlocks?.addEventListener('click', () => {
+      this.setEditorViewMode('blocks');
+    });
+
+    this.btnViewModePython?.addEventListener('click', () => {
+      this.setEditorViewMode('python');
+    });
+
+    // SPIKE App project file import (.llsp, .llsp3, .sb3, .json)
+    this.spikeScratchFileInput?.addEventListener('change', () => {
+      if (this.spikeScratchFileInput.files && this.spikeScratchFileInput.files[0]) {
+        this.handleSpikeScratchFile(this.spikeScratchFileInput.files[0]);
+        this.spikeScratchFileInput.value = '';
+      }
+    });
+
+    // Drag and drop onto code editor container
+    const editorContainer = this.rootElement.querySelector('#code-editor-container');
+    if (editorContainer) {
+      editorContainer.addEventListener('dragover', (e: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        editorContainer.classList.add('drag-over-active');
+      });
+      editorContainer.addEventListener('dragleave', (e: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        editorContainer.classList.remove('drag-over-active');
+      });
+      editorContainer.addEventListener('drop', (e: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        editorContainer.classList.remove('drag-over-active');
+        const dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length > 0) {
+          const file = dt.files[0];
+          if (/\.(llsp3?|sb3|json)$/i.test(file.name)) {
+            this.handleSpikeScratchFile(file);
+          } else {
+            this.logConsole(`⚠️ Dropped file "${file.name}" is not a recognized SPIKE App archive (.llsp, .llsp3, .sb3).`);
+          }
+        }
+      });
+    }
 
     const btnNewTab = this.rootElement.querySelector('#btn-new-tab') as HTMLButtonElement | null;
     btnNewTab?.addEventListener('click', () => {
@@ -1192,9 +1480,13 @@ export class SimulatorHud {
         if (this.scriptTabs[this.activeTabIndex]) {
           this.scriptTabs[this.activeTabIndex].code = selected.code;
           this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
+          this.scriptTabs[this.activeTabIndex].visualBlocks = selected.visualBlocks;
         }
         this.renderScriptTabs();
         this.saveScriptTabsToStorage();
+        if (this.editorViewMode === 'blocks') {
+          this.renderVisualBlocks();
+        }
         this.logConsole(`Loaded ${selected.title}`);
       }
     });
@@ -1366,8 +1658,12 @@ export class SimulatorHud {
           if (this.scriptTabs[this.activeTabIndex]) {
             this.scriptTabs[this.activeTabIndex].code = sample.code;
             this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
+            this.scriptTabs[this.activeTabIndex].visualBlocks = sample.visualBlocks;
             this.renderScriptTabs();
             this.saveScriptTabsToStorage();
+            if (this.editorViewMode === 'blocks') {
+              this.renderVisualBlocks();
+            }
           }
           this.logConsole(`Loaded ${sample.title} into active editor.`);
         }
@@ -1377,8 +1673,12 @@ export class SimulatorHud {
         if (this.scriptTabs[this.activeTabIndex]) {
           this.scriptTabs[this.activeTabIndex].code = sample.code;
           this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
+          this.scriptTabs[this.activeTabIndex].visualBlocks = sample.visualBlocks;
           this.renderScriptTabs();
           this.saveScriptTabsToStorage();
+          if (this.editorViewMode === 'blocks') {
+            this.renderVisualBlocks();
+          }
         }
         this.logConsole(`Loaded ${sample.title} into active editor.`);
       }
@@ -3166,10 +3466,13 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     this.activeTabIndex = idx;
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks();
+    }
     this.saveScriptTabsToStorage();
   }
 
-  public addNewScriptTab(title?: string, initialCode?: string): void {
+  public addNewScriptTab(title?: string, initialCode?: string, visualBlocks?: VisualBlock[]): void {
     this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
     const tabNum = this.scriptTabs.length + 1;
     const defaultCode =
@@ -3198,10 +3501,14 @@ print("Finished!")
       id: `tab-${Date.now()}`,
       title: title || `Script ${tabNum}`,
       code: defaultCode,
+      visualBlocks,
     });
     this.activeTabIndex = this.scriptTabs.length - 1;
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks();
+    }
     this.saveScriptTabsToStorage();
     this.logConsole(`➕ Created new script page: "${this.scriptTabs[this.activeTabIndex].title}"`);
   }
@@ -3214,7 +3521,142 @@ print("Finished!")
     }
     this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
     this.renderScriptTabs();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks();
+    }
     this.saveScriptTabsToStorage();
+  }
+
+  public setEditorViewMode(mode: 'blocks' | 'python'): void {
+    this.editorViewMode = mode;
+    if (this.btnViewModeBlocks) {
+      this.btnViewModeBlocks.classList.toggle('active', mode === 'blocks');
+    }
+    if (this.btnViewModePython) {
+      this.btnViewModePython.classList.toggle('active', mode === 'python');
+    }
+
+    if (mode === 'blocks') {
+      if (this.wordBlocksContainer) this.wordBlocksContainer.style.display = 'block';
+      if (this.codeTextarea) this.codeTextarea.style.display = 'none';
+      this.renderVisualBlocks();
+    } else {
+      if (this.wordBlocksContainer) this.wordBlocksContainer.style.display = 'none';
+      if (this.codeTextarea) this.codeTextarea.style.display = 'block';
+    }
+  }
+
+  public renderVisualBlocks(): void {
+    if (!this.wordBlocksContainer) return;
+    const currentTab = this.scriptTabs[this.activeTabIndex];
+    if (!currentTab || !currentTab.visualBlocks || currentTab.visualBlocks.length === 0) {
+      this.wordBlocksContainer.innerHTML = `
+        <div class="word-blocks-empty">
+          <div class="empty-icon">🧩</div>
+          <div class="empty-title">SPIKE Word Blocks View</div>
+          <div class="empty-desc">
+            No visual blocks in this tab yet. You can import your LEGO SPIKE App program (<b>.llsp3</b> or <b>.llsp</b>) to see your code in Word Blocks format!
+          </div>
+          <div class="empty-action-row">
+            <button class="btn btn-sm btn-primary" id="btn-empty-import-spike">
+              📥 Import SPIKE Code (.llsp3 / .llsp)
+            </button>
+          </div>
+          <div class="empty-subtext">Or click <b>[💻 Python]</b> above to edit code directly.</div>
+        </div>
+      `;
+      const btn = this.wordBlocksContainer.querySelector('#btn-empty-import-spike');
+      btn?.addEventListener('click', () => {
+        this.spikeScratchFileInput?.click();
+      });
+      return;
+    }
+
+    const blocksHtml = currentTab.visualBlocks
+      .map((b) => this.renderVisualBlockHtml(b))
+      .join('');
+
+    this.wordBlocksContainer.innerHTML = `
+      <div class="word-blocks-stack">
+        <div class="word-blocks-stack-header">
+          <span class="stack-title">🧩 ${currentTab.title}</span>
+          <span class="stack-count">${currentTab.visualBlocks.length} blocks</span>
+        </div>
+        ${blocksHtml}
+      </div>
+    `;
+  }
+
+  private renderVisualBlockHtml(b: VisualBlock): string {
+    const isHat = b.category === 'event' || b.opcode.includes('when') || b.opcode.includes('start');
+    const isControlWithChildren = b.category === 'control' && (Boolean(b.children) || Boolean(b.elseChildren));
+
+    const formattedLabel = this.formatBlockLabel(b.label);
+
+    if (isControlWithChildren) {
+      const childrenHtml = b.children && b.children.length > 0
+        ? b.children.map((child) => this.renderVisualBlockHtml(child)).join('')
+        : '<div class="word-block-empty-slot"><em>empty</em></div>';
+
+      const elseChildrenHtml = b.elseChildren && b.elseChildren.length > 0
+        ? b.elseChildren.map((child) => this.renderVisualBlockHtml(child)).join('')
+        : (b.elseChildren ? '<div class="word-block-empty-slot"><em>empty</em></div>' : '');
+
+      return `
+        <div class="word-block word-block-control-clamp" style="--block-color: ${b.colorHex};">
+          <div class="word-block-body word-block-c-top">
+            <span class="word-block-icon">${b.icon}</span>
+            <span class="word-block-label">${formattedLabel}</span>
+          </div>
+          <div class="word-block-children">
+            ${childrenHtml}
+          </div>
+          ${b.elseChildren ? `
+            <div class="word-block-body word-block-else-divider">
+              <span class="word-block-icon">❓</span>
+              <span class="word-block-label">else</span>
+            </div>
+            <div class="word-block-children">
+              ${elseChildrenHtml}
+            </div>
+          ` : ''}
+          <div class="word-block-c-bottom"></div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="word-block ${isHat ? 'word-block-hat' : ''}" style="--block-color: ${b.colorHex};">
+        <div class="word-block-body">
+          <span class="word-block-icon">${b.icon}</span>
+          <span class="word-block-label">${formattedLabel}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private formatBlockLabel(label: string): string {
+    return label
+      .replace(/\[([^\]]+)\]/g, '<span class="word-block-pill">$1</span>')
+      .replace(/<([^>]+)>/g, '<span class="word-block-pill pill-condition">&lt;$1&gt;</span>');
+  }
+
+  public async handleSpikeScratchFile(file: File): Promise<void> {
+    this.logConsole(`Unpacking and transpiling SPIKE App project "${file.name}"...`);
+    try {
+      const buffer = await file.arrayBuffer();
+      const result = await SpikeScratchImporter.importProject(buffer, file.name);
+
+      this.addNewScriptTab(result.projectName, result.pythonCode, result.visualBlocks);
+      this.setEditorViewMode('blocks');
+      this.logConsole(`✅ Successfully imported SPIKE project "${result.projectName}" (${result.totalBlocks} Word Blocks converted to Python)!`);
+
+      if (this.callbacks.onImportSpikeScratch) {
+        await this.callbacks.onImportSpikeScratch(file);
+      }
+    } catch (err: any) {
+      this.logConsole(`❌ Failed to import SPIKE project: ${err.message || err}`);
+    }
   }
 
   private loadScriptTabsFromStorage(): void {
@@ -3224,6 +3666,10 @@ print("Finished!")
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           this.scriptTabs = parsed;
+          // Ensure first tab has visualBlocks if missing
+          if (!this.scriptTabs[0].visualBlocks && SAMPLE_MISSIONS.drive_straight.visualBlocks) {
+            this.scriptTabs[0].visualBlocks = SAMPLE_MISSIONS.drive_straight.visualBlocks;
+          }
           this.activeTabIndex = 0;
         }
       }

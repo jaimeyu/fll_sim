@@ -470,11 +470,66 @@ body, html {
   flex-shrink: 0;
 }
 
-/* Code Editor */
+/* Code & Word Blocks Header Bar */
+.code-editor-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.editor-view-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-view-mode-toggle .btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.editor-view-mode-toggle .btn.active {
+  background: #38bdf8;
+  color: #0f172a;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.editor-import-actions .file-upload-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.editor-import-actions .file-upload-btn:hover {
+  background: #0369a1;
+}
+
+/* Code Editor & Word Blocks Container */
 .code-editor-container {
   flex: 1;
-  min-height: 200px;
+  min-height: 220px;
   display: flex;
+  position: relative;
+}
+
+.drag-over-active {
+  outline: 2px dashed #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.08) !important;
 }
 
 #python-code-editor {
@@ -487,13 +542,231 @@ body, html {
   line-height: 1.5;
   padding: 12px;
   border: 1px solid var(--border-color);
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-top: none;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
   resize: none;
   outline: none;
   white-space: pre;
+}
+
+/* Word Blocks View Container */
+.word-blocks-container {
+  width: 100%;
+  height: 100%;
+  max-height: 480px;
+  background: #090d16;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+}
+
+.word-blocks-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.word-blocks-stack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.word-blocks-stack-header .stack-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.word-blocks-stack-header .stack-count {
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Authentic LEGO SPIKE Block Cards */
+.word-block {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  background: var(--block-color, #0284c7);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  user-select: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.word-block:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Curved Hat Block (When Program Starts) */
+.word-block-hat {
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  position: relative;
+  margin-bottom: 3px;
+}
+
+.word-block-hat::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: 48px;
+  height: 8px;
+  background: var(--block-color, #eab308);
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.word-block-body {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.word-block-icon {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+}
+
+.word-block-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Block Parameter Badges (Pills) */
+.word-block-pill {
+  display: inline-block;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin: 0 2px;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.word-block-pill.pill-condition {
+  background: rgba(0, 0, 0, 0.35);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Control C-Clamps (Loops, If/Else) */
+.word-block-control-clamp {
+  background: transparent;
+  box-shadow: none;
+}
+
+.word-block-c-top {
+  background: var(--block-color, #f97316);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.word-block-children {
+  margin-left: 14px;
+  padding: 6px 0 6px 10px;
+  border-left: 6px solid var(--block-color, #f97316);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.word-block-empty-slot {
+  font-size: 11px;
+  color: #64748b;
+  padding: 4px 8px;
+}
+
+.word-block-else-divider {
+  background: var(--block-color, #f97316);
+  border-radius: 4px;
+  margin-top: 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.word-block-c-bottom {
+  height: 8px;
+  background: var(--block-color, #f97316);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  width: 50px;
+}
+
+/* Empty Word Blocks View */
+.word-blocks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  padding: 24px 16px;
+  color: #94a3b8;
+}
+
+.word-blocks-empty .empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.word-blocks-empty .empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 6px;
+}
+
+.word-blocks-empty .empty-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 300px;
+  margin-bottom: 16px;
+  color: #94a3b8;
+}
+
+.word-blocks-empty .empty-action-row {
+  margin-bottom: 12px;
+}
+
+.word-blocks-empty .empty-subtext {
+  font-size: 11px;
+  color: #64748b;
 }
 
 /* Action Buttons */
