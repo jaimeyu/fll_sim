@@ -1,0 +1,14 @@
+0 Stud Tube Open 0.1875 Truncated at 4 LDU Wall
+0 Name: 3-16stud4t4.dat
+0 Author: Magnus Forsberg [MagFors]
+0 !LDRAW_ORG Unofficial_Primitive
+0 !LICENSE Licensed under CC BY 4.0 : see CAreadme.txt
+
+0 BFC CERTIFY CCW
+
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 1-8stud4.dat
+1 16 4.1213 -2 4.32365 0 1 -.1213 -2 0 0 0 0 .08105 rect3.dat
+4 16 4 -4 4.4047 4.2426 -4 4.2426 5.6568 -4 5.6568 4 -4 6.7641
+1 16 4.8284 -2 6.21045 0 -1 -.8284 2 0 0 0 0 .55365 rect3.dat
+5 24 4.2426 0 4.2426 4.2426 -4 4.2426 4 0 4.4047 5.5434 0 2.2962
+5 24 5.6568 0 5.6568 5.6568 -4 5.6568 4 0 6.7641 7.3912 0 3.0616

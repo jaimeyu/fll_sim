@@ -214,10 +214,10 @@ export class CadClusteringPreSolver {
               if (pz < sMinZ) sMinZ = pz;
               if (pz > sMaxZ) sMaxZ = pz;
             }
-            // Minimal 1.5mm margin per submodel so components don't envelope empty air
-            const sHx = Math.max(0.003, (sMaxX - sMinX) / 2 + 0.0015);
-            const sHy = Math.max(0.002, (sMaxY - sMinY) / 2 + 0.0015);
-            const sHz = Math.max(0.003, (sMaxZ - sMinZ) / 2 + 0.0015);
+            // Standard 4mm margin (half-stud pitch) so collider covers physical LEGO brick walls
+            const sHx = Math.max(0.004, (sMaxX - sMinX) / 2 + 0.004);
+            const sHy = Math.max(0.004, (sMaxY - sMinY) / 2 + 0.004);
+            const sHz = Math.max(0.004, (sMaxZ - sMinZ) / 2 + 0.004);
             const sCx = (sMinX + sMaxX) / 2;
             const sCy = (sMinY + sMaxY) / 2;
             const sCz = (sMinZ + sMaxZ) / 2;
@@ -232,10 +232,10 @@ export class CadClusteringPreSolver {
             });
           }
         } else {
-          // Single tight box collider with minimal 1.5mm margin
-          const tightHx = Math.max(0.004, (maxX - minX) / 2 + 0.0015);
-          const tightHy = Math.max(0.003, (maxY - minY) / 2 + 0.0015);
-          const tightHz = Math.max(0.004, (maxZ - minZ) / 2 + 0.0015);
+          // Single tight box collider with standard 4mm margin
+          const tightHx = Math.max(0.004, (maxX - minX) / 2 + 0.004);
+          const tightHy = Math.max(0.004, (maxY - minY) / 2 + 0.004);
+          const tightHz = Math.max(0.004, (maxZ - minZ) / 2 + 0.004);
           colliders.push({
             shape: 'box',
             halfExtents: [tightHx, tightHy, tightHz],

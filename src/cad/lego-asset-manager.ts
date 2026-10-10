@@ -97,7 +97,12 @@ class LegoAssetManagerImpl {
 
   /** Clean part ID for asset lookups */
   public cleanPartNumber(partNumber: string): string {
-    return partNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return partNumber
+      .toLowerCase()
+      .trim()
+      .replace(/\.(dat|ldr|mpd|io)$/i, '')
+      .replace(/^bl_/, '')
+      .replace(/[^a-z0-9]/g, '');
   }
 
   /** Get runtime stats for CAD inspector & debugging */

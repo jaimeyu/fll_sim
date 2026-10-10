@@ -31,7 +31,8 @@ describe('LegoAssetManager (Draco GLB & Local Offline Fallback)', () => {
   });
 
   it('cleans part numbers for filesystem lookup', () => {
-    expect(legoAssetManager.cleanPartNumber('50450.dat')).toBe('50450dat');
+    expect(legoAssetManager.cleanPartNumber('50450.dat')).toBe('50450');
+    expect(legoAssetManager.cleanPartNumber('bl_970c00pb1581.dat')).toBe('970c00pb1581');
     expect(legoAssetManager.cleanPartNumber('3020')).toBe('3020');
     expect(legoAssetManager.cleanPartNumber('44309-a')).toBe('44309a');
   });

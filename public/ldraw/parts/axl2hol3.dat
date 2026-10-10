@@ -1,0 +1,22 @@
+0 Technic Axle Hole Reduced Tooth Outer Edges
+0 Name: axl2hol3.dat
+0 Author: Guy Vivan [guyvivan]
+0 !LDRAW_ORG Unofficial_Primitive
+0 !LICENSE Redistributable under CCAL version 2.0 : see CAreadme.txt
+
+0 BFC CERTIFY CCW
+
+0 !HISTORY 2010-04-05 [PTadmin] Official Update 2010-01
+0 !HISTORY 2022-01-23 [MagFors] Reshaped axlehole
+
+
+2 24 5.6023 0 2 5.5433 0 2.2961
+1 16 0 0 0 5.54328 0 -2.2961 0 1 0 2.2961 0 5.54328 1-8edge.dat
+2 24 2.2961 0 5.5433 2 0 5.6023
+2 24 -4.2426 0 4.2426 -3.5115 0 4.7316
+2 24 -4.7316 0 3.5115 -4.2426 0 4.2426
+2 24 -5.6023 0 -2 -5.5433 0 -2.2961
+1 16 0 0 0 -5.54328 0 2.2961 0 1 0 -2.2961 0 -5.54328 1-8edge.dat
+2 24 -2.2961 0 -5.5433 -2 0 -5.6023
+2 24 4.2426 0 -4.2426 3.5115 0 -4.7316
+2 24 4.7316 0 -3.5115 4.2426 0 -4.2426
