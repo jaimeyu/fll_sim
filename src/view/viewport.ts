@@ -896,6 +896,8 @@ export class Viewport3D {
       }
     });
 
+    dom.addEventListener('contextmenu', (e: MouseEvent) => e.preventDefault());
+
     dom.addEventListener('pointerdown', (e: PointerEvent) => {
       // Only handle left mouse click / primary pointer
       if (e.button !== 0) return;

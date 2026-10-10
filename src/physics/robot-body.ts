@@ -171,10 +171,7 @@ export class RobotPhysicsBody {
       motorR?.start(rightPercent);
     }
     if (Math.abs(leftPercent) < 0.1 && Math.abs(rightPercent) < 0.1) {
-      for (const wb of this.wheelBodies.values()) {
-        wb.setAngularDamping(15.0);
-        wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
-      }
+      this.brakeChassisAndWheels();
     }
   }
 
@@ -186,6 +183,13 @@ export class RobotPhysicsBody {
     if (!motor) return;
     if (Math.abs(speedPercent) < 0.1) {
       motor.stop('BRAKE');
+      if (port === 'A' || port === 'B') {
+        const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
+        const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
+        if (Math.abs(spdA) < 0.1 && Math.abs(spdB) < 0.1) {
+          this.brakeChassisAndWheels();
+        }
+      }
     } else {
       motor.start(speedPercent);
     }
@@ -196,6 +200,40 @@ export class RobotPhysicsBody {
    */
   public stopMotor(port: MotorPort): void {
     this.motors.get(port)?.stop('BRAKE');
+    if (port === 'A' || port === 'B') {
+      const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
+      const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
+      if (Math.abs(spdA) < 0.1 && Math.abs(spdB) < 0.1) {
+        this.brakeChassisAndWheels();
+      }
+    }
+  }
+
+  /**
+   * Applies an active electromagnetic brake to wheels and chassis, bringing the robot to an
+   * immediate standstill without coasting or micro-creeping across the mat.
+   */
+  public brakeChassisAndWheels(): void {
+    for (const wb of this.wheelBodies.values()) {
+      wb.setAngularDamping(50.0);
+      wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+    for (const joint of this.joints.values()) {
+      try {
+        (joint as any).configureMotorVelocity(0.0, 5.0);
+      } catch (_) {}
+    }
+    this.chassisBody.setAngularDamping(15.0);
+    this.chassisBody.setLinearDamping(12.0);
+    const lin = this.chassisBody.linvel();
+    const horizSpd = Math.sqrt(lin.x * lin.x + lin.z * lin.z);
+    if (horizSpd < 0.25) {
+      this.chassisBody.setLinvel({ x: 0, y: lin.y, z: 0 }, true);
+      this.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    } else {
+      // Rapid deceleration simulating rubber tire skidding to dead stop
+      this.chassisBody.setLinvel({ x: lin.x * 0.1, y: lin.y, z: lin.z * 0.1 }, true);
+    }
   }
 
   /**
@@ -211,6 +249,7 @@ export class RobotPhysicsBody {
     const uz = 2 * (rot.x * rot.z - rot.y * rot.w);
 
     const nonRootClusters = this.spec.clusters.filter((c) => !c.isRootChassis);
+    let anyDriveActive = false;
 
     for (const [port, motor] of this.motors.entries()) {
       const targetDegPerSec = motor.step(dt);
@@ -229,16 +268,24 @@ export class RobotPhysicsBody {
 
           const wb = this.wheelBodies.get(cluster.clusterId);
           if (!wb) continue;
+          const joint = jointSpec ? this.joints.get(jointSpec.jointId) : undefined;
 
           if (isIdle) {
-            // High angular damping naturally dissipates spin without feedback torque oscillation
-            wb.setAngularDamping(15.0);
-            const wAng = wb.angvel();
-            const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
-            if (Math.abs(currentSpin) < 0.08) {
-              wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
+            // Electromagnetic holding brake: locks wheel axle and prevents creeping
+            wb.setAngularDamping(50.0);
+            wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            if (joint) {
+              try {
+                (joint as any).configureMotorVelocity(0.0, 5.0);
+              } catch (_) {}
             }
           } else {
+            anyDriveActive = true;
+            if (joint) {
+              try {
+                (joint as any).configureMotorVelocity(0.0, 0.0);
+              } catch (_) {}
+            }
             this.chassisBody.wakeUp();
             wb.wakeUp();
             wb.setAngularDamping(0.2);
@@ -255,6 +302,22 @@ export class RobotPhysicsBody {
         }
       }
     }
+
+    if (!anyDriveActive) {
+      // Both drive motors idle: apply holding brake to chassis to eliminate residual coasting
+      this.chassisBody.setLinearDamping(12.0);
+      this.chassisBody.setAngularDamping(8.0);
+      const cv = this.chassisBody.linvel();
+      const horizSpd = Math.sqrt(cv.x * cv.x + cv.z * cv.z);
+      if (horizSpd < 0.15) {
+        this.chassisBody.setLinvel({ x: 0, y: cv.y, z: 0 }, true);
+        this.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+    } else {
+      // Actively driving: standard chassis damping
+      this.chassisBody.setLinearDamping(0.5);
+      this.chassisBody.setAngularDamping(2.0);
+    }
   }
 
   /**
@@ -264,10 +327,7 @@ export class RobotPhysicsBody {
     for (const motor of this.motors.values()) {
       motor.stop('BRAKE');
     }
-    for (const wb of this.wheelBodies.values()) {
-      wb.setAngularDamping(15.0);
-      wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
-    }
+    this.brakeChassisAndWheels();
   }
 
   public getYawDegrees(): number {

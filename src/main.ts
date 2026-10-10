@@ -75,6 +75,8 @@ async function bootstrapSimulator() {
   // Setup automatic safety sanity recovery handler
   engine.onSanityReset = (reason: string) => {
     runner.abort();
+    engine.robot.stopAllMotors();
+    hud.stopAllManualDriving();
     sensors.resetYaw();
     hud.setExecutionState('ERROR');
     hud.logConsole(`⚠️ [Safety Sanity System] Robot reset to Launch Area: ${reason}`);
@@ -84,6 +86,7 @@ async function bootstrapSimulator() {
   let cadInspector: CadModelInspector;
   const hud = new SimulatorHud(document.body, {
     onRunScript: async (code: string) => {
+      hud.stopAllManualDriving();
       hud.logConsole('Executing SPIKE Python script...');
       try {
         await runner.execute(code, (msg) => hud.logConsole(msg));
@@ -92,18 +95,20 @@ async function bootstrapSimulator() {
       } catch (err: any) {
         hud.setExecutionState('ERROR');
         hud.logConsole(`Runtime Error: ${err.message || err}`);
+      } finally {
+        engine.robot.stopAllMotors();
       }
     },
     onStopScript: () => {
       runner.abort();
-      engine.robot.motors.get('A')?.stop();
-      engine.robot.motors.get('B')?.stop();
+      engine.robot.stopAllMotors();
+      hud.stopAllManualDriving();
       hud.setExecutionState('IDLE');
     },
     onResetRobot: () => {
       runner.abort();
-      engine.robot.motors.get('A')?.stop();
-      engine.robot.motors.get('B')?.stop();
+      engine.robot.stopAllMotors();
+      hud.stopAllManualDriving();
       const spawnPose = hud.getSpawnPose();
       engine.resetRobot(spawnPose);
       viewport.setRobotYaw(spawnPose.yawDegrees);
@@ -116,8 +121,8 @@ async function bootstrapSimulator() {
     },
     onMoveRobotToPose: (pose, label) => {
       runner.abort();
-      engine.robot.motors.get('A')?.stop();
-      engine.robot.motors.get('B')?.stop();
+      engine.robot.stopAllMotors();
+      hud.stopAllManualDriving();
       engine.resetRobot(pose);
       engine.setDefaultPose(pose);
       viewport.setRobotYaw(pose.yawDegrees);

@@ -190,6 +190,8 @@ export class SimulatorHud {
     ['F', 50],
   ]);
   private heldDriverKeys: Set<string> = new Set();
+  private heldPhysicalKeys: Set<string> = new Set();
+  private heldPointerKeys: Set<string> = new Set();
   private btnToggleDriverArm!: HTMLButtonElement;
   private driverStatusDot!: HTMLElement;
   private driverStatusLabel!: HTMLElement;
@@ -1766,27 +1768,56 @@ export class SimulatorHud {
     // Mouse / Touch pointer button handlers for interactive key pad
     const allKeyButtons = this.viewDriver.querySelectorAll('.driver-key-btn[data-key]');
     allKeyButtons.forEach((btn) => {
-      const handlePress = (e: Event) => {
+      const handlePress = (e: PointerEvent) => {
         e.preventDefault();
+        try {
+          (btn as HTMLElement).setPointerCapture(e.pointerId);
+        } catch (_) {}
         const key = btn.getAttribute('data-key');
-        if (key) this.pressDriverKey(key);
+        if (key) this.pressDriverKey(key, 'pointer');
       };
-      const handleRelease = (e: Event) => {
+      const handleRelease = (e: PointerEvent) => {
         e.preventDefault();
+        try {
+          if ((btn as HTMLElement).hasPointerCapture(e.pointerId)) {
+            (btn as HTMLElement).releasePointerCapture(e.pointerId);
+          }
+        } catch (_) {}
         const key = btn.getAttribute('data-key');
-        if (key) this.releaseDriverKey(key);
+        if (key) this.releaseDriverKey(key, 'pointer');
       };
 
-      btn.addEventListener('pointerdown', handlePress);
-      btn.addEventListener('pointerup', handleRelease);
-      btn.addEventListener('pointercancel', handleRelease);
-      btn.addEventListener('pointerleave', handleRelease);
+      btn.addEventListener('pointerdown', handlePress as any);
+      btn.addEventListener('pointerup', handleRelease as any);
+      btn.addEventListener('pointercancel', handleRelease as any);
+      btn.addEventListener('lostpointercapture', handleRelease as any);
+      btn.addEventListener('pointerleave', () => {
+        const key = btn.getAttribute('data-key');
+        if (key) this.releaseDriverKey(key, 'pointer');
+      });
+    });
+
+    // Window level pointer/mouse release safety: whenever mouse buttons are 0, release any pointer-held keys
+    window.addEventListener('pointerup', (e: PointerEvent) => {
+      if (e.buttons === 0 && this.heldPointerKeys.size > 0) {
+        for (const k of Array.from(this.heldPointerKeys)) {
+          this.releaseDriverKey(k, 'pointer');
+        }
+      }
+    });
+    window.addEventListener('mouseup', () => {
+      if (this.heldPointerKeys.size > 0) {
+        for (const k of Array.from(this.heldPointerKeys)) {
+          this.releaseDriverKey(k, 'pointer');
+        }
+      }
     });
 
     // Global keyboard listeners
     window.addEventListener('keydown', (e) => this.handleDriverKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleDriverKeyUp(e));
     window.addEventListener('blur', () => this.stopAllManualDriving());
+    window.addEventListener('contextmenu', () => this.stopAllManualDriving());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.stopAllManualDriving();
     });
@@ -1818,7 +1849,7 @@ export class SimulatorHud {
   private handleDriverKeyDown(e: KeyboardEvent): void {
     if (!this.isDriverArmed) return;
 
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' || e.key === 'Meta' || e.key === 'Alt' || e.key === 'Control') {
       this.stopAllManualDriving();
       return;
     }
@@ -1834,7 +1865,7 @@ export class SimulatorHud {
       if ([' ', 'w', 's', 'a', 'd'].includes(key)) {
         e.preventDefault();
       }
-      this.pressDriverKey(key);
+      this.pressDriverKey(key, 'physical');
     }
   }
 
@@ -1842,45 +1873,68 @@ export class SimulatorHud {
     // Note: NEVER drop keyup events based on focused element! If a physical key is released,
     // it must always be removed from heldDriverKeys so motors never get stuck running.
     const key = e.key.toLowerCase();
-    this.releaseDriverKey(key);
+    this.releaseDriverKey(key, 'physical');
 
     // Also support e.code mappings in case Shift or modifier keys altered e.key
     if (e.code.startsWith('Key')) {
-      this.releaseDriverKey(e.code.slice(3).toLowerCase());
+      this.releaseDriverKey(e.code.slice(3).toLowerCase(), 'physical');
     } else if (e.code === 'Space') {
-      this.releaseDriverKey(' ');
+      this.releaseDriverKey(' ', 'physical');
     } else if (e.code === 'Semicolon') {
-      this.releaseDriverKey(';');
-      this.releaseDriverKey(':');
+      this.releaseDriverKey(';', 'physical');
+      this.releaseDriverKey(':', 'physical');
     }
   }
 
-  private pressDriverKey(key: string): void {
+  private pressDriverKey(key: string, source: 'physical' | 'pointer' = 'physical'): void {
     const k = key.toLowerCase();
-    if (this.heldDriverKeys.has(k)) return;
+    if (source === 'physical') {
+      this.heldPhysicalKeys.add(k);
+    } else {
+      this.heldPointerKeys.add(k);
+    }
+    const hadKey = this.heldDriverKeys.has(k);
     this.heldDriverKeys.add(k);
-    this.updateDriverKeyOutputs();
-    this.updateDriverKeyHighlights();
-  }
-
-  private releaseDriverKey(key: string): void {
-    const k = key.toLowerCase();
-    let changed = false;
-    if (this.heldDriverKeys.has(k)) {
-      this.heldDriverKeys.delete(k);
-      changed = true;
-    }
-    if (k === ';' && this.heldDriverKeys.has(':')) {
-      this.heldDriverKeys.delete(':');
-      changed = true;
-    }
-    if (k === ':' && this.heldDriverKeys.has(';')) {
-      this.heldDriverKeys.delete(';');
-      changed = true;
-    }
-    if (changed) {
+    if (!hadKey) {
       this.updateDriverKeyOutputs();
       this.updateDriverKeyHighlights();
+    }
+  }
+
+  private releaseDriverKey(key: string, source?: 'physical' | 'pointer'): void {
+    const k = key.toLowerCase();
+    if (source === 'physical') {
+      this.heldPhysicalKeys.delete(k);
+    } else if (source === 'pointer') {
+      this.heldPointerKeys.delete(k);
+    } else {
+      this.heldPhysicalKeys.delete(k);
+      this.heldPointerKeys.delete(k);
+    }
+
+    // Only completely release from heldDriverKeys if neither physical nor pointer holds it
+    if (!this.heldPhysicalKeys.has(k) && !this.heldPointerKeys.has(k)) {
+      let changed = false;
+      if (this.heldDriverKeys.has(k)) {
+        this.heldDriverKeys.delete(k);
+        changed = true;
+      }
+      if (k === ';' && this.heldDriverKeys.has(':')) {
+        this.heldDriverKeys.delete(':');
+        this.heldPhysicalKeys.delete(':');
+        this.heldPointerKeys.delete(':');
+        changed = true;
+      }
+      if (k === ':' && this.heldDriverKeys.has(';')) {
+        this.heldDriverKeys.delete(';');
+        this.heldPhysicalKeys.delete(';');
+        this.heldPointerKeys.delete(';');
+        changed = true;
+      }
+      if (changed) {
+        this.updateDriverKeyOutputs();
+        this.updateDriverKeyHighlights();
+      }
     }
   }
 
@@ -2108,6 +2162,8 @@ export class SimulatorHud {
 
   public stopAllManualDriving(): void {
     this.heldDriverKeys.clear();
+    this.heldPhysicalKeys.clear();
+    this.heldPointerKeys.clear();
     this.updateDriverKeyHighlights();
     this.callbacks.onManualDriveBaseStop?.();
     for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
@@ -2546,6 +2602,9 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
 
   public toggleDrawer(open?: boolean): void {
     this.isDrawerOpen = open !== undefined ? open : !this.isDrawerOpen;
+    if (!this.isDrawerOpen && this.activeView === 'driver') {
+      this.stopAllManualDriving();
+    }
     this.drawerPanel.style.display = this.isDrawerOpen ? 'flex' : 'none';
     const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
     actBtns.forEach((btn) => {

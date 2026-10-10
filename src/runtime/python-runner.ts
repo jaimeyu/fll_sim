@@ -18,6 +18,7 @@ export class PythonScriptRunner {
       this.abortController.abort();
     }
     this.isRunning = false;
+    this.api.stopAllMotors();
   }
 
   public static findMatchingParen(str: string, openIndex: number): number {
@@ -111,7 +112,10 @@ export class PythonScriptRunner {
         continue;
       }
 
-      let transformed = line;
+      let transformed = line
+        .replace(/\bTrue\b/g, 'true')
+        .replace(/\bFalse\b/g, 'false')
+        .replace(/\bNone\b/g, 'null');
 
       // Convert while loops
       if (transformed.startsWith('while ') && transformed.endsWith(':')) {
@@ -187,6 +191,7 @@ export class PythonScriptRunner {
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move\(/g, 'await $1.move(');
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.move_tank\(/g, 'await $1.move_tank(');
       transformed = transformed.replace(/\b([a-zA-Z0-9_]+)\.run_for_degrees\(/g, 'await $1.run_for_degrees(');
+      transformed = transformed.replace(/\bcontrol\.wait_for_seconds\(/g, 'wait_for_seconds(');
       transformed = transformed.replace(/\bwait_for_seconds\(/g, 'await wait_for_seconds(');
       transformed = transformed.replace(/\btime\.sleep\(/g, 'await wait_for_seconds(');
 

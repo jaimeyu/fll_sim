@@ -135,4 +135,83 @@ describe('Manual Driver Mode & Motor Controls', () => {
     expect(robot.motors.get('C')?.velocityDegPerSec).toBe(0);
     expect(robot.motors.get('D')?.velocityDegPerSec).toBe(0);
   });
+
+  it('immediately halts chassis momentum and wheel spin when brakeChassisAndWheels is engaged', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    const robot = engine.robot;
+
+    // Drive forward at full throttle
+    robot.setDriveSpeeds(100, 100);
+    for (let i = 0; i < 20; i++) {
+      engine.update(1 / 60);
+    }
+
+    const movingLinvel = robot.chassisBody.linvel();
+    const movingSpeed = Math.hypot(movingLinvel.x, movingLinvel.z);
+    expect(movingSpeed).toBeGreaterThan(0.05);
+
+    // Stop drivebase with active electromagnetic brake
+    robot.setDriveSpeeds(0, 0);
+
+    // Step physics for 10 ticks
+    for (let i = 0; i < 10; i++) {
+      engine.update(1 / 60);
+    }
+
+    // Chassis should have come to a dead stop with zero creeping
+    const stoppedLinvel = robot.chassisBody.linvel();
+    const stoppedSpeed = Math.hypot(stoppedLinvel.x, stoppedLinvel.z);
+    expect(stoppedSpeed).toBeLessThan(0.05);
+
+    // Wheel axle spin should be stopped (< 0.05 rad/s)
+    for (const wb of robot.wheelBodies.values()) {
+      const angvel = wb.angvel();
+      const axleSpin = Math.abs(angvel.x);
+      expect(axleSpin).toBeLessThan(0.05);
+    }
+  });
+
+  it('stops all motors immediately when PythonScriptRunner is aborted', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    const sensors = new VirtualSensorManager(engine.robot);
+    const { VirtualSpikeApi } = await import('../src/runtime/spike-api');
+    const { PythonScriptRunner } = await import('../src/runtime/python-runner');
+
+    const api = new VirtualSpikeApi(engine, sensors);
+    const runner = new PythonScriptRunner(api);
+
+    // Start a continuous motor script that keeps running
+    const pyScript = `
+from spike import Motor, MotorPair
+from spike.control import wait_for_seconds
+motor_c = Motor('C')
+motor_c.start(75)
+pair = MotorPair('A', 'B')
+pair.start(50, 50)
+while True:
+    wait_for_seconds(0.1)
+`;
+    // Execute script in background
+    const execPromise = runner.execute(pyScript, () => {});
+
+    // Yield a frame
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Motors A, B, and C should have targets while running
+    expect(engine.robot.motors.get('C')?.targetSpeedDegPerSec).toBeGreaterThan(0);
+
+    // Abort runner
+    runner.abort();
+    await execPromise;
+
+    // All motors must be halted
+    for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as const) {
+      expect(engine.robot.motors.get(port)?.targetSpeedDegPerSec).toBe(0);
+      expect(engine.robot.motors.get(port)?.velocityDegPerSec).toBe(0);
+    }
+  });
 });
