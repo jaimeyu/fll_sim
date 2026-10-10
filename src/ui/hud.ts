@@ -1787,21 +1787,51 @@ export class SimulatorHud {
     window.addEventListener('keydown', (e) => this.handleDriverKeyDown(e));
     window.addEventListener('keyup', (e) => this.handleDriverKeyUp(e));
     window.addEventListener('blur', () => this.stopAllManualDriving());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.stopAllManualDriving();
+    });
+    document.addEventListener('focusin', () => {
+      if (this.isTextInputFocused()) {
+        this.stopAllManualDriving();
+      }
+    });
+  }
+
+  private isTextInputFocused(): boolean {
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (!activeEl) return false;
+    const tagName = activeEl.tagName?.toLowerCase();
+    if (tagName === 'textarea') return true;
+    if (tagName === 'select') return true;
+    if (activeEl.isContentEditable) return true;
+    if (activeEl.classList?.contains('monaco-editor') || activeEl.closest?.('.monaco-editor')) return true;
+    if (tagName === 'input') {
+      const type = (activeEl as HTMLInputElement).type?.toLowerCase() || 'text';
+      // Range sliders, checkboxes, radios, buttons do NOT count as text inputs
+      if (['text', 'password', 'search', 'email', 'number', 'url', 'tel'].includes(type)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private handleDriverKeyDown(e: KeyboardEvent): void {
     if (!this.isDriverArmed) return;
-    // Don't intercept typing in input boxes or code editor
-    const activeEl = document.activeElement;
-    const tagName = activeEl?.tagName?.toLowerCase();
-    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+
+    if (e.key === 'Escape') {
+      this.stopAllManualDriving();
+      return;
+    }
+
+    // Don't intercept typing in real text boxes or code editor
+    if (this.isTextInputFocused()) {
       return;
     }
 
     const key = e.key.toLowerCase();
-    const validDriverKeys = ['w', 'a', 's', 'd', ' ', 'u', 'i', 'o', 'p', 'j', 'k', 'l', ';', 'h', 'y', 't', 'g'];
+    const validDriverKeys = ['w', 'a', 's', 'd', ' ', 'u', 'i', 'o', 'p', 'j', 'k', 'l', ';', ':', 'h', 'y', 't', 'g'];
     if (validDriverKeys.includes(key)) {
-      if (key === ' ' || key === 'w' || key === 's' || key === 'a' || key === 'd') {
+      if ([' ', 'w', 's', 'a', 'd'].includes(key)) {
         e.preventDefault();
       }
       this.pressDriverKey(key);
@@ -1809,14 +1839,20 @@ export class SimulatorHud {
   }
 
   private handleDriverKeyUp(e: KeyboardEvent): void {
-    const activeEl = document.activeElement;
-    const tagName = activeEl?.tagName?.toLowerCase();
-    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
-      return;
-    }
-
+    // Note: NEVER drop keyup events based on focused element! If a physical key is released,
+    // it must always be removed from heldDriverKeys so motors never get stuck running.
     const key = e.key.toLowerCase();
     this.releaseDriverKey(key);
+
+    // Also support e.code mappings in case Shift or modifier keys altered e.key
+    if (e.code.startsWith('Key')) {
+      this.releaseDriverKey(e.code.slice(3).toLowerCase());
+    } else if (e.code === 'Space') {
+      this.releaseDriverKey(' ');
+    } else if (e.code === 'Semicolon') {
+      this.releaseDriverKey(';');
+      this.releaseDriverKey(':');
+    }
   }
 
   private pressDriverKey(key: string): void {
@@ -1829,14 +1865,31 @@ export class SimulatorHud {
 
   private releaseDriverKey(key: string): void {
     const k = key.toLowerCase();
-    this.heldDriverKeys.delete(k);
-    this.updateDriverKeyOutputs();
-    this.updateDriverKeyHighlights();
+    let changed = false;
+    if (this.heldDriverKeys.has(k)) {
+      this.heldDriverKeys.delete(k);
+      changed = true;
+    }
+    if (k === ';' && this.heldDriverKeys.has(':')) {
+      this.heldDriverKeys.delete(':');
+      changed = true;
+    }
+    if (k === ':' && this.heldDriverKeys.has(';')) {
+      this.heldDriverKeys.delete(';');
+      changed = true;
+    }
+    if (changed) {
+      this.updateDriverKeyOutputs();
+      this.updateDriverKeyHighlights();
+    }
   }
 
   private updateDriverKeyOutputs(): void {
     if (!this.isDriverArmed) {
       this.callbacks.onManualDriveBaseStop?.();
+      for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
+        this.callbacks.onManualMotorStop?.(port);
+      }
       return;
     }
 
@@ -1887,12 +1940,12 @@ export class SimulatorHud {
     const isWasdActive = left !== 0 || right !== 0;
 
     // 2. Individual motor key pairs
-    // U/J (Port A), I/K (Port B), O/L (Port C), P/; or P/H (Port D), Y/H (Port E), T/G (Port F)
+    // U/J (Port A), I/K (Port B), O/L (Port C), P/; (Port D), Y/H (Port E), T/G (Port F)
     const motorBindings: Array<{ port: MotorPort; fwd: string[]; rev: string[] }> = [
       { port: 'A', fwd: ['u'], rev: ['j'] },
       { port: 'B', fwd: ['i'], rev: ['k'] },
       { port: 'C', fwd: ['o'], rev: ['l'] },
-      { port: 'D', fwd: ['p'], rev: [';', 'h'] },
+      { port: 'D', fwd: ['p'], rev: [';', ':'] },
       { port: 'E', fwd: ['y'], rev: ['h'] },
       { port: 'F', fwd: ['t'], rev: ['g'] },
     ];
@@ -1912,8 +1965,8 @@ export class SimulatorHud {
         this.callbacks.onManualMotorSpeed?.(b.port, portSpeed);
       } else if (isRev && !isFwd) {
         this.callbacks.onManualMotorSpeed?.(b.port, -portSpeed);
-      } else if (!isFwd && !isRev) {
-        // If not driving via WASD, stop
+      } else {
+        // Stopped, released, or both opposing keys held simultaneously
         if (b.port !== 'A' && b.port !== 'B') {
           this.callbacks.onManualMotorStop?.(b.port);
         }
@@ -2013,7 +2066,7 @@ export class SimulatorHud {
       { port: 'A', fwd: ['u'], rev: ['j'] },
       { port: 'B', fwd: ['i'], rev: ['k'] },
       { port: 'C', fwd: ['o'], rev: ['l'] },
-      { port: 'D', fwd: ['p'], rev: [';', 'h'] },
+      { port: 'D', fwd: ['p'], rev: [';', ':'] },
       { port: 'E', fwd: ['y'], rev: ['h'] },
       { port: 'F', fwd: ['t'], rev: ['g'] },
     ];
@@ -2027,7 +2080,7 @@ export class SimulatorHud {
 
       const isFwd = binding.fwd.some((k) => this.heldDriverKeys.has(k));
       const isRev = binding.rev.some((k) => this.heldDriverKeys.has(k));
-      const isWasdDriving = (port === 'A' || port === 'B') && (isW || isS || isA || isD);
+      const isWasdDriving = (port === 'A' || port === 'B') && !isFwd && !isRev && (isW || isS || isA || isD) && !isSpace;
 
       if (isFwd || isRev || isWasdDriving) {
         card.classList.add('active-motor-card');

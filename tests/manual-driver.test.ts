@@ -95,4 +95,44 @@ describe('Manual Driver Mode & Motor Controls', () => {
     sensors.resetYaw();
     expect(sensors.getYaw()).toBe(0);
   });
+
+  it('reliably returns all motors to zero speed when stopped without torque oscillation', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    const robot = engine.robot;
+
+    // Run forward for a few ticks
+    robot.setDriveSpeeds(80, 80);
+    for (let i = 0; i < 5; i++) {
+      engine.update(1 / 60);
+    }
+    expect(robot.motors.get('A')?.velocityDegPerSec).toBeGreaterThan(0);
+    expect(robot.motors.get('B')?.velocityDegPerSec).toBeGreaterThan(0);
+
+    // Stop drivebase
+    robot.setDriveSpeeds(0, 0);
+    expect(robot.motors.get('A')?.targetSpeedDegPerSec).toBe(0);
+    expect(robot.motors.get('B')?.targetSpeedDegPerSec).toBe(0);
+    expect(robot.motors.get('A')?.velocityDegPerSec).toBe(0);
+    expect(robot.motors.get('B')?.velocityDegPerSec).toBe(0);
+
+    // Step physics when idle and ensure motors remain at 0 speed and stable
+    for (let i = 0; i < 10; i++) {
+      engine.update(1 / 60);
+      expect(robot.motors.get('A')?.targetSpeedDegPerSec).toBe(0);
+      expect(robot.motors.get('B')?.targetSpeedDegPerSec).toBe(0);
+      expect(robot.motors.get('A')?.velocityDegPerSec).toBe(0);
+      expect(robot.motors.get('B')?.velocityDegPerSec).toBe(0);
+    }
+
+    // Verify stopAllMotors
+    robot.setMotorSpeed('C', 60);
+    robot.setMotorSpeed('D', -40);
+    robot.stopAllMotors();
+    expect(robot.motors.get('C')?.targetSpeedDegPerSec).toBe(0);
+    expect(robot.motors.get('D')?.targetSpeedDegPerSec).toBe(0);
+    expect(robot.motors.get('C')?.velocityDegPerSec).toBe(0);
+    expect(robot.motors.get('D')?.velocityDegPerSec).toBe(0);
+  });
 });

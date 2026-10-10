@@ -74,6 +74,9 @@ export class VirtualMotor {
     const cb = this.activeTarget?.onComplete;
     this.activeTarget = null;
     this.targetSpeedDegPerSec = 0;
+    if (action !== 'COAST') {
+      this.velocityDegPerSec = 0;
+    }
     if (cb) cb();
   }
 
@@ -88,17 +91,20 @@ export class VirtualMotor {
     if (actualAngularVelocityRadPerSec !== undefined) {
       // Convert rad/s to deg/s
       this.velocityDegPerSec = (actualAngularVelocityRadPerSec * 180) / Math.PI;
+    } else if (this.activeTarget) {
+      this.velocityDegPerSec = this.activeTarget.targetSpeedDegPerSec;
     }
 
     if (!this.activeTarget) {
       if (this.stopAction === 'COAST') {
         this.targetSpeedDegPerSec = 0;
         this.velocityDegPerSec *= 0.95;
+        if (Math.abs(this.velocityDegPerSec) < 0.1) this.velocityDegPerSec = 0;
       } else {
         this.targetSpeedDegPerSec = 0;
         this.velocityDegPerSec = 0;
       }
-      return this.targetSpeedDegPerSec;
+      return 0;
     }
 
     const { type, targetSpeedDegPerSec } = this.activeTarget;

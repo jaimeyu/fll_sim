@@ -87,11 +87,23 @@ export class SimulationPhysicsEngine {
     this.isRobotStationary = stationary;
     if (!this.robot || !this.isInitialized) return;
     if (stationary) {
+      // Elevate chassis slightly (3mm) onto dyno test stand so wheels/attachments can actuate freely without floor friction lock
+      const cp = this.robot.chassisBody.translation();
+      this.robot.chassisBody.setTranslation({ x: cp.x, y: cp.y + 0.003, z: cp.z }, true);
       this.robot.chassisBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
       this.robot.chassisBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
       this.robot.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      for (const wb of this.robot.wheelBodies.values()) {
+        const wp = wb.translation();
+        wb.setTranslation({ x: wp.x, y: wp.y + 0.003, z: wp.z }, true);
+        wb.wakeUp();
+      }
     } else {
       this.robot.chassisBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+      this.robot.chassisBody.wakeUp();
+      for (const wb of this.robot.wheelBodies.values()) {
+        wb.wakeUp();
+      }
     }
   }
 

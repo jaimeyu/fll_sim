@@ -170,6 +170,12 @@ export class RobotPhysicsBody {
     } else {
       motorR?.start(rightPercent);
     }
+    if (Math.abs(leftPercent) < 0.1 && Math.abs(rightPercent) < 0.1) {
+      for (const wb of this.wheelBodies.values()) {
+        wb.setAngularDamping(15.0);
+        wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
+      }
+    }
   }
 
   /**
@@ -225,13 +231,12 @@ export class RobotPhysicsBody {
           if (!wb) continue;
 
           if (isIdle) {
-            wb.setAngularDamping(4.0);
+            // High angular damping naturally dissipates spin without feedback torque oscillation
+            wb.setAngularDamping(15.0);
             const wAng = wb.angvel();
             const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
-            // Active electromagnetic braking torque to stop and hold robot in place
-            if (Math.abs(currentSpin) > 0.05) {
-              const brakeTorque = Math.max(-0.06, Math.min(0.06, (0 - currentSpin) * 0.01));
-              wb.addTorque({ x: brakeTorque * ux, y: brakeTorque * uy, z: brakeTorque * uz }, true);
+            if (Math.abs(currentSpin) < 0.08) {
+              wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
             }
           } else {
             this.chassisBody.wakeUp();
@@ -258,6 +263,10 @@ export class RobotPhysicsBody {
   public stopAllMotors(): void {
     for (const motor of this.motors.values()) {
       motor.stop('BRAKE');
+    }
+    for (const wb of this.wheelBodies.values()) {
+      wb.setAngularDamping(15.0);
+      wb.setAngvel({ x: 0, y: 0, z: 0 }, false);
     }
   }
 
