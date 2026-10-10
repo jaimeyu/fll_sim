@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import JSZip from 'jszip';
 import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec, PlacedPart } from '../cad/types';
-import { createLegoBrickMesh, LEGO_COLORS } from '../view/lego-visuals';
+import { LEGO_COLORS } from '../view/lego-visuals';
+import { legoAssetManager } from '../cad/lego-asset-manager';
 import { SEASON_MISSIONS_CONFIG } from '../missions/season-config';
 
 export interface CadInspectorCallbacks {
@@ -240,6 +241,18 @@ export class CadModelInspector {
               </div>
             </div>
 
+            <!-- 3D Mesh Engine Mode (Draco GLB vs Native Procedural) -->
+            <div class="inspector-section-card">
+              <div class="section-card-title">🎨 3D Mesh Engine Mode</div>
+              <div class="engine-mode-row" style="display: flex; gap: 8px; margin-top: 6px;">
+                <button class="btn btn-xs btn-outline" id="btn-engine-draco" title="High-fidelity Draco compressed 3D GLB models">⚡ Draco GLB</button>
+                <button class="btn btn-xs btn-outline" id="btn-engine-procedural" title="Fast built-in procedural LEGO geometry">🧱 Native Procedural</button>
+              </div>
+              <div class="engine-status-desc" id="engine-status-desc" style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
+                Active: ⚡ Draco GLB (High fidelity, authentic geometry)
+              </div>
+            </div>
+
             <!-- Physics Mode Controls -->
             <div class="inspector-section-card">
               <div class="section-card-title">⚙️ Physics Engine Mode</div>
@@ -398,6 +411,42 @@ export class CadModelInspector {
       btnTabClusters?.classList.remove('active');
       clustersList.style.display = 'none';
       bomContainer.style.display = 'block';
+    });
+
+    // 3D Mesh Engine Mode buttons (Draco GLB vs Native Procedural)
+    const btnDraco = this.overlay.querySelector('#btn-engine-draco') as HTMLButtonElement | null;
+    const btnProc = this.overlay.querySelector('#btn-engine-procedural') as HTMLButtonElement | null;
+
+    const updateEngineButtons = () => {
+      const mode = legoAssetManager.getRenderMode();
+      if (mode === 'draco_glb') {
+        btnDraco?.classList.add('btn-primary', 'active');
+        btnDraco?.classList.remove('btn-outline');
+        btnProc?.classList.add('btn-outline');
+        btnProc?.classList.remove('btn-primary', 'active');
+      } else {
+        btnProc?.classList.add('btn-primary', 'active');
+        btnProc?.classList.remove('btn-outline');
+        btnDraco?.classList.add('btn-outline');
+        btnDraco?.classList.remove('btn-primary', 'active');
+      }
+    };
+    updateEngineButtons();
+
+    btnDraco?.addEventListener('click', async () => {
+      legoAssetManager.setRenderMode('draco_glb');
+      updateEngineButtons();
+      if (this.currentSpec) {
+        await this.build3DRepresentation(this.currentSpec);
+      }
+    });
+
+    btnProc?.addEventListener('click', async () => {
+      legoAssetManager.setRenderMode('procedural');
+      updateEngineButtons();
+      if (this.currentSpec) {
+        await this.build3DRepresentation(this.currentSpec);
+      }
     });
 
     // Deploy to mat
@@ -594,7 +643,7 @@ export class CadModelInspector {
     this.currentThumbnailUrl = thumbUrl;
 
     this.updateThumbnailDom(thumbUrl);
-    this.build3DRepresentation(spec);
+    await this.build3DRepresentation(spec);
     this.updateReportDom(spec, name, id);
     this.resetCamera();
   }
@@ -610,7 +659,7 @@ export class CadModelInspector {
     }
   }
 
-  private build3DRepresentation(spec: RobotAssemblySpec): void {
+  private async build3DRepresentation(spec: RobotAssemblySpec): Promise<void> {
     this.modelGroup.clear();
     this.colliderGroup.clear();
     this.inspectedSteps = [];
@@ -618,6 +667,7 @@ export class CadModelInspector {
       this.scene.remove(this.highlightHelper);
       this.highlightHelper = null;
     }
+    legoAssetManager.resetStats();
 
     const clusterPalette = [
       LEGO_COLORS.DARK_BLUE,
@@ -663,11 +713,11 @@ export class CadModelInspector {
       const clusterObj = new THREE.Group();
       clusterObj.position.set(offsetX, offsetY, offsetZ);
 
-      // Render authentic LEGO bricks
+      // Render authentic LEGO bricks with Draco GLB / procedural engine
       if (cluster.parts && cluster.parts.length > 0) {
         for (const part of cluster.parts) {
           const pColor = part.colorHex ?? clusterColor;
-          const mesh = createLegoBrickMesh(part.partNumber, pColor, part.role);
+          const mesh = await legoAssetManager.loadPartMesh(part.partNumber, pColor, part.role);
           mesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
           mesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
           clusterObj.add(mesh);
@@ -699,6 +749,16 @@ export class CadModelInspector {
         const colMesh = new THREE.Mesh(geom, mat);
         colMesh.position.set(col.offset[0] + offsetX, col.offset[1] + offsetY, col.offset[2] + offsetZ);
         this.colliderGroup.add(colMesh);
+      }
+    }
+
+    const statusDesc = this.overlay.querySelector('#engine-status-desc') as HTMLDivElement | null;
+    if (statusDesc) {
+      const stats = legoAssetManager.getStats();
+      if (stats.mode === 'draco_glb') {
+        statusDesc.innerHTML = `Active: <strong style="color: #38bdf8;">⚡ Draco GLB</strong> (<span style="color:#4ade80;">${stats.dracoHits} GLB assets</span>, <span style="color:#fbbf24;">${stats.proceduralFallbacks} procedural fallbacks</span>)`;
+      } else {
+        statusDesc.innerHTML = `Active: <strong style="color: #f97316;">🧱 Native Procedural</strong> (${stats.proceduralFallbacks} procedural meshes)`;
       }
     }
 

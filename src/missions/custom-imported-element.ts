@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { MissionElement } from './types';
 import { RobotAssemblySpec } from '../cad/types';
-import { LEGO_COLORS, getLegoMaterial, createLegoBrickMesh } from '../view/lego-visuals';
+import { LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
+import { legoAssetManager } from '../cad/lego-asset-manager';
 
 export interface CustomElementOptions {
   id: string;
@@ -200,10 +201,24 @@ export class CustomImportedMissionElement implements MissionElement {
       if (hasDetailedParts) {
         for (const part of cluster.parts!) {
           const partColor = part.colorHex ?? clusterColor;
-          const partMesh = createLegoBrickMesh(part.partNumber, partColor, part.role);
+          const partMesh = legoAssetManager.loadPartMeshSync(part.partNumber, partColor, part.role);
           partMesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
           partMesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
           clusterGroup.add(partMesh);
+
+          // Asynchronously upgrade to Draco GLB mesh when ready
+          if (legoAssetManager.getRenderMode() === 'draco_glb') {
+            legoAssetManager.loadPartMesh(part.partNumber, partColor, part.role).then((loadedMesh) => {
+              if (loadedMesh !== partMesh) {
+                loadedMesh.position.copy(partMesh.position);
+                loadedMesh.quaternion.copy(partMesh.quaternion);
+                clusterGroup.remove(partMesh);
+                clusterGroup.add(loadedMesh);
+                const idx = this.interactiveMeshes.indexOf(partMesh);
+                if (idx !== -1) this.interactiveMeshes[idx] = loadedMesh;
+              }
+            });
+          }
 
           if (!isBase || !this.isBaseFixed) {
             this.interactiveMeshes.push(partMesh);

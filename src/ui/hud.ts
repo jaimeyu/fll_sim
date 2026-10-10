@@ -4,6 +4,7 @@ import { SimulatorAppMode } from '../missions/mission-manager';
 import { MatMapType } from '../view/mat-texture';
 
 import { SeasonMissionSpec } from '../missions/season-config';
+import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
 
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
@@ -454,6 +455,21 @@ export class SimulatorHud {
                 <button class="btn btn-xs btn-outline" data-spawn-preset="blue">🔷 Blue Arc</button>
                 <button class="btn btn-xs btn-outline" data-spawn-preset="center">🎯 Center</button>
               </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-card-title">🎨 3D Mesh Engine & Offline Mode</div>
+              <p class="settings-card-desc">Compare high-fidelity Draco GLB assets with built-in procedural geometry.</p>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <select id="engine-mode-select" class="hud-select w-100">
+                  <option value="draco_glb">⚡ Draco GLB (High-Fidelity 3D Assets)</option>
+                  <option value="procedural">🧱 Native Procedural (Fast Built-in)</option>
+                </select>
+              </div>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #94a3b8; cursor: pointer;">
+                <input type="checkbox" id="chk-local-offline" checked>
+                <span>🔌 Local Offline Mode (Serve from /draco & /parts, 0 external HTTP)</span>
+              </label>
             </div>
 
             <div class="settings-card">
@@ -961,6 +977,27 @@ export class SimulatorHud {
       this.callbacks.onResetMission?.();
       this.logConsole('Mission model reset to starting state.');
     });
+
+    // 3D Mesh Engine & Offline Mode settings
+    const engineModeSelect = this.rootElement.querySelector('#engine-mode-select') as HTMLSelectElement | null;
+    const chkLocalOffline = this.rootElement.querySelector('#chk-local-offline') as HTMLInputElement | null;
+
+    if (engineModeSelect) {
+      engineModeSelect.value = legoAssetManager.getRenderMode();
+      engineModeSelect.addEventListener('change', () => {
+        const mode = engineModeSelect.value as LegoRenderMode;
+        legoAssetManager.setRenderMode(mode);
+        this.logConsole(`Switched 3D Mesh Engine to: ${engineModeSelect.options[engineModeSelect.selectedIndex].text}`);
+      });
+    }
+
+    if (chkLocalOffline) {
+      chkLocalOffline.checked = legoAssetManager.isLocalOfflineMode();
+      chkLocalOffline.addEventListener('change', () => {
+        legoAssetManager.setLocalOfflineMode(chkLocalOffline.checked);
+        this.logConsole(`Local Offline Mode: ${chkLocalOffline.checked ? 'ENABLED (Zero external HTTP)' : 'DISABLED'}`);
+      });
+    }
   }
 
   private startMatchTimer(): void {
