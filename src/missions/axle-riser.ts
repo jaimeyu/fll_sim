@@ -262,8 +262,13 @@ export class AxleRiserMission implements MissionElement {
   public syncVisuals(): void {
     if (!this.sliderBody || !this.anchorBody) return;
 
-    const { x, y, z } = this.basePos;
     const { ux, uz, wx, wz } = this.getDirectionVectors();
+    if (!this.isDualLocked) {
+      const aP = this.anchorBody.translation();
+      this.basePos.x = aP.x + 0.09 * ux;
+      this.basePos.z = aP.z + 0.09 * uz;
+    }
+    const { x, y, z } = this.basePos;
     const radYaw = (this.yawDegrees * Math.PI) / 180;
 
     // Baseplate

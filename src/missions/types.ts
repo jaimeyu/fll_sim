@@ -103,10 +103,15 @@ export interface MissionElement {
   /**
    * Sets Dual-Lock fastening status (true = fixed, false = dynamic)
    */
-  setDualLocked?(locked: boolean, anchorPoint?: { x: number; z: number }): void;
+  setDualLocked?(locked: boolean, anchorPoint?: { x: number; z: number }, targetClusterId?: string): void;
 
   /**
    * Returns current Dual Lock anchor position on the mat
    */
   getDualLockPosition?(): { x: number; z: number } | null;
+
+  /**
+   * Returns ID of the cluster currently anchored to the field mat
+   */
+  getAnchoredClusterId?(): string | null;
 }

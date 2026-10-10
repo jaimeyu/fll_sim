@@ -235,6 +235,182 @@ describe('Mission Model Decomposition & Dual Lock Layout Management', () => {
       expect(dualLockPos!.x).toBeCloseTo(0.22, 2);
       expect(dualLockPos!.z).toBeCloseTo(0.31, 2);
     });
+
+    it('keeps mechanism clusters dynamic while only anchoring the base cluster to the mat', () => {
+      const multiClusterSpec: RobotAssemblySpec = {
+        name: 'Mechanism with Base',
+        clusters: [
+          {
+            clusterId: 'mat_base_frame',
+            name: 'Base Frame',
+            isRootChassis: true,
+            isFixed: true,
+            partIds: ['p_base'],
+            totalMassKg: 0.3,
+            colliders: [
+              {
+                shape: 'box',
+                halfExtents: [0.05, 0.01, 0.05],
+                offset: [0, 0, 0],
+                rotation: [0, 0, 0, 1],
+                friction: 0.8,
+                restitution: 0.0,
+              },
+            ],
+          },
+          {
+            clusterId: 'rotating_dial',
+            name: 'Revolute Dial Mechanism',
+            isRootChassis: false,
+            isFixed: false,
+            partIds: ['p_dial'],
+            totalMassKg: 0.05,
+            colliders: [
+              {
+                shape: 'cylinder',
+                radius: 0.03,
+                halfHeight: 0.01,
+                offset: [0, 0.02, 0],
+                rotation: [0, 0, 0, 1],
+                friction: 0.4,
+                restitution: 0.0,
+              },
+            ],
+          },
+        ],
+        joints: [
+          {
+            jointId: 'dial_joint',
+            name: 'Dial Pivot',
+            type: 'REVOLUTE',
+            parentClusterId: 'mat_base_frame',
+            childClusterId: 'rotating_dial',
+            anchorParent: [0, 0.02, 0],
+            anchorChild: [0, 0, 0],
+            axis: [0, 1, 0],
+            maxTorqueNm: 0.2,
+            maxVelocityDegPerSec: 360,
+          },
+        ],
+        sensors: [],
+      };
+
+      const elem = new CustomImportedMissionElement(multiClusterSpec, {
+        id: 'multi_clust_1',
+        name: 'Multi Clust Test',
+        isBaseFixed: true,
+      });
+      elem.init(world, { x: 0.1, y: 0.002, z: 0.1 });
+
+      // @ts-ignore
+      const baseBody = elem['bodies'].get('mat_base_frame') as RAPIER.RigidBody;
+      // @ts-ignore
+      const dialBody = elem['bodies'].get('rotating_dial') as RAPIER.RigidBody;
+
+      // Base must be Fixed, Dial mechanism MUST be Dynamic!
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(dialBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+
+      // Unfastening Dual Lock releases base to Dynamic
+      elem.setDualLocked(false);
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(dialBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+
+      // Fastening Dual Lock restores Fixed to base only
+      elem.setDualLocked(true);
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(dialBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+    });
+
+    it('can anchor a decomposed secondary object whose clusters were initialized as non-fixed', () => {
+      // Simulates a secondary object decomposed from a larger model
+      const decomposedSpec: RobotAssemblySpec = {
+        name: 'Secondary Piece',
+        clusters: [
+          {
+            clusterId: 'loose_payload_box',
+            name: 'Payload Piece',
+            isRootChassis: false,
+            isFixed: false, // Originally not fixed
+            partIds: ['p_box'],
+            totalMassKg: 0.1,
+            colliders: [
+              {
+                shape: 'box',
+                halfExtents: [0.02, 0.02, 0.02],
+                offset: [0, 0, 0],
+                rotation: [0, 0, 0, 1],
+                friction: 0.5,
+                restitution: 0.0,
+              },
+            ],
+          },
+        ],
+        joints: [],
+        sensors: [],
+      };
+
+      const elem = new CustomImportedMissionElement(decomposedSpec, {
+        id: 'decomposed_obj_1',
+        name: 'Decomposed Piece',
+        isBaseFixed: false, // Initialized dynamic
+      });
+      elem.init(world, { x: 0.3, y: 0.002, z: 0.3 });
+
+      // @ts-ignore
+      const body = elem['bodies'].get('loose_payload_box') as RAPIER.RigidBody;
+      expect(body.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(elem.isDualLocked).toBe(false);
+
+      // User anchors this piece to the field using Dual Lock tool
+      elem.setDualLocked(true, { x: 0.3, z: 0.3 });
+      expect(elem.isDualLocked).toBe(true);
+      expect(body.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+    });
+
+    it('supports selecting a specific cluster to anchor via targetClusterId', () => {
+      const dualLegSpec: RobotAssemblySpec = {
+        name: 'Two Leg Frame',
+        clusters: [
+          {
+            clusterId: 'leg_left',
+            name: 'Left Leg',
+            isRootChassis: false,
+            partIds: ['p_l'],
+            totalMassKg: 0.1,
+            colliders: [{ shape: 'box', halfExtents: [0.02, 0.02, 0.02], offset: [-0.05, 0, 0], rotation: [0, 0, 0, 1], friction: 0.5, restitution: 0.0 }],
+          },
+          {
+            clusterId: 'leg_right',
+            name: 'Right Leg',
+            isRootChassis: false,
+            partIds: ['p_r'],
+            totalMassKg: 0.1,
+            colliders: [{ shape: 'box', halfExtents: [0.02, 0.02, 0.02], offset: [0.05, 0, 0], rotation: [0, 0, 0, 1], friction: 0.5, restitution: 0.0 }],
+          },
+        ],
+        joints: [],
+        sensors: [],
+      };
+
+      const elem = new CustomImportedMissionElement(dualLegSpec, {
+        id: 'two_leg_1',
+        name: 'Two Leg',
+        isBaseFixed: false,
+      });
+      elem.init(world, { x: 0.0, y: 0.002, z: 0.0 });
+
+      // @ts-ignore
+      const leftBody = elem['bodies'].get('leg_left') as RAPIER.RigidBody;
+      // @ts-ignore
+      const rightBody = elem['bodies'].get('leg_right') as RAPIER.RigidBody;
+
+      // Anchor leg_right specifically
+      elem.setDualLocked(true, { x: 0.05, z: 0.0 }, 'leg_right');
+      expect(elem.getAnchoredClusterId()).toBe('leg_right');
+      expect(rightBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(leftBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+    });
   });
 
   describe('FieldLayoutManager', () => {

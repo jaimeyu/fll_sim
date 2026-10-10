@@ -713,7 +713,7 @@ export class Viewport3D {
       return null;
     };
 
-    const getDualLockTarget = (coords: { x: number; y: number }): { element: any; clickPoint: { x: number; z: number } } | null => {
+    const getDualLockTarget = (coords: { x: number; y: number }): { element: any; clickPoint: { x: number; z: number }; clusterId?: string } | null => {
       if (!this.missionManager) return null;
       this.mouse.set(coords.x, coords.y);
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -732,11 +732,46 @@ export class Viewport3D {
       }
 
       // 2. Direct hit on mission element LEGO geometry
-      const entireElemHit = getMissionElementEntireHit(coords);
-      if (entireElemHit) {
-        const groundHit = getGroundIntersection(coords);
-        const clickPoint = groundHit ? { x: groundHit.x, z: groundHit.z } : entireElemHit.getPosition();
-        return { element: entireElemHit, clickPoint };
+      const groups: THREE.Object3D[] = [];
+      const map = new Map<THREE.Object3D, any>();
+      for (const elem of this.missionManager.elements.values()) {
+        if (!elem.rootGroup.visible) continue;
+        groups.push(elem.rootGroup);
+        map.set(elem.rootGroup, elem);
+      }
+      if (groups.length > 0) {
+        const hits = this.raycaster.intersectObjects(groups, true);
+        if (hits.length > 0) {
+          const hit = hits[0];
+          let elem: any = null;
+          let curr: THREE.Object3D | null = hit.object;
+          while (curr) {
+            if (map.has(curr)) {
+              elem = map.get(curr);
+              break;
+            }
+            curr = curr.parent;
+          }
+
+          if (elem) {
+            let clusterId: string | undefined = undefined;
+            if (elem.clusterMeshes instanceof Map) {
+              let searchObj: THREE.Object3D | null = hit.object;
+              while (searchObj && searchObj !== elem.rootGroup) {
+                for (const [cid, group] of elem.clusterMeshes.entries()) {
+                  if (group === searchObj) {
+                    clusterId = cid;
+                    break;
+                  }
+                }
+                if (clusterId) break;
+                searchObj = searchObj.parent;
+              }
+            }
+            const clickPoint = { x: hit.point.x, z: hit.point.z };
+            return { element: elem, clickPoint, clusterId };
+          }
+        }
       }
 
       // 3. Proximity hit on ground: if user clicked near an element's base on the mat (within 15cm)
@@ -870,10 +905,10 @@ export class Viewport3D {
       if (this.isDualLockToolActive) {
         const target = getDualLockTarget(coords);
         if (target) {
-          const { element, clickPoint } = target;
+          const { element, clickPoint, clusterId } = target;
           const willLock = this.isDualLockEraseMode ? false : true;
           if (element.setDualLocked) {
-            element.setDualLocked(willLock, clickPoint);
+            element.setDualLocked(willLock, clickPoint, clusterId);
           }
           this.selectMissionElement(element.id);
           this.onDualLockToggle?.(element.id, willLock, clickPoint);

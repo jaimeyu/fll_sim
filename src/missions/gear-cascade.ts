@@ -347,8 +347,11 @@ export class CascadeGearDialMission implements MissionElement {
   }
 
   public syncVisuals(): void {
-    if (!this.rotorBody) return;
-
+    if (!this.isDualLocked && this.pedestalBody) {
+      const p = this.pedestalBody.translation();
+      this.basePos.x = p.x;
+      this.basePos.z = p.z;
+    }
     const { x, y, z } = this.basePos;
     const radYaw = (this.yawDegrees * Math.PI) / 180;
 

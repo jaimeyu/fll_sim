@@ -42,7 +42,8 @@ export class CustomImportedMissionElement implements MissionElement {
   private isSolidRigidMode: boolean;
   private groundCorrectionY: number = 0;
   private dualLockMarker: DualLockMarker | null = null;
-  private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
+  private dualLockLocalOffset: { x: number; z: number } | null = null;
+  private anchoredClusterId: string | null = null;
   private dualLockJoint: RAPIER.ImpulseJoint | null = null;
   private dualLockAnchorBody: RAPIER.RigidBody | null = null;
 
@@ -88,6 +89,7 @@ export class CustomImportedMissionElement implements MissionElement {
   public setIsBaseFixed(fixed: boolean): void {
     if (this.isBaseFixed === fixed) return;
     this.isBaseFixed = fixed;
+    this.isDualLocked = fixed;
     if (this.world) {
       this.destroy();
       this.createPhysicsAndVisuals();
@@ -96,21 +98,70 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public getIsBaseFixed(): boolean {
-    return this.isBaseFixed;
+    return this.isDualLocked;
   }
 
   /**
-   * Sets Dual-Lock fastening status (base fixed to field, mechanisms stay dynamic)
+   * Resolves the primary base cluster ID that rests on the field mat and holds Dual Lock fasteners
    */
-  public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }): void {
+  public getBaseClusterId(): string {
+    if (this.anchoredClusterId && this.spec.clusters.some((c) => c.clusterId === this.anchoredClusterId)) {
+      return this.anchoredClusterId;
+    }
+    const root = this.spec.clusters.find((c) => c.isRootChassis || c.clusterId === 'chassis_root');
+    if (root) return root.clusterId;
+
+    // Pick the cluster with the lowest bottom-Y (resting closest to the mat)
+    let lowestClusterId = this.spec.clusters[0]?.clusterId || 'base';
+    let lowestY = Infinity;
+    for (const c of this.spec.clusters) {
+      let cMinY = Infinity;
+      if (c.parts && c.parts.length > 0) {
+        for (const p of c.parts) {
+          if (p.position[1] / 1000 < cMinY) cMinY = p.position[1] / 1000;
+        }
+      } else {
+        for (const col of c.colliders) {
+          const hy = col.halfExtents ? col.halfExtents[1] : 0.015;
+          const bottom = col.offset[1] - hy;
+          if (bottom < cMinY) cMinY = bottom;
+        }
+      }
+      if (cMinY < lowestY) {
+        lowestY = cMinY;
+        lowestClusterId = c.clusterId;
+      }
+    }
+    return lowestClusterId;
+  }
+
+  public getAnchoredClusterId(): string | null {
+    return this.isDualLocked ? (this.anchoredClusterId || this.getBaseClusterId()) : null;
+  }
+
+  /**
+   * Sets Dual-Lock fastening status (base cluster fixed to field, mechanisms stay dynamic)
+   */
+  public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }, targetClusterId?: string): void {
     this.isDualLocked = locked;
     this.isBaseFixed = locked;
 
+    if (targetClusterId && this.spec.clusters.some((c) => c.clusterId === targetClusterId)) {
+      this.anchoredClusterId = targetClusterId;
+    }
+
     if (anchorPoint) {
-      this.dualLockAnchorOffset = {
-        x: anchorPoint.x - this.basePos.x,
-        z: anchorPoint.z - this.basePos.z,
+      const radYaw = (this.yawDegrees * Math.PI) / 180;
+      const cosY = Math.cos(-radYaw);
+      const sinY = Math.sin(-radYaw);
+      const dx = anchorPoint.x - this.basePos.x;
+      const dz = anchorPoint.z - this.basePos.z;
+      this.dualLockLocalOffset = {
+        x: dx * cosY - dz * sinY,
+        z: dx * sinY + dz * cosY,
       };
+    } else if (locked && !this.dualLockLocalOffset) {
+      this.dualLockLocalOffset = { x: 0, z: 0 };
     }
 
     // Clean up any existing physical Dual Lock joint
@@ -132,18 +183,14 @@ export class CustomImportedMissionElement implements MissionElement {
     }
 
     // Determine the base cluster ID (root frame where Dual Lock is attached to the field)
-    const baseClusterId = this.spec.clusters.find((c) => c.isRootChassis)?.clusterId || this.spec.clusters[0]?.clusterId || 'base';
+    const baseClusterId = this.getBaseClusterId();
 
     // Update Rapier bodies:
     // Only the base cluster where Dual Lock is applied is fixed to the field mat.
     // All mechanism clusters, levers, dials, and dynamic parts REMAIN DYNAMIC!
     for (const [cid, body] of this.bodies.entries()) {
-      const isBase = cid === baseClusterId || cid === 'base' || cid === 'chassis_root';
-      const cluster = this.spec.clusters.find((c) => c.clusterId === cid);
-
-      // Only base is fixed when locked; mechanisms and dynamic clusters stay dynamic!
-      const shouldBeFixed = this.isSolidRigidMode || 
-        (locked && isBase && (cluster?.isFixed !== false));
+      const isBase = cid === baseClusterId;
+      const shouldBeFixed = this.isSolidRigidMode || (locked && isBase);
 
       body.setBodyType(
         shouldBeFixed ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
@@ -156,14 +203,24 @@ export class CustomImportedMissionElement implements MissionElement {
       }
     }
 
+    // Keep cluster specs synchronized
+    for (const cluster of this.spec.clusters) {
+      const isBase = cluster.clusterId === baseClusterId;
+      cluster.isFixed = this.isSolidRigidMode || (locked && isBase);
+    }
+
     this.updateDualLockVisualMesh();
   }
 
   public getDualLockPosition(): { x: number; z: number } | null {
     if (!this.isDualLocked) return null;
+    const offset = this.dualLockLocalOffset || { x: 0, z: 0 };
+    const radYaw = (this.yawDegrees * Math.PI) / 180;
+    const cosY = Math.cos(radYaw);
+    const sinY = Math.sin(radYaw);
     return {
-      x: this.basePos.x + this.dualLockAnchorOffset.x,
-      z: this.basePos.z + this.dualLockAnchorOffset.z,
+      x: this.basePos.x + (offset.x * cosY - offset.z * sinY),
+      z: this.basePos.z + (offset.x * sinY + offset.z * cosY),
     };
   }
 
@@ -175,9 +232,8 @@ export class CustomImportedMissionElement implements MissionElement {
 
     this.dualLockMarker.setVisible(this.isDualLocked);
     if (this.isDualLocked) {
-      const worldX = this.basePos.x + this.dualLockAnchorOffset.x;
-      const worldZ = this.basePos.z + this.dualLockAnchorOffset.z;
-      this.dualLockMarker.setPosition(worldX, 0.002, worldZ);
+      const pos = this.getDualLockPosition() || this.basePos;
+      this.dualLockMarker.setPosition(pos.x, 0.002, pos.z);
     }
   }
 
@@ -242,10 +298,12 @@ export class CustomImportedMissionElement implements MissionElement {
 
     let colorIdx = 0;
 
+    const baseClusterId = this.getBaseClusterId();
+
     for (const cluster of this.spec.clusters) {
-      const isFixedCluster = cluster.isFixed !== undefined
-        ? cluster.isFixed
-        : (cluster.isRootChassis && this.isBaseFixed);
+      const isBase = cluster.clusterId === baseClusterId;
+      const isFixedCluster = this.isSolidRigidMode || (this.isDualLocked && isBase);
+      cluster.isFixed = isFixedCluster;
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
       colorIdx++;
 
@@ -431,6 +489,7 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public syncVisuals(): void {
+    const baseClusterId = this.getBaseClusterId();
     for (const [id, body] of this.bodies.entries()) {
       const group = this.clusterMeshes.get(id);
       if (!group) continue;
@@ -439,8 +498,7 @@ export class CustomImportedMissionElement implements MissionElement {
       group.position.set(t.x, t.y, t.z);
       group.quaternion.set(r.x, r.y, r.z, r.w);
 
-      const cluster = this.spec.clusters.find((c) => c.clusterId === id);
-      if (cluster?.isRootChassis || id === 'chassis_root' || this.spec.clusters.length === 1) {
+      if (id === baseClusterId) {
         this.basePos.x = t.x;
         this.basePos.z = t.z;
       }

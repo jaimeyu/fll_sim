@@ -10,6 +10,7 @@ export interface MissionElementLayoutEntry {
   yawDegrees: number;
   isDualLocked: boolean;
   dualLockPosition?: { x: number; z: number } | null;
+  anchoredClusterId?: string | null;
 }
 
 export interface FieldLayoutData {
@@ -31,6 +32,7 @@ export class FieldLayoutManager {
       const yaw = elem.getYawDegrees ? elem.getYawDegrees() : 0;
       const isLocked = elem.isDualLocked ?? (elem instanceof CustomImportedMissionElement ? elem.getIsBaseFixed() : true);
       const lockPos = elem.getDualLockPosition ? elem.getDualLockPosition() : (isLocked ? { x: pos.x, z: pos.z } : null);
+      const clusterId = (elem as any).getAnchoredClusterId ? (elem as any).getAnchoredClusterId() : null;
 
       return {
         elementId: elem.id,
@@ -40,6 +42,7 @@ export class FieldLayoutManager {
         yawDegrees: yaw,
         isDualLocked: isLocked,
         dualLockPosition: lockPos,
+        anchoredClusterId: clusterId,
       };
     });
 
@@ -131,9 +134,9 @@ export class FieldLayoutManager {
 
         // Apply Dual Lock status
         if (elem.setDualLocked) {
-          elem.setDualLocked(entry.isDualLocked, entry.dualLockPosition || undefined);
+          elem.setDualLocked(entry.isDualLocked, entry.dualLockPosition || undefined, entry.anchoredClusterId || undefined);
         } else if (elem instanceof CustomImportedMissionElement) {
-          elem.setDualLocked(entry.isDualLocked, entry.dualLockPosition || undefined);
+          elem.setDualLocked(entry.isDualLocked, entry.dualLockPosition || undefined, entry.anchoredClusterId || undefined);
         }
 
         if (entry.isDualLocked) {
