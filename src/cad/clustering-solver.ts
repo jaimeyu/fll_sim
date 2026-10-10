@@ -320,10 +320,8 @@ export class CadClusteringPreSolver {
 
     // Determine cluster fixed state:
     // - Root chassis is fixed to field mat by default (base dual lock anchor).
-    // - Articulated mechanisms (child of joints) are DYNAMIC.
-    // - Chain links and flexible linkages are ALWAYS DYNAMIC.
-    // - Free-standing game pieces / payload objects remain dynamic.
-    const childClusterIds = new Set(joints.map((j) => j.childClusterId));
+    // - All non-root clusters (articulated mechanisms, child of joints, sliding carts, payloads, loose pieces)
+    //   remain DYNAMIC so they simulate physically, collide, and interact with the robot!
     for (const cluster of clusters) {
       const isChain =
         cluster.name.toLowerCase().includes('chain') ||
@@ -336,13 +334,8 @@ export class CadClusteringPreSolver {
         if (!cluster.name.toLowerCase().includes('chain')) {
           cluster.name = 'Dynamic Chain Link';
         }
-      } else if (childClusterIds.has(cluster.clusterId)) {
-        cluster.isFixed = false;
-      } else if (joints.length === 0) {
-        // Stationary base assemblies without any joints stay intact
-        cluster.isFixed = true;
       } else {
-        // Disconnected subassemblies / payloads in articulated assemblies stay dynamic
+        // Non-root clusters (revolute arms, sliding carts, loose elements) are DYNAMIC
         cluster.isFixed = false;
       }
     }

@@ -86,6 +86,21 @@ function matrixToQuaternion(M: Mat3): [number, number, number, number] {
   return [0, 0, 0, 1];
 }
 
+/**
+ * Resolves the primary cylinder/hinge axis for a Technic pin or axle from its orientation quaternion.
+ */
+function getPinAxis(q: [number, number, number, number]): [number, number, number] {
+  const [qx, qy, qz, qw] = q;
+  // Rotate local pin cylinder vector [0, 1, 0] by quaternion q
+  const vx = 2 * (qx * qy - qw * qz);
+  const vy = 1 - 2 * (qx * qx + qz * qz);
+  const vz = 2 * (qy * qz + qw * qx);
+  const ax = Math.abs(vx), ay = Math.abs(vy), az = Math.abs(vz);
+  if (ax >= ay && ax >= az) return [Math.sign(vx) || 1, 0, 0];
+  if (ay >= ax && ay >= az) return [0, Math.sign(vy) || 1, 0];
+  return [0, 0, Math.sign(vz) || 1];
+}
+
 export class LDrawImporter {
   /**
    * Parses raw LDraw text (.ldr / .mpd) into placed parts, recursively
@@ -218,44 +233,44 @@ export class LDrawImporter {
 
     // 3. Connect parts:
     // A. Parts belonging to the same Studio SubModel instance are linked
-    const byInstance = new Map<string, string[]>();
+    const byInstance = new Map<string, PlacedPart[]>();
     for (const p of parts) {
       const inst = p.submodelInstance || p.submodel || 'main';
       if (!byInstance.has(inst)) byInstance.set(inst, []);
-      byInstance.get(inst)!.push(p.id);
+      byInstance.get(inst)!.push(p);
     }
-    for (const partIds of byInstance.values()) {
-      const pFirst = parts.find((p) => p.id === partIds[0]);
+    for (const pList of byInstance.values()) {
+      const pFirst = pList[0];
       const isChainSub = pFirst && (pFirst.role === 'CHAIN_LINK' || isChainPart(pFirst.partNumber, pFirst.submodel));
 
-      if (isChainSub && partIds.length > 2) {
+      if (isChainSub && pList.length > 2) {
         // Articulate chain into dynamic segments (3-5 links per segment)
         // so chains droop, flex, and swing realistically in physics!
-        const linksPerSegment = Math.max(3, Math.ceil(partIds.length / 5));
-        for (let k = 0; k < partIds.length - 1; k++) {
+        const linksPerSegment = Math.max(3, Math.ceil(pList.length / 5));
+        for (let k = 0; k < pList.length - 1; k++) {
           const isSegmentBoundary = (k + 1) % linksPerSegment === 0;
           if (isSegmentBoundary) {
-            const pk = parts.find((p) => p.id === partIds[k])!;
+            const pk = pList[k];
             links.push({
-              fromPartId: partIds[k],
-              toPartId: partIds[k + 1],
+              fromPartId: pList[k].id,
+              toPartId: pList[k + 1].id,
               connectionType: 'FREE_ROTATION',
               anchor: [pk.position[0] / 1000, pk.position[1] / 1000, pk.position[2] / 1000],
             });
           } else {
             links.push({
-              fromPartId: partIds[k],
-              toPartId: partIds[k + 1],
+              fromPartId: pList[k].id,
+              toPartId: pList[k + 1].id,
               connectionType: 'RIGID_PIN',
             });
           }
         }
       } else {
         // Standard rigid subassembly
-        for (let k = 0; k < partIds.length - 1; k++) {
+        for (let k = 0; k < pList.length - 1; k++) {
           links.push({
-            fromPartId: partIds[k],
-            toPartId: partIds[k + 1],
+            fromPartId: pList[k].id,
+            toPartId: pList[k + 1].id,
             connectionType: 'RIGID_PIN',
           });
         }
@@ -264,61 +279,139 @@ export class LDrawImporter {
 
     // B. Selective connections across distinct submodels (fasteners, chains, and revolute joints)
     const chainAnchorCandidates = new Map<string, { chainPart: PlacedPart; otherPart: PlacedPart; dist: number }>();
+    const instances = Array.from(byInstance.keys());
 
-    for (let i = 0; i < parts.length; i++) {
-      for (let j = i + 1; j < parts.length; j++) {
-        const p1 = parts[i];
-        const p2 = parts[j];
-        if (p1.submodelInstance && p2.submodelInstance && p1.submodelInstance === p2.submodelInstance) {
-          continue; // Already handled in Section A
-        }
+    for (let i = 0; i < instances.length; i++) {
+      for (let j = i + 1; j < instances.length; j++) {
+        const instA = instances[i];
+        const instB = instances[j];
+        const partsA = byInstance.get(instA) || [];
+        const partsB = byInstance.get(instB) || [];
 
-        const dx = p1.position[0] - p2.position[0];
-        const dy = p1.position[1] - p2.position[1];
-        const dz = p1.position[2] - p2.position[2];
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const isChainA = partsA.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
+        const isChainB = partsB.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
 
-        const p1IsChain = p1.role === 'CHAIN_LINK' || isChainPart(p1.partNumber, p1.submodel);
-        const p2IsChain = p2.role === 'CHAIN_LINK' || isChainPart(p2.partNumber, p2.submodel);
-
-        // Chain connection to frame or payload: find closest anchor attachment
-        if (p1IsChain || p2IsChain) {
-          if (dist <= 36.0) {
-            const chainPart = p1IsChain ? p1 : p2;
-            const otherPart = p1IsChain ? p2 : p1;
+        // 1. Chain connection to frame or payload: find closest anchor attachment
+        if (isChainA || isChainB) {
+          let bestD = Infinity;
+          let bestP1: PlacedPart | null = null;
+          let bestP2: PlacedPart | null = null;
+          for (const pa of partsA) {
+            for (const pb of partsB) {
+              const dx = pa.position[0] - pb.position[0];
+              const dy = pa.position[1] - pb.position[1];
+              const dz = pa.position[2] - pb.position[2];
+              const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (d < bestD) {
+                bestD = d;
+                bestP1 = pa;
+                bestP2 = pb;
+              }
+            }
+          }
+          if (bestD <= 36.0 && bestP1 && bestP2) {
+            const chainPart = isChainA ? bestP1 : bestP2;
+            const otherPart = isChainA ? bestP2 : bestP1;
             const key = `${chainPart.submodelInstance || chainPart.submodel}__${otherPart.submodelInstance || otherPart.submodel}`;
             const existing = chainAnchorCandidates.get(key);
-            if (!existing || dist < existing.dist) {
-              chainAnchorCandidates.set(key, { chainPart, otherPart, dist });
+            if (!existing || bestD < existing.dist) {
+              chainAnchorCandidates.set(key, { chainPart, otherPart, dist: bestD });
             }
           }
           continue;
         }
 
-        if (dist <= 32.0 && (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM')) {
-          const rimPart = p1.role === 'WHEEL_RIM' ? p1 : p2;
-          const chassisPart = p1.role === 'WHEEL_RIM' ? p2 : p1;
-          links.push({
-            fromPartId: chassisPart.id,
-            toPartId: rimPart.id,
-            connectionType: 'REVOLUTE_AXLE',
-            jointAxis: [1, 0, 0],
-            anchor: [rimPart.position[0] / 1000, rimPart.position[1] / 1000, rimPart.position[2] / 1000],
-          });
-        } else {
-          // Link distinct submodels if physically fastened with a pin/axle or directly abutting brick walls (<16mm)
-          const isFastener =
-            p1.role === 'FASTENER_PIN' ||
-            p2.role === 'FASTENER_PIN' ||
-            p1.role === 'FASTENER_AXLE' ||
-            p2.role === 'FASTENER_AXLE';
-          if ((isFastener && dist <= 24.0) || dist <= 16.0) {
-            links.push({
-              fromPartId: p1.id,
-              toPartId: p2.id,
-              connectionType: 'RIGID_PIN',
-            });
+        // 2. Wheel rim revolute joint
+        let hasWheelLink = false;
+        for (const pa of partsA) {
+          for (const pb of partsB) {
+            if (pa.role === 'WHEEL_RIM' || pb.role === 'WHEEL_RIM') {
+              const dx = pa.position[0] - pb.position[0];
+              const dy = pa.position[1] - pb.position[1];
+              const dz = pa.position[2] - pb.position[2];
+              const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (d <= 32.0) {
+                const rimPart = pa.role === 'WHEEL_RIM' ? pa : pb;
+                const chassisPart = pa.role === 'WHEEL_RIM' ? pb : pa;
+                links.push({
+                  fromPartId: chassisPart.id,
+                  toPartId: rimPart.id,
+                  connectionType: 'REVOLUTE_AXLE',
+                  jointAxis: [1, 0, 0],
+                  anchor: [rimPart.position[0] / 1000, rimPart.position[1] / 1000, rimPart.position[2] / 1000],
+                });
+                hasWheelLink = true;
+                break;
+              }
+            }
           }
+          if (hasWheelLink) break;
+        }
+        if (hasWheelLink) continue;
+
+        // 3. Fasteners & Concentric Pin Holes / Coincident Mounts
+        const connPoints: { pos: [number, number, number]; pa: PlacedPart; pb: PlacedPart; fastenerPart: PlacedPart | null }[] = [];
+        let bestPair: { pa: PlacedPart; pb: PlacedPart; d: number } | null = null;
+        let minD = Infinity;
+
+        for (const pa of partsA) {
+          for (const pb of partsB) {
+            const dx = pa.position[0] - pb.position[0];
+            const dy = pa.position[1] - pb.position[1];
+            const dz = pa.position[2] - pb.position[2];
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (d < minD) {
+              minD = d;
+              bestPair = { pa, pb, d };
+            }
+
+            const isFastener =
+              pa.role === 'FASTENER_PIN' ||
+              pb.role === 'FASTENER_PIN' ||
+              pa.role === 'FASTENER_AXLE' ||
+              pb.role === 'FASTENER_AXLE';
+
+            // Either engaged pin/axle fastener (within 22mm) or concentric hole/mounting point (within 4mm)
+            if ((isFastener && d <= 22.0) || d <= 4.0) {
+              const ptPos: [number, number, number] = [
+                (pa.position[0] + pb.position[0]) / 2,
+                (pa.position[1] + pb.position[1]) / 2,
+                (pa.position[2] + pb.position[2]) / 2,
+              ];
+              // Avoid duplicate connection points within 12mm of each other
+              const exists = connPoints.some((cp) => {
+                const cdx = cp.pos[0] - ptPos[0];
+                const cdy = cp.pos[1] - ptPos[1];
+                const cdz = cp.pos[2] - ptPos[2];
+                return Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz) <= 12.0;
+              });
+              if (!exists) {
+                const fastenerPart = (pa.role === 'FASTENER_PIN' || pa.role === 'FASTENER_AXLE') ? pa :
+                                     (pb.role === 'FASTENER_PIN' || pb.role === 'FASTENER_AXLE') ? pb : null;
+                connPoints.push({ pos: ptPos, pa, pb, fastenerPart });
+              }
+            }
+          }
+        }
+
+        if (connPoints.length >= 2 && bestPair) {
+          // Rigidly fastened across 2 or more points (prevents rotation)
+          links.push({
+            fromPartId: bestPair.pa.id,
+            toPartId: bestPair.pb.id,
+            connectionType: 'RIGID_PIN',
+          });
+        } else if (connPoints.length === 1) {
+          // Exactly 1 pin/axle or pivot hole: 1-DOF Revolute Joint
+          const cp = connPoints[0];
+          const axis: [number, number, number] = cp.fastenerPart ? getPinAxis(cp.fastenerPart.rotation) : [0, 1, 0];
+          links.push({
+            fromPartId: cp.pa.id,
+            toPartId: cp.pb.id,
+            connectionType: 'REVOLUTE_AXLE',
+            jointAxis: axis,
+            anchor: [cp.pos[0] / 1000, cp.pos[1] / 1000, cp.pos[2] / 1000],
+          });
         }
       }
     }

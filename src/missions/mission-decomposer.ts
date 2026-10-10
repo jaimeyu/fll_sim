@@ -199,11 +199,11 @@ export function decomposeMissionAssembly(
       }));
 
     // Default Dual Lock fixed state:
-    // Main base is fixed (anchored to field mat).
+    // Main base is fixed (anchored to field mat by default).
     // Secondary pieces (carts, boulders, loose blocks) are dynamic (slide on mat).
     const defaultFixed = isMainBase
-      ? (shiftedClusters[0].isFixed !== undefined ? shiftedClusters[0].isFixed : true)
-      : (shiftedClusters.some((c) => c.isFixed === true));
+      ? (shiftedClusters[0]?.isFixed !== undefined ? shiftedClusters[0].isFixed : true)
+      : false;
 
     // Name formatting
     const objName = isMainBase

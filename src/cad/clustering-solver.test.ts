@@ -85,7 +85,7 @@ describe('CAD Ingestion & Pin Clustering Pre-Solver', () => {
     expect(cartCluster!.isRootChassis).toBe(true);
   });
 
-  it('marks all clusters as isFixed=true for stationary assemblies without active joints to prevent model shattering', async () => {
+  it('marks root chassis as isFixed=true while other clusters remain dynamic for simulation', async () => {
     const { CadClusteringPreSolver } = await import('./clustering-solver');
     const stationaryAssembly = {
       name: 'Stationary Goal Frame',
@@ -113,9 +113,14 @@ describe('CAD Ingestion & Pin Clustering Pre-Solver', () => {
     const spec = CadClusteringPreSolver.solve(stationaryAssembly);
     expect(spec.joints.length).toBe(0);
     expect(spec.clusters.length).toBe(2);
-    // Both clusters should be marked isFixed: true so they never fall apart
-    for (const cluster of spec.clusters) {
-      expect(cluster.isFixed).toBe(true);
+    // Root chassis is anchored to the field mat (isFixed: true), secondary clusters are dynamic (isFixed: false)
+    const rootCluster = spec.clusters.find((c) => c.isRootChassis);
+    expect(rootCluster).toBeDefined();
+    expect(rootCluster!.isFixed).toBe(true);
+
+    const dynamicClusters = spec.clusters.filter((c) => !c.isRootChassis);
+    for (const cluster of dynamicClusters) {
+      expect(cluster.isFixed).toBe(false);
     }
   });
 

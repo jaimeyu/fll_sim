@@ -411,6 +411,96 @@ describe('Mission Model Decomposition & Dual Lock Layout Management', () => {
       expect(rightBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
       expect(leftBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
     });
+
+    it('ensures mechanism clusters stay dynamic when base is dual locked and all become dynamic when unfastened', () => {
+      const assemblyWithMechanism: RobotAssemblySpec = {
+        name: 'Lever Model',
+        clusters: [
+          {
+            clusterId: 'chassis_root',
+            name: 'Stationary Base Frame',
+            isRootChassis: true,
+            isFixed: true,
+            partIds: ['base_p1'],
+            totalMassKg: 0.25,
+            colliders: [{ shape: 'box', halfExtents: [0.05, 0.02, 0.05], offset: [0, 0, 0], rotation: [0, 0, 0, 1], friction: 0.8, restitution: 0.0 }],
+          },
+          {
+            clusterId: 'lever_arm',
+            name: 'Articulated Lever',
+            isRootChassis: false,
+            isFixed: false,
+            partIds: ['lever_p1'],
+            totalMassKg: 0.05,
+            colliders: [{ shape: 'box', halfExtents: [0.01, 0.01, 0.04], offset: [0, 0.03, 0.02], rotation: [0, 0, 0, 1], friction: 0.5, restitution: 0.0 }],
+          },
+          {
+            clusterId: 'payload_cart',
+            name: 'Sliding Cart',
+            isRootChassis: false,
+            isFixed: false,
+            partIds: ['cart_p1'],
+            totalMassKg: 0.08,
+            colliders: [{ shape: 'box', halfExtents: [0.02, 0.02, 0.02], offset: [0.03, 0.01, 0], rotation: [0, 0, 0, 1], friction: 0.1, restitution: 0.0 }],
+          },
+        ],
+        joints: [
+          {
+            jointId: 'hinge_1',
+            name: 'Hinge',
+            type: 'REVOLUTE',
+            parentClusterId: 'chassis_root',
+            childClusterId: 'lever_arm',
+            anchorParent: [0, 0.03, 0],
+            anchorChild: [0, 0, 0],
+            axis: [1, 0, 0],
+            maxTorqueNm: 0.25,
+            maxVelocityDegPerSec: 1000,
+          },
+        ],
+        sensors: [],
+      };
+
+      const elem = new CustomImportedMissionElement(assemblyWithMechanism, {
+        id: 'lever_model_1',
+        name: 'Lever Model',
+        isBaseFixed: true,
+      });
+      elem.init(world, { x: 0.2, y: 0.002, z: 0.3 });
+
+      // @ts-ignore
+      const baseBody = elem['bodies'].get('chassis_root') as RAPIER.RigidBody;
+      // @ts-ignore
+      const leverBody = elem['bodies'].get('lever_arm') as RAPIER.RigidBody;
+      // @ts-ignore
+      const cartBody = elem['bodies'].get('payload_cart') as RAPIER.RigidBody;
+
+      // 1. Initial fastened state: only base is Fixed; lever and cart are Dynamic
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(leverBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(cartBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+
+      // 2. Erase / remove fastener: ALL clusters become Dynamic so the entire assembly can move/tip
+      elem.setDualLocked(false);
+      expect(elem.getIsBaseFixed()).toBe(false);
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(leverBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(cartBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+
+      // 3. Fasten again targeting chassis_root: only base becomes Fixed; lever and cart remain Dynamic
+      elem.setDualLocked(true, { x: 0.2, z: 0.3 }, 'chassis_root');
+      expect(elem.getIsBaseFixed()).toBe(true);
+      expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(leverBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+      expect(cartBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
+
+      // 4. Test dragging: only dynamic bodies receive velocities, fixed body stays at 0
+      elem.applyUserDrag(new THREE.Vector3(0.5, 0, 0.5));
+      expect(baseBody.linvel().x).toBe(0);
+      expect(baseBody.linvel().z).toBe(0);
+      expect(leverBody.isSleeping()).toBe(false);
+      expect(cartBody.isSleeping()).toBe(false);
+    });
   });
 
   describe('FieldLayoutManager', () => {

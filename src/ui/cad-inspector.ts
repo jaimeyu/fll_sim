@@ -1339,10 +1339,10 @@ export class CadModelInspector {
         }
 
         // Collision filtering:
-        // Group 3 (0x0008): Fixed base clusters (filters 0xFFEF, ignores dynamic mechanisms)
-        // Group 4 (0x0010): Dynamic mechanism clusters (filters 0xFFF7, ignores fixed base)
+        // Group 3 (0x0008): Fixed base clusters
+        // Group 4 (0x0010): Dynamic mechanism clusters
         const membership = (isFixed || this.isSolidMode) ? 0x0008 : 0x0010;
-        const filter = (isFixed || this.isSolidMode) ? 0xFFEF : 0xFFF7;
+        const filter = 0xFFFF;
         colDesc.setCollisionGroups((membership << 16) | filter);
 
         colDesc.setTranslation(col.offset[0], col.offset[1], col.offset[2])

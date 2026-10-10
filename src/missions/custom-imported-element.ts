@@ -146,11 +146,16 @@ export class CustomImportedMissionElement implements MissionElement {
     this.isDualLocked = locked;
     this.isBaseFixed = locked;
 
-    if (targetClusterId && this.spec.clusters.some((c) => c.clusterId === targetClusterId)) {
-      this.anchoredClusterId = targetClusterId;
+    if (locked) {
+      if (targetClusterId && this.spec.clusters.some((c) => c.clusterId === targetClusterId)) {
+        this.anchoredClusterId = targetClusterId;
+      }
+    } else {
+      this.anchoredClusterId = null;
+      this.dualLockLocalOffset = null;
     }
 
-    if (anchorPoint) {
+    if (anchorPoint && locked) {
       const radYaw = (this.yawDegrees * Math.PI) / 180;
       const cosY = Math.cos(-radYaw);
       const sinY = Math.sin(-radYaw);
@@ -352,10 +357,12 @@ export class CustomImportedMissionElement implements MissionElement {
         }
 
         // Collision filtering:
-        // Group 3 (0x0008): Fixed base clusters (filters 0xFFEF, ignores dynamic mechanisms)
-        // Group 4 (0x0010): Dynamic mechanism clusters (filters 0xFFF7, ignores fixed base)
+        // Group 3 (0x0008): Fixed base clusters
+        // Group 4 (0x0010): Dynamic mechanism clusters
+        // Both fixed and dynamic clusters collide with everything (filter 0xFFFF).
+        // (Jointed pairs already have mutual contact disabled via rapierJoint.setContactsEnabled(false)).
         const membership = isFixedCluster ? 0x0008 : 0x0010;
-        const filter = isFixedCluster ? 0xFFEF : 0xFFF7;
+        const filter = 0xFFFF;
         colDesc.setCollisionGroups((membership << 16) | filter);
 
         colDesc
@@ -561,14 +568,13 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {
-    // Apply dynamic impulse to non-fixed bodies
-    for (const [id, body] of this.bodies.entries()) {
-      const cluster = this.spec.clusters.find((c) => c.clusterId === id);
-      if (cluster?.isRootChassis && this.isBaseFixed) continue;
+    // Apply dynamic impulse only to non-fixed bodies
+    for (const body of this.bodies.values()) {
+      if (body.bodyType() === RAPIER.RigidBodyType.Fixed) continue;
 
       const curTrans = body.translation();
-      const vx = (groundTarget.x - curTrans.x) * 10.0;
-      const vz = (groundTarget.z - curTrans.z) * 10.0;
+      const vx = Math.min(2.5, Math.max(-2.5, (groundTarget.x - curTrans.x) * 6.0));
+      const vz = Math.min(2.5, Math.max(-2.5, (groundTarget.z - curTrans.z) * 6.0));
       body.setLinvel({ x: vx, y: 0, z: vz }, true);
     }
   }

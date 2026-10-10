@@ -147,7 +147,7 @@ export function isChainPart(partNumber: string, submodel?: string): boolean {
   const cleanPart = partNumber.replace(/\.dat$/i, '').trim().toLowerCase();
   const sub = (submodel || '').trim().toLowerCase();
   if (
-    /^(208|209|30104|3711|60447|57518|92338|63141|14696|14226|14210|24869|88323)$/i.test(cleanPart) ||
+    /^(208|209|30104|3711|60447|57518|57539|3873|92338|63141|14696|14226|14210|24869|88323)$/i.test(cleanPart) ||
     /chain|tread/i.test(cleanPart) ||
     /chain|tread|30104/i.test(sub)
   ) {
