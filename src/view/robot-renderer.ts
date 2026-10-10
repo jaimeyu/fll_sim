@@ -6,6 +6,7 @@ import {
   getLegoMaterial,
   createTechnicBeamGroup,
 } from './lego-visuals';
+import { consolidateGroupMeshes } from '../cad/mesh-consolidator';
 
 /**
  * High-Fidelity LEGO SPIKE Prime Advance Driving Base 3D Visualizer.
@@ -33,6 +34,11 @@ export class Robot3DRenderer {
     this.buildLegoChassisVisuals();
     this.buildLegoWheelVisuals(this.leftWheelMesh, 'left');
     this.buildLegoWheelVisuals(this.rightWheelMesh, 'right');
+
+    // Consolidate chassis and wheels into material-merged meshes to reduce draw calls from ~120 to ~22
+    consolidateGroupMeshes(this.chassisMesh);
+    consolidateGroupMeshes(this.leftWheelMesh);
+    consolidateGroupMeshes(this.rightWheelMesh);
 
     this.rootGroup.add(this.chassisMesh);
     this.rootGroup.add(this.leftWheelMesh);

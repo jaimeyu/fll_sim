@@ -1,6 +1,8 @@
 // src/core/performance-profiler.ts
 // Real-time Frame Profiler & Render Performance Diagnostic Analyzer
 
+import { legoAssetManager } from '../cad/lego-asset-manager';
+
 export interface RenderStats {
   drawCalls: number;
   triangles: number;
@@ -198,25 +200,37 @@ export class PerformanceProfiler {
     }
 
     // Dynamic recommendations
-    if (this.latestRenderStats.drawCalls > 120) {
+    const isRenderHeavy = avgRender > 8.0 || isFpsDropping;
+    const isDracoActive =
+      typeof legoAssetManager !== 'undefined' &&
+      typeof legoAssetManager.getRenderMode === 'function' &&
+      legoAssetManager.getRenderMode() === 'draco_glb';
+
+    if (this.latestRenderStats.drawCalls > 1000 || (isRenderHeavy && this.latestRenderStats.drawCalls > 150)) {
       recommendations.push(
         `High Draw Calls (${this.latestRenderStats.drawCalls}): Merging static LEGO assemblies into shared geometries can significantly reduce CPU-GPU command overhead.`
       );
     }
 
-    if (this.latestRenderStats.triangles > 80000) {
-      recommendations.push(
-        `Heavy Geometry (${this.latestRenderStats.triangles.toLocaleString()} polygons): Ensure Draco compressed assets are enabled in Settings to stream lightweight meshes.`
-      );
+    if (this.latestRenderStats.triangles > 80000 && isRenderHeavy) {
+      if (isDracoActive) {
+        recommendations.push(
+          `Heavy Geometry (${this.latestRenderStats.triangles.toLocaleString()} polygons): Draco GLB compression is active, but high polygon density may be straining GPU rasterization.`
+        );
+      } else {
+        recommendations.push(
+          `Heavy Geometry (${this.latestRenderStats.triangles.toLocaleString()} polygons): Ensure Draco compressed assets are enabled in Settings to stream lightweight meshes.`
+        );
+      }
     }
 
-    if (this.latestPhysicsStats.dynamicBodies > 15) {
+    if (this.latestPhysicsStats.dynamicBodies > 15 && (avgPhysics > 4.0 || isFpsDropping)) {
       recommendations.push(
         `Many Dynamic Physics Bodies (${this.latestPhysicsStats.dynamicBodies} active): Use the 📌 Dual Lock tool to anchor non-sliding station bases to the mat, turning them into fixed bodies.`
       );
     }
 
-    if (avgSensors > 2.5) {
+    if (avgSensors > 2.5 && isFpsDropping) {
       recommendations.push(
         `Color Sensor Readback: Sensor sampling reads pixels from the field mat canvas. Procedural or downscaled textures improve read throughput.`
       );
