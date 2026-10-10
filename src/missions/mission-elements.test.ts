@@ -457,7 +457,7 @@ describe('FLL Mission Elements Physics Integration', () => {
       expect(clearIds).toEqual([]);
     });
 
-    it('anchors non-jointed clusters as fixed bodies when isBaseFixed is true to prevent loose scattering', async () => {
+    it('anchors base cluster as fixed body while keeping mechanism clusters dynamic when isBaseFixed is true', async () => {
       const { CustomImportedMissionElement } = await import('./custom-imported-element');
       const mockSpecMultiCluster = {
         name: 'Multi-Cluster Mission',
@@ -513,11 +513,11 @@ describe('FLL Mission Elements Physics Integration', () => {
       const baseBody = bodies.get('base')!;
       const wallBody = bodies.get('fixed_accessory')!;
 
-      // Both bodies should be fixed (immovable)
+      // Base is fixed (anchored to mat), while mechanism/accessory clusters are dynamic
       expect(baseBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
-      expect(wallBody.bodyType()).toBe(RAPIER.RigidBodyType.Fixed);
+      expect(wallBody.bodyType()).toBe(RAPIER.RigidBodyType.Dynamic);
 
-      // Verify toggling solid rigid mode keeps everything fixed
+      // Verify toggling solid rigid mode anchors all clusters as fixed
       elem.setSolidRigidMode(true);
       expect(elem.getSolidRigidMode()).toBe(true);
       const solidBodies = elem['bodies'] as Map<string, RAPIER.RigidBody>;

@@ -185,6 +185,7 @@ async function bootstrapSimulator() {
           name: file.name.replace(/\.[^/.]+$/, ''),
           description: `Imported Studio/LDraw model (${file.name})`,
           sourceFile: file.name,
+          isBaseFixed: spec.clusters.length > 1,
         });
 
         // Place on field mat
@@ -264,7 +265,14 @@ async function bootstrapSimulator() {
       }
     },
     onOpenInspector: (missionId?: string) => {
-      cadInspector.open(missionId || 'M01');
+      const targetId = missionId || 'M01';
+      const elem = missionManager.getElement(targetId);
+      if (elem && (elem as any).spec) {
+        cadInspector.open(targetId);
+        cadInspector.inspectSpec((elem as any).spec, elem.name, elem.id);
+      } else {
+        cadInspector.open(targetId);
+      }
     },
     onModeChange: (mode) => {
       missionManager.setMode(mode);

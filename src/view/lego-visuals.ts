@@ -294,8 +294,21 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 2. Pins & Bushings (e.g. 2780, 3673, 6558, 32054, 43093, 3713, 4265c, 26287)
-  if (role === 'FASTENER_PIN' || role === 'FASTENER_BUSH' || /^(2780|3673|6558|32054|43093|3713|4265c|26287)$/.test(clean)) {
+  // 2. Flexible Technic Axle 32L / 256mm (50450)
+  // Must be checked before standard axles to avoid 4-stud fallback truncation!
+  if (clean === '50450') {
+    const len = 0.256; // 640 LDU = 256mm (32L)
+    const geom = new THREE.CylinderGeometry(0.0024, 0.0024, len, 16);
+    geom.rotateZ(Math.PI / 2); // Aligned along X axis
+    geom.translate(len / 2, 0, 0); // Origin in LDraw 50450 is at one end
+    const m = new THREE.Mesh(geom, mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    return m;
+  }
+
+  // 3. Pins & Bushings (e.g. 2780, 3673, 6558, 32054, 43093, 3713, 4265c, 26287, 4304, 3749, 11214)
+  if (role === 'FASTENER_PIN' || role === 'FASTENER_BUSH' || /^(2780|3673|6558|32054|43093|3713|4265c|26287|4304|3749|11214)$/.test(clean)) {
     if (clean === '3713' || clean === '4265c') {
       // Technic Bushing
       const h = clean === '4265c' ? 0.004 : 0.0078;
@@ -305,7 +318,7 @@ export function createLegoBrickMesh(
       m.castShadow = true;
       return m;
     }
-    const is3L = clean === '6558' || clean === '32054';
+    const is3L = clean === '6558' || clean === '32054' || clean === '4304' || clean === '11214';
     const len = is3L ? 0.024 : 0.016;
     const geom = new THREE.CylinderGeometry(0.0024, 0.0024, len, 12);
     geom.rotateZ(Math.PI / 2);
@@ -315,10 +328,22 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 3. Axles & Axle Connectors (e.g. 3704, 3705, 3706, 3707, 3708, 3737, 50450, 32062, 18654)
-  if (role === 'FASTENER_AXLE' || /^370[4-9]/.test(clean) || clean === '32062' || clean === '18654') {
-    const lMatch = clean.match(/^370(\d)/);
-    const lengthStuds = lMatch ? parseInt(lMatch[1], 10) : clean === '32062' ? 2 : 4;
+  // 4. Standard Technic Axles (e.g. 3704=2L, 3705=4L, 3706=6L, 3707=8L, 3708=10L, 3737=12L, 4519=3L, 32073=5L, 44294=7L, 32062=2L, 18654)
+  if (role === 'FASTENER_AXLE' || /^370[4-9]/.test(clean) || clean === '32062' || clean === '18654' || clean === '4519' || clean === '32073' || clean === '44294' || clean === '3737') {
+    let lengthStuds = 4;
+    if (clean === '32062' || clean === '3704') lengthStuds = 2;
+    else if (clean === '4519') lengthStuds = 3;
+    else if (clean === '3705') lengthStuds = 4;
+    else if (clean === '32073') lengthStuds = 5;
+    else if (clean === '3706') lengthStuds = 6;
+    else if (clean === '44294') lengthStuds = 7;
+    else if (clean === '3707') lengthStuds = 8;
+    else if (clean === '3708') lengthStuds = 10;
+    else if (clean === '3737') lengthStuds = 12;
+    else {
+      const lMatch = clean.match(/^370(\d)/);
+      if (lMatch) lengthStuds = parseInt(lMatch[1], 10);
+    }
     const len = lengthStuds * 0.008;
     const geom = new THREE.CylinderGeometry(0.0024, 0.0024, len, 8);
     geom.rotateZ(Math.PI / 2);
@@ -328,10 +353,10 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 4. Technic Rectangular Frames (e.g. 64179 5x7 frame, 39794 7x11 frame)
-  if (clean === '64179' || clean === '39794') {
-    const wHoles = clean === '64179' ? 5 : 7;
-    const lHoles = clean === '64179' ? 7 : 11;
+  // 5. Technic Rectangular & Open Center Frames (e.g. 64179 5x7 frame, 39794 7x11 frame, 32531 4x6 frame)
+  if (clean === '64179' || clean === '39794' || clean === '32531') {
+    const wHoles = clean === '64179' ? 5 : clean === '32531' ? 4 : 7;
+    const lHoles = clean === '64179' ? 7 : clean === '32531' ? 6 : 11;
     const pitch = 0.008;
     const totalW = wHoles * pitch;
     const totalL = lHoles * pitch;
@@ -362,22 +387,55 @@ export function createLegoBrickMesh(
     return frameGroup;
   }
 
-  // 5. Technic Beams / Liftarms (e.g. 32523, 32316, 32524, 32525, 40490, 60483, 32009, 32271)
-  if (role === 'STRUCTURAL_BEAM' || /^(3252[3-6]|32316|40490|60483|32009|32271)/.test(clean)) {
+  // 6. Bent / L-Shape Liftarms (e.g. 32555, 32556, 32556b, 32348, 80431)
+  if (/^(32555|32556|32556b|32348|80431)$/.test(clean)) {
+    if (clean === '80431') {
+      const g = new THREE.Group();
+      const body = createLegoPlateGroup(1, 2, colorHex, 3, false);
+      g.add(body);
+      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.005, 12, 10), mat);
+      socket.position.set(0.008, 0, 0);
+      socket.castShadow = true;
+      g.add(socket);
+      return g;
+    }
+    const lGroup = new THREE.Group();
+    const is4x4 = clean === '32348';
+    const arm1Holes = is4x4 ? 4 : 3;
+    const arm2Holes = is4x4 ? 4 : 5;
+    const pitch = 0.008;
+
+    const beam1 = createTechnicBeamGroup(arm1Holes, colorHex);
+    beam1.position.set(0, 0, 0);
+    lGroup.add(beam1);
+
+    const beam2 = createTechnicBeamGroup(arm2Holes, colorHex);
+    if (is4x4) {
+      beam2.rotation.y = Math.PI * 0.3;
+      beam2.position.set((arm1Holes - 1) * pitch * 0.4, 0, pitch);
+    } else {
+      beam2.rotation.y = Math.PI / 2;
+      beam2.position.set((arm1Holes - 1) * pitch / 2, 0, (arm2Holes - 1) * pitch / 2);
+    }
+    lGroup.add(beam2);
+    return lGroup;
+  }
+
+  // 7. Technic Beams / Liftarms (e.g. 32523, 32316, 32524, 32525, 40490, 60483, 32009, 32271, 87618)
+  if (role === 'STRUCTURAL_BEAM' || /^(3252[3-6]|32316|40490|60483|32009|32271|87618)/.test(clean)) {
     let holes = 5;
-    if (clean === '32523') holes = 3;
-    else if (clean === '32316') holes = 5;
-    else if (clean === '32524') holes = 7;
+    if (clean === '32523' || clean === '32271') holes = 3;
+    else if (clean === '60483') holes = 2;
+    else if (clean === '32316' || clean === '87618') holes = 5;
+    else if (clean === '32524' || clean === '32009') holes = 7;
     else if (clean === '40490') holes = 9;
     else if (clean === '32525') holes = 11;
     else if (clean === '32526') holes = 13;
-    else if (clean === '60483' || clean === '32271') holes = 3;
-    else if (clean === '32009') holes = 7;
     return createTechnicBeamGroup(holes, colorHex);
   }
 
-  // 6. Connectors (e.g. 32013, 32014, 89678, 32034, 32184, 62462, 25214)
-  if (/^(32013|32014|32015|32016|89678|32034|32184|62462|25214)$/.test(clean)) {
+  // 8. Connectors (e.g. 32013, 32014, 32015, 32016, 89678, 32034, 32184, 62462, 25214, 1750, 42003, 59443)
+  if (/^(32013|32014|32015|32016|89678|32034|32184|62462|25214|1750|42003|59443)$/.test(clean)) {
     const group = new THREE.Group();
     const c1 = new THREE.CylinderGeometry(0.0036, 0.0036, 0.012, 12);
     const m1 = new THREE.Mesh(c1, mat);
@@ -392,18 +450,57 @@ export function createLegoBrickMesh(
     return group;
   }
 
-  // 6b. Flexible Technic Axle 19L (50450)
-  if (clean === '50450') {
-    const len = 0.264; // 660 LDU = 264mm spanning between guide track anchors
-    const geom = new THREE.CylinderGeometry(0.0024, 0.0024, len, 16);
-    geom.rotateZ(Math.PI / 2); // Aligned along X axis
-    const m = new THREE.Mesh(geom, mat);
+  // 9. Radar Dishes (e.g. 4740 2x2 dish, 43898 3x3 dish)
+  if (/^(4740|43898)$/.test(clean)) {
+    const radius = clean === '43898' ? 0.012 : 0.008;
+    const height = clean === '43898' ? 0.006 : 0.0048;
+    const dishGeom = new THREE.ConeGeometry(radius, height, 20, 1, true);
+    dishGeom.rotateX(Math.PI);
+    const m = new THREE.Mesh(dishGeom, mat);
+    m.position.set(0, -height / 2, 0);
     m.castShadow = true;
     m.receiveShadow = true;
     return m;
   }
 
-  // 7. Technic Panels (e.g. 64782)
+  // 10. Minifigure Utensil Seat 2x2 (4079)
+  if (clean === '4079') {
+    const chairGroup = new THREE.Group();
+    const seat = createLegoPlateGroup(2, 2, colorHex, 1, false);
+    chairGroup.add(seat);
+    const back = createLegoPlateGroup(2, 2, colorHex, 1, false);
+    back.rotation.x = Math.PI / 2;
+    back.position.set(0, 0.008, -0.008);
+    chairGroup.add(back);
+    return chairGroup;
+  }
+
+  // 11. Minifigure Body Elements & Accessories
+  if (clean.includes('970') || clean.includes('973') || clean.includes('3626') || /^(30124b|53118|2447b|64644)$/.test(clean)) {
+    if (clean.includes('3626')) {
+      const headGeom = new THREE.CylinderGeometry(0.005, 0.005, 0.010, 14);
+      const m = new THREE.Mesh(headGeom, mat);
+      m.castShadow = true;
+      return m;
+    } else if (clean.includes('973')) {
+      const torsoGeom = new THREE.BoxGeometry(0.016, 0.014, 0.008);
+      const m = new THREE.Mesh(torsoGeom, mat);
+      m.castShadow = true;
+      return m;
+    } else if (clean.includes('970')) {
+      const legGeom = new THREE.BoxGeometry(0.015, 0.016, 0.008);
+      const m = new THREE.Mesh(legGeom, mat);
+      m.castShadow = true;
+      return m;
+    } else {
+      const accGeom = new THREE.CylinderGeometry(0.003, 0.003, 0.012, 10);
+      const m = new THREE.Mesh(accGeom, mat);
+      m.castShadow = true;
+      return m;
+    }
+  }
+
+  // 12. Technic Panels (e.g. 64782)
   if (clean === '64782') {
     const geom = new THREE.BoxGeometry(0.024, 0.088, 0.003);
     const m = new THREE.Mesh(geom, mat);
@@ -412,11 +509,12 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 8. Foliage / Flowers / Plants (e.g. 32607, 24866, 209)
-  if (/^(32607|24866|209)$/.test(clean)) {
+  // 13. Foliage / Flowers / Plants / Coral (e.g. 32607, 24866, 209, 2417, 33183)
+  if (/^(32607|24866|209|2417|33183)$/.test(clean)) {
     const plantGroup = new THREE.Group();
-    for (let i = 0; i < 3; i++) {
-      const angle = (i * 2 * Math.PI) / 3;
+    const count = clean === '2417' ? 5 : 3;
+    for (let i = 0; i < count; i++) {
+      const angle = (i * 2 * Math.PI) / count;
       const leafGeom = new THREE.ConeGeometry(0.005, 0.014, 6);
       leafGeom.rotateZ(Math.PI / 4);
       const leaf = new THREE.Mesh(leafGeom, mat);
@@ -428,7 +526,7 @@ export function createLegoBrickMesh(
     return plantGroup;
   }
 
-  // 9. Slope Bricks & Curved Slopes (e.g. 3039, 3040, 3040b, 15068, 11477, 14719, 85984, 28192)
+  // 14. Slope Bricks & Curved Slopes (e.g. 3039, 3040, 3040b, 15068, 11477, 14719, 85984, 28192)
   if (/^(3039|3040|3040b|15068|11477|14719|85984|28192)$/.test(clean)) {
     const is1x2 = clean === '3040' || clean === '3040b' || clean === '11477';
     const widthStuds = is1x2 ? 1 : 2;
@@ -447,11 +545,13 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 10. Round Plates & Discs (e.g. 2654, 15535, 4032, 2447, 85861, 18674, 30340)
-  if (/^(2654|15535|4032|2447|85861|18674|30340)$/.test(clean)) {
-    const radius = clean === '85861' ? 0.004 : 0.008;
+  // 15. Round Plates & Discs (e.g. 2654, 15535, 4032, 4032a, 2447, 85861, 18674, 30340, 11213, 61485, 98138, 6141)
+  if (/^(2654|15535|4032|4032a|2447|85861|18674|30340|11213|61485|98138|6141)$/.test(clean)) {
+    let radius = 0.008;
+    if (clean === '11213') radius = 0.024;
+    else if (clean === '85861' || clean === '98138' || clean === '6141') radius = 0.004;
     const height = 0.0032;
-    const geom = new THREE.CylinderGeometry(radius, radius, height, 16);
+    const geom = new THREE.CylinderGeometry(radius, radius, height, 18);
     const m = new THREE.Mesh(geom, mat);
     m.position.set(0, -height / 2, 0);
     m.castShadow = true;
@@ -459,19 +559,25 @@ export function createLegoBrickMesh(
     return m;
   }
 
-  // 11. Smooth Tiles (without studs, e.g. 2431 1x4, 3069/3069b 1x2, 3068b 2x2, 6636 1x6)
-  if (/^(2431|3069|3069b|3068|3068b|6636)$/.test(clean)) {
+  // 16. Brackets & Modified Plates (e.g. 18980, 77850, 68568, 35480, 88072, 74611)
+  if (/^(18980|77850|68568|35480|88072|74611)$/.test(clean)) {
+    return createLegoPlateGroup(1, 2, colorHex, 1, true);
+  }
+
+  // 17. Smooth Tiles (without studs, e.g. 2431 1x4, 3069/3069b 1x2, 3068b 2x2, 6636 1x6, 87079 2x4)
+  if (/^(2431|3069|3069b|3068|3068b|6636|87079)$/.test(clean)) {
     let tw = 1, tl = 2;
     if (clean.startsWith('2431')) { tw = 1; tl = 4; }
     else if (clean.startsWith('3068')) { tw = 2; tl = 2; }
     else if (clean.startsWith('6636')) { tw = 1; tl = 6; }
+    else if (clean.startsWith('87079')) { tw = 2; tl = 4; }
     return createLegoPlateGroup(tw, tl, colorHex, 1, false);
   }
 
-  // 12. Standard Bricks & Plates with Genuine Studs (e.g. 3001 2x4, 3003 2x2, 3004 1x2, 3005 1x1, 3010 1x4, 3020 2x4, 3035 4x8, etc.)
+  // 18. Standard Bricks & Plates with Genuine Studs (e.g. 3001 2x4, 3003 2x2, 3004 1x2, 3005 1x1, 3010 1x4, 3020 2x4, 3035 4x8, etc.)
   let w = 2, l = 2, hPlates = 1;
   if (/^(3024|3005)$/.test(clean)) { w = 1; l = 1; }
-  else if (/^(3023|3023b|3004|3700|35480)$/.test(clean)) { w = 1; l = 2; }
+  else if (/^(3023|3023b|3004|3700)$/.test(clean)) { w = 1; l = 2; }
   else if (/^(3022|3003)$/.test(clean)) { w = 2; l = 2; }
   else if (/^(3021|3002)$/.test(clean)) { w = 2; l = 3; }
   else if (/^(3020|3001)$/.test(clean)) { w = 2; l = 4; }

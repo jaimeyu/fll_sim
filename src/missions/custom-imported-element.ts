@@ -73,6 +73,20 @@ export class CustomImportedMissionElement implements MissionElement {
     return this.isSolidRigidMode;
   }
 
+  public setIsBaseFixed(fixed: boolean): void {
+    if (this.isBaseFixed === fixed) return;
+    this.isBaseFixed = fixed;
+    if (this.world) {
+      this.destroy();
+      this.createPhysicsAndVisuals();
+      this.reset();
+    }
+  }
+
+  public getIsBaseFixed(): boolean {
+    return this.isBaseFixed;
+  }
+
   public getSpec(): RobotAssemblySpec {
     return this.spec;
   }
@@ -130,14 +144,11 @@ export class CustomImportedMissionElement implements MissionElement {
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
       colorIdx++;
 
-      // Check if this cluster is connected to an active joint
-      const isConnectedToJoint = this.spec.joints.some(
-        (j) => j.parentClusterId === cluster.clusterId || j.childClusterId === cluster.clusterId
-      );
-
-      // Create Rapier RigidBody
+      // Create Rapier RigidBody:
+      // Fixed if in solid rigid mode, or if isBaseFixed and this is the base anchor cluster.
+      // All other mechanisms/articulated clusters are dynamic so they react to robot pushes & tools!
       let bodyDesc: RAPIER.RigidBodyDesc;
-      if (this.isSolidRigidMode || (this.isBaseFixed && (isBase || !isConnectedToJoint))) {
+      if (this.isSolidRigidMode || (this.isBaseFixed && isBase)) {
         bodyDesc = RAPIER.RigidBodyDesc.fixed()
           .setTranslation(this.basePos.x, initialY, this.basePos.z)
           .setRotation({ x: 0, y: qy, z: 0, w: qw });
@@ -145,8 +156,8 @@ export class CustomImportedMissionElement implements MissionElement {
         bodyDesc = RAPIER.RigidBodyDesc.dynamic()
           .setTranslation(this.basePos.x, initialY, this.basePos.z)
           .setRotation({ x: 0, y: qy, z: 0, w: qw })
-          .setLinearDamping(3.0)
-          .setAngularDamping(4.0)
+          .setLinearDamping(2.0)
+          .setAngularDamping(3.0)
           .setAdditionalMass(Math.max(0.05, cluster.totalMassKg));
       }
 

@@ -808,10 +808,20 @@ export class SimulatorHud {
       });
     });
 
+    // Top Bar CAD Inspector Button
+    const btnTopbarInspector = this.rootElement.querySelector('#btn-topbar-inspector');
+    btnTopbarInspector?.addEventListener('click', () => {
+      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
+      const targetId = activePlaced ? activePlaced.id : 'M01';
+      this.callbacks.onOpenInspector?.(targetId);
+    });
+
     // Activity Bar CAD Inspector Button
     const actBtnCad = this.rootElement.querySelector('#act-btn-cad');
     actBtnCad?.addEventListener('click', () => {
-      this.callbacks.onOpenInspector?.('M01');
+      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
+      const targetId = activePlaced ? activePlaced.id : 'M01';
+      this.callbacks.onOpenInspector?.(targetId);
     });
 
     // Drawer Minimize Button

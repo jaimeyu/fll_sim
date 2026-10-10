@@ -474,8 +474,10 @@ export class CadModelInspector {
     this.overlay.style.display = 'flex';
     this.initThree();
     this.startLoop();
-    this.onResize();
-    this.loadMissionModel(missionId);
+    requestAnimationFrame(() => {
+      this.onResize();
+      this.loadMissionModel(missionId);
+    });
   }
 
   public close(): void {
@@ -484,13 +486,29 @@ export class CadModelInspector {
     this.stopLoop();
   }
 
+  public inspectSpec(spec: RobotAssemblySpec, name: string = 'Custom Model', id: string = 'custom'): void {
+    this.currentMissionId = id;
+    this.currentSpec = spec;
+    this.currentThumbnailUrl = null;
+    this.updateThumbnailDom(null);
+    this.build3DRepresentation(spec);
+    this.updateReportDom(spec, name, id);
+    this.resetCamera();
+  }
+
   public async loadMissionModel(missionId: string): Promise<void> {
     this.currentMissionId = missionId;
     const select = this.overlay.querySelector('#inspector-mission-select') as HTMLSelectElement;
-    if (select && select.value !== missionId) select.value = missionId;
+    if (select) {
+      const exists = Array.from(select.options).some((o) => o.value === missionId);
+      if (exists) select.value = missionId;
+    }
 
-    const specConfig = SEASON_MISSIONS_CONFIG.find((m) => m.id === missionId);
-    if (!specConfig) return;
+    let specConfig = SEASON_MISSIONS_CONFIG.find((m) => m.id === missionId);
+    if (!specConfig) {
+      specConfig = SEASON_MISSIONS_CONFIG[0];
+      if (!specConfig) return;
+    }
 
     try {
       const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
@@ -577,24 +595,37 @@ export class CadModelInspector {
 
     let colorIdx = 0;
 
-    // Ground elevation normalization
-    let lowestY = Infinity;
+    // Centering & ground normalization
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
     for (const cluster of spec.clusters) {
       if (cluster.parts) {
         for (const p of cluster.parts) {
+          const px = p.position[0] / 1000;
           const py = p.position[1] / 1000;
-          if (py < lowestY) lowestY = py;
+          const pz = p.position[2] / 1000;
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+          if (pz < minZ) minZ = pz;
+          if (pz > maxZ) maxZ = pz;
         }
       }
     }
-    const groundCorrectionY = lowestY !== Infinity ? -lowestY : 0;
+
+    const offsetX = minX !== Infinity ? -(minX + maxX) / 2 : 0;
+    const offsetY = minY !== Infinity ? -minY : 0;
+    const offsetZ = minZ !== Infinity ? -(minZ + maxZ) / 2 : 0;
 
     for (const cluster of spec.clusters) {
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
       colorIdx++;
 
       const clusterObj = new THREE.Group();
-      clusterObj.position.set(0, groundCorrectionY, 0);
+      clusterObj.position.set(offsetX, offsetY, offsetZ);
 
       // Render authentic LEGO bricks
       if (cluster.parts && cluster.parts.length > 0) {
@@ -630,7 +661,7 @@ export class CadModelInspector {
           opacity: 0.8,
         });
         const colMesh = new THREE.Mesh(geom, mat);
-        colMesh.position.set(col.offset[0], col.offset[1] + groundCorrectionY, col.offset[2]);
+        colMesh.position.set(col.offset[0] + offsetX, col.offset[1] + offsetY, col.offset[2] + offsetZ);
         this.colliderGroup.add(colMesh);
       }
     }
@@ -904,8 +935,21 @@ export class CadModelInspector {
 
   private resetCamera(): void {
     if (!this.controls || !this.camera) return;
-    this.camera.position.set(0.35, 0.25, 0.35);
-    this.controls.target.set(0, 0.05, 0);
+    const box = new THREE.Box3().setFromObject(this.modelGroup);
+    if (!box.isEmpty()) {
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z, 0.08);
+      const dist = maxDim * 2.2;
+      this.camera.position.set(center.x + dist * 0.75, center.y + dist * 0.55, center.z + dist * 0.75);
+      this.controls.target.copy(center);
+      this.camera.near = Math.max(0.005, dist / 100);
+      this.camera.far = Math.max(20, dist * 20);
+      this.camera.updateProjectionMatrix();
+    } else {
+      this.camera.position.set(0.35, 0.25, 0.35);
+      this.controls.target.set(0, 0.05, 0);
+    }
     this.controls.update();
   }
 }
