@@ -17,13 +17,26 @@ export interface TelemetryState {
       port: 'A' | 'B';
       degrees: number;
       speed: number;
+      targetPercent?: number;
+      status?: 'IDLE' | 'RUNNING' | 'BRAKING';
     };
     right: {
       port: 'A' | 'B';
       degrees: number;
       speed: number;
+      targetPercent?: number;
+      status?: 'IDLE' | 'RUNNING' | 'BRAKING';
     };
-    all?: Record<string, { port: MotorPort; degrees: number; speed: number }>;
+    all?: Record<
+      string,
+      {
+        port: MotorPort;
+        degrees: number;
+        speed: number;
+        targetPercent?: number;
+        status?: 'IDLE' | 'RUNNING' | 'BRAKING';
+      }
+    >;
   };
   sensors: {
     colorC: {

@@ -9,6 +9,15 @@ import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
 import { profiler } from '../core/performance-profiler';
 import { SpikeScratchImporter, VisualBlock } from '../runtime/spike-scratch-importer';
 
+export interface CommandLogEntry {
+  id: number;
+  timeStr: string;
+  relativeSec: number;
+  type: 'CMD' | 'DRIVE' | 'BRAKE' | 'STOP' | 'MOTOR' | 'PHYSICS';
+  source: string;
+  message: string;
+}
+
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
   onStopScript: () => void;
@@ -458,6 +467,13 @@ export class SimulatorHud {
   private telemDist!: HTMLElement;
   private telemFps!: HTMLElement;
 
+  // Telemetry Tabbed & Diagnostic state
+  private commandLogs: CommandLogEntry[] = [];
+  private logIdCounter: number = 0;
+  private activeTelemTab: 'sensors' | 'motors' | 'logs' = 'sensors';
+  private autoScrollLogs: boolean = true;
+  private logFilter: 'ALL' | 'DRIVE' | 'BRAKE' | 'MOTOR' = 'ALL';
+
   // Bottom FPS meter & Profiler Modal
   private bottomFpsMeter!: HTMLElement;
   private bottomFpsDot!: HTMLElement;
@@ -771,91 +787,29 @@ export class SimulatorHud {
               </div>
             </div>
 
-            <!-- SECTION 3: Live Sensor Dashboard -->
+            <!-- SECTION 3: Live Telemetry & Diagnostics Link -->
             <div class="driver-section-card">
               <div class="driver-section-header">
-                <span class="section-title">📡 Live Sensors &amp; Readings</span>
-                <button class="btn btn-xs btn-outline" id="btn-driver-zero-gyro" title="Reset Gyro Yaw Heading to 0°">🧭 Zero Gyro</button>
+                <span class="section-title">📡 Live Sensors &amp; Diagnostics</span>
+                <button class="btn btn-xs btn-primary" id="btn-driver-open-telem" title="Open Resizable Telemetry Modal">📊 Open Telemetry Modal</button>
               </div>
-
-              <div class="driver-sensors-grid">
-                <!-- Color Sensor C (Left) -->
-                <div class="driver-sensor-card">
-                  <div class="sensor-card-title">
-                    <span>🎨 Color Sensor C (Left)</span>
-                    <span class="sensor-badge" id="driver-badge-color-c">WHITE</span>
-                  </div>
-                  <div class="sensor-meter-container">
-                    <div class="sensor-meter-label">
-                      <span>Reflected Light:</span>
-                      <strong id="driver-val-light-c">0%</strong>
-                    </div>
-                    <div class="sensor-meter-track">
-                      <div class="sensor-meter-fill fill-color-light" id="driver-meter-light-c" style="width: 0%;"></div>
-                    </div>
-                  </div>
-                  <div class="sensor-color-swatch-row">
-                    <div class="sensor-swatch-box" id="driver-swatch-c" style="background-color: #ffffff;"></div>
-                    <span class="sensor-rgb-text" id="driver-rgb-c">RGB: (255, 255, 255)</span>
-                  </div>
+              <div class="driver-section-hint">
+                Live color sensors, ultrasonic sonar, gyro yaw heading, motor speeds &amp; physics command logs are located in the floating <b>Telemetry Modal</b>.
+              </div>
+              <div class="driver-quick-telemetry-row">
+                <div class="driver-quick-stat">
+                  <span class="quick-stat-label">Gyro:</span>
+                  <strong class="quick-stat-val" id="driver-quick-gyro">0.0°</strong>
                 </div>
-
-                <!-- Color Sensor D (Right) -->
-                <div class="driver-sensor-card">
-                  <div class="sensor-card-title">
-                    <span>🎨 Color Sensor D (Right)</span>
-                    <span class="sensor-badge" id="driver-badge-color-d">WHITE</span>
-                  </div>
-                  <div class="sensor-meter-container">
-                    <div class="sensor-meter-label">
-                      <span>Reflected Light:</span>
-                      <strong id="driver-val-light-d">0%</strong>
-                    </div>
-                    <div class="sensor-meter-track">
-                      <div class="sensor-meter-fill fill-color-light" id="driver-meter-light-d" style="width: 0%;"></div>
-                    </div>
-                  </div>
-                  <div class="sensor-color-swatch-row">
-                    <div class="sensor-swatch-box" id="driver-swatch-d" style="background-color: #ffffff;"></div>
-                    <span class="sensor-rgb-text" id="driver-rgb-d">RGB: (255, 255, 255)</span>
-                  </div>
+                <div class="driver-quick-stat">
+                  <span class="quick-stat-label">Sonar:</span>
+                  <strong class="quick-stat-val" id="driver-quick-dist">-- cm</strong>
                 </div>
-
-                <!-- Distance Sensor -->
-                <div class="driver-sensor-card">
-                  <div class="sensor-card-title">
-                    <span>📏 Distance / Sonar</span>
-                    <span class="sensor-badge badge-dist" id="driver-val-dist">0 cm</span>
-                  </div>
-                  <div class="sensor-meter-container">
-                    <div class="sensor-meter-label">
-                      <span>Proximity:</span>
-                      <strong id="driver-dist-prox-label">Clear</strong>
-                    </div>
-                    <div class="sensor-meter-track">
-                      <div class="sensor-meter-fill fill-dist" id="driver-meter-dist" style="width: 50%;"></div>
-                    </div>
-                  </div>
-                  <div class="sensor-field-hint">Range to field borders &amp; obstacles</div>
+                <div class="driver-quick-stat">
+                  <span class="quick-stat-label">Color C:</span>
+                  <strong class="quick-stat-val" id="driver-quick-color-c">--</strong>
                 </div>
-
-                <!-- Gyro Sensor -->
-                <div class="driver-sensor-card">
-                  <div class="sensor-card-title">
-                    <span>🧭 Gyro / Motion IMU</span>
-                    <span class="sensor-badge badge-gyro" id="driver-val-gyro">0.0°</span>
-                  </div>
-                  <div class="gyro-compass-row">
-                    <div class="gyro-compass-dial">
-                      <div class="compass-needle" id="driver-compass-needle" style="transform: rotate(0deg);"></div>
-                      <span class="compass-n">N</span>
-                    </div>
-                    <div class="gyro-info-text">
-                      <div>Heading: <strong id="driver-yaw-text">0.0°</strong></div>
-                      <div>Field Pose: <strong id="driver-pos-text">0.00m, 0.00m</strong></div>
-                    </div>
-                  </div>
-                </div>
+                <button class="btn btn-xs btn-outline" id="btn-driver-zero-gyro" title="Reset Gyro Yaw Heading to 0°">🧭 Zero Gyro</button>
               </div>
             </div>
           </div>
@@ -1101,42 +1055,200 @@ export class SimulatorHud {
         </div>
       </div>
 
-      <!-- Bottom-Right Telemetry Card -->
+      <!-- Wide Resizable Telemetry Modal (Bottom-Right) -->
       <div class="hud-telemetry-panel" id="hud-telemetry-panel">
-        <div class="telem-header">
-          <span>📡 LIVE TELEMETRY</span>
-          <span id="telem-fps" class="fps-badge">60 FPS</span>
-        </div>
-        <div class="telem-grid">
-          <div class="telem-item">
-            <span class="label">Position (X, Z)</span>
-            <span class="value" id="telem-pos">0.00m, 0.00m</span>
+        <!-- Edge & Corner Resizer Handles -->
+        <div class="telem-resizer telem-resizer-w" id="telem-resizer-w" title="Drag left/right to resize width"></div>
+        <div class="telem-resizer telem-resizer-n" id="telem-resizer-n" title="Drag up/down to resize height"></div>
+        <div class="telem-resizer telem-resizer-nw" id="telem-resizer-nw" title="Drag to resize width and height"></div>
+
+        <!-- Telemetry Modal Header -->
+        <div class="telem-modal-header" id="telem-modal-header">
+          <div class="telem-header-left">
+            <span class="telem-header-icon">📡</span>
+            <span class="telem-header-title">ROBOT TELEMETRY &amp; DIAGNOSTICS</span>
+            <span id="telem-fps" class="fps-badge">60 FPS • 60 Hz</span>
           </div>
-          <div class="telem-item">
-            <span class="label">Heading (Yaw)</span>
-            <span class="value highlight" id="telem-yaw">0.0°</span>
-          </div>
-          <div class="telem-item">
-            <span class="label">Motor Left [A]</span>
-            <span class="value" id="telem-motor-a">0° (0 deg/s)</span>
-          </div>
-          <div class="telem-item">
-            <span class="label">Motor Right [B]</span>
-            <span class="value" id="telem-motor-b">0° (0 deg/s)</span>
-          </div>
-          <div class="telem-item">
-            <span class="label">Color Sensor [C]</span>
-            <span class="value" id="telem-color-c">Refl: 0% [white]</span>
-          </div>
-          <div class="telem-item">
-            <span class="label">Color Sensor [D]</span>
-            <span class="value" id="telem-color-d">Refl: 0% [white]</span>
-          </div>
-          <div class="telem-item">
-            <span class="label">Ultrasonic Dist</span>
-            <span class="value" id="telem-dist">-- cm</span>
+          <div class="telem-header-actions">
+            <button class="btn btn-xs btn-outline" id="btn-telem-reset-size" title="Reset Default Size (640×480)">⤢ Reset</button>
+            <button class="btn btn-xs btn-outline" id="btn-telem-close" title="Close Telemetry Panel">✖</button>
           </div>
         </div>
+
+        <!-- Telemetry Tabs Navigation -->
+        <div class="telem-tabs-bar">
+          <button class="telem-tab-btn active" data-telem-tab="sensors" id="btn-telem-tab-sensors">
+            <span>📡 Sensors &amp; Pose</span>
+          </button>
+          <button class="telem-tab-btn" data-telem-tab="motors" id="btn-telem-tab-motors">
+            <span>⚙️ Motors (A–F)</span>
+            <span class="telem-tab-badge" id="telem-motors-badge">6 Active</span>
+          </button>
+          <button class="telem-tab-btn" data-telem-tab="logs" id="btn-telem-tab-logs">
+            <span>📋 Command Logs</span>
+            <span class="telem-tab-badge badge-logs-count" id="telem-logs-count">0</span>
+          </button>
+        </div>
+
+        <!-- Telemetry Tabs Body -->
+        <div class="telem-body">
+          <!-- TAB 1: Sensors & Pose -->
+          <div class="telem-tab-content telem-content-sensors active" id="telem-content-sensors">
+            <div class="telem-sensors-grid">
+              <!-- Color Sensor C -->
+              <div class="telem-sensor-card">
+                <div class="telem-card-header">
+                  <span class="telem-card-title">🎨 Color Sensor C (Left)</span>
+                  <span class="sensor-badge" id="telem-badge-color-c">WHITE</span>
+                </div>
+                <div class="sensor-meter-container">
+                  <div class="sensor-meter-label">
+                    <span>Reflected Light:</span>
+                    <strong id="telem-val-light-c">0%</strong>
+                  </div>
+                  <div class="sensor-meter-track">
+                    <div class="sensor-meter-fill fill-color-light" id="telem-meter-light-c" style="width: 0%;"></div>
+                  </div>
+                </div>
+                <div class="sensor-color-swatch-row">
+                  <div class="sensor-swatch-box" id="telem-swatch-c" style="background-color: #ffffff;"></div>
+                  <span class="sensor-rgb-text" id="telem-rgb-c">RGB: (255, 255, 255)</span>
+                </div>
+              </div>
+
+              <!-- Color Sensor D -->
+              <div class="telem-sensor-card">
+                <div class="telem-card-header">
+                  <span class="telem-card-title">🎨 Color Sensor D (Right)</span>
+                  <span class="sensor-badge" id="telem-badge-color-d">WHITE</span>
+                </div>
+                <div class="sensor-meter-container">
+                  <div class="sensor-meter-label">
+                    <span>Reflected Light:</span>
+                    <strong id="telem-val-light-d">0%</strong>
+                  </div>
+                  <div class="sensor-meter-track">
+                    <div class="sensor-meter-fill fill-color-light" id="telem-meter-light-d" style="width: 0%;"></div>
+                  </div>
+                </div>
+                <div class="sensor-color-swatch-row">
+                  <div class="sensor-swatch-box" id="telem-swatch-d" style="background-color: #ffffff;"></div>
+                  <span class="sensor-rgb-text" id="telem-rgb-d">RGB: (255, 255, 255)</span>
+                </div>
+              </div>
+
+              <!-- Ultrasonic Distance Sensor -->
+              <div class="telem-sensor-card">
+                <div class="telem-card-header">
+                  <span class="telem-card-title">📡 Ultrasonic Distance</span>
+                  <span class="sensor-badge badge-dist" id="telem-dist-prox-label">🟢 Clear</span>
+                </div>
+                <div class="sensor-meter-container">
+                  <div class="sensor-meter-label">
+                    <span>Distance Reading:</span>
+                    <strong id="telem-val-dist">-- cm</strong>
+                  </div>
+                  <div class="sensor-meter-track">
+                    <div class="sensor-meter-fill fill-dist" id="telem-meter-dist" style="width: 100%;"></div>
+                  </div>
+                </div>
+                <div class="telem-subinfo-row">
+                  <span>Range: 0–150 cm</span>
+                  <span class="text-muted" id="telem-dist-raw">Raw: --</span>
+                </div>
+              </div>
+
+              <!-- Gyro IMU & Heading -->
+              <div class="telem-sensor-card">
+                <div class="telem-card-header">
+                  <span class="telem-card-title">🧭 Gyro / IMU Yaw</span>
+                  <button class="btn btn-xs btn-outline" id="btn-telem-zero-gyro" title="Reset Gyro Yaw Heading to 0°">🧭 Zero</button>
+                </div>
+                <div class="telem-gyro-row">
+                  <div class="driver-compass-dial">
+                    <div class="compass-circle">
+                      <div class="compass-needle" id="telem-compass-needle" style="transform: rotate(0deg);"></div>
+                      <span class="compass-n">N</span>
+                    </div>
+                  </div>
+                  <div class="telem-gyro-info">
+                    <div class="telem-big-stat" id="telem-val-gyro">0.0°</div>
+                    <div class="telem-subtext">Heading Yaw (Clockwise +)</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Field Position & Coordinates -->
+              <div class="telem-sensor-card telem-card-fullwidth">
+                <div class="telem-card-header">
+                  <span class="telem-card-title">📍 Robot Field Coordinates (Mat Arena)</span>
+                  <button class="btn btn-xs btn-outline" id="btn-telem-capture-pose" title="Capture current pose as starting spawn">📌 Capture Pose</button>
+                </div>
+                <div class="telem-pose-grid">
+                  <div class="pose-stat-box">
+                    <span class="label">X Position:</span>
+                    <span class="value" id="telem-pos-x">0.00 m</span>
+                  </div>
+                  <div class="pose-stat-box">
+                    <span class="label">Z Position:</span>
+                    <span class="value" id="telem-pos-z">0.00 m</span>
+                  </div>
+                  <div class="pose-stat-box">
+                    <span class="label">Heading Yaw:</span>
+                    <span class="value highlight" id="telem-pos-yaw">0.0°</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: Motors & Speeds -->
+          <div class="telem-tab-content telem-content-motors" id="telem-content-motors" style="display: none;">
+            <div class="telem-motors-toolbar">
+              <div class="telem-drivebase-summary">
+                <span>Drivebase: Left [A] <b id="telem-live-spd-a">0%</b> • Right [B] <b id="telem-live-spd-b">0%</b></span>
+              </div>
+              <div class="telem-motor-actions">
+                <button class="btn btn-xs btn-outline" id="btn-telem-stop-all-motors" title="Stop and brake all motors">⏹ Stop All</button>
+                <button class="btn btn-xs btn-outline" id="btn-telem-reset-encoders" title="Zero all encoders">↺ Zero Encoders</button>
+              </div>
+            </div>
+            <div class="telem-motors-grid" id="telem-motors-grid">
+              ${this.renderTelemMotorCardsHtml()}
+            </div>
+          </div>
+
+          <!-- TAB 3: Command & Physics Logs -->
+          <div class="telem-tab-content telem-content-logs" id="telem-content-logs" style="display: none;">
+            <div class="telem-logs-toolbar">
+              <div class="telem-logs-filters">
+                <button class="btn btn-xs btn-outline filter-btn active" data-filter="ALL" id="btn-filter-all">All</button>
+                <button class="btn btn-xs btn-outline filter-btn" data-filter="DRIVE" id="btn-filter-drive">Drive</button>
+                <button class="btn btn-xs btn-outline filter-btn" data-filter="BRAKE" id="btn-filter-brake">Brake</button>
+                <button class="btn btn-xs btn-outline filter-btn" data-filter="MOTOR" id="btn-filter-motor">Motors</button>
+              </div>
+              <div class="telem-logs-actions">
+                <label class="telem-autoscroll-label">
+                  <input type="checkbox" id="telem-autoscroll-chk" checked>
+                  <span>Auto-scroll</span>
+                </label>
+                <button class="btn btn-xs btn-outline" id="btn-telem-clear-logs" title="Clear all command logs">🧹 Clear Logs</button>
+              </div>
+            </div>
+            <div class="telem-log-stream" id="telem-log-stream">
+              <div class="telem-log-empty" id="telem-log-empty">No commands issued yet. Use WASD keys or Word Blocks to drive.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hidden legacy elements for full backward compatibility -->
+        <span id="telem-pos" style="display: none;">0.00m, 0.00m</span>
+        <span id="telem-yaw" style="display: none;">0.0°</span>
+        <span id="telem-motor-a" style="display: none;">0° (0 deg/s)</span>
+        <span id="telem-motor-b" style="display: none;">0° (0 deg/s)</span>
+        <span id="telem-color-c" style="display: none;">0% [white]</span>
+        <span id="telem-color-d" style="display: none;">0% [white]</span>
+        <span id="telem-dist" style="display: none;">-- cm</span>
       </div>
 
       <!-- Always-Visible Bottom Center FPS Meter & Profiler Button -->
@@ -1954,6 +2066,303 @@ export class SimulatorHud {
     });
 
     this.setupDriverModeEvents();
+    this.setupTelemetryPanelEvents();
+  }
+
+  private renderTelemMotorCardsHtml(): string {
+    const motorDefs = [
+      { port: 'A' as MotorPort, name: 'Left Drive Wheel' },
+      { port: 'B' as MotorPort, name: 'Right Drive Wheel' },
+      { port: 'C' as MotorPort, name: 'Aux Motor C' },
+      { port: 'D' as MotorPort, name: 'Aux Motor D' },
+      { port: 'E' as MotorPort, name: 'Aux Motor E' },
+      { port: 'F' as MotorPort, name: 'Aux Motor F' },
+    ];
+    return motorDefs
+      .map(
+        (m) => `
+      <div class="telem-motor-card" data-port="${m.port}">
+        <div class="telem-motor-card-header">
+          <div class="telem-motor-port-tag">PORT ${m.port}</div>
+          <div class="telem-motor-role-title">${m.name}</div>
+          <div class="telem-motor-state-badge state-idle" id="telem-motor-state-${m.port}">IDLE</div>
+        </div>
+        <div class="telem-motor-card-stats">
+          <div class="telem-stat-row">
+            <span class="label">Target Speed:</span>
+            <strong class="value" id="telem-motor-cmd-${m.port}">0%</strong>
+          </div>
+          <div class="telem-stat-row">
+            <span class="label">Actual Velocity:</span>
+            <strong class="value highlight" id="telem-motor-spd-${m.port}">0 °/s (0 RPM)</strong>
+          </div>
+          <div class="telem-stat-row">
+            <span class="label">Encoder Angle:</span>
+            <span class="value" id="telem-motor-deg-${m.port}">0.0°</span>
+          </div>
+        </div>
+        <div class="telem-motor-meter-track">
+          <div class="telem-motor-meter-fill" id="telem-motor-meter-${m.port}" style="width: 50%;"></div>
+        </div>
+      </div>`
+      )
+      .join('');
+  }
+
+  public logCommand(
+    type: CommandLogEntry['type'],
+    source: string,
+    message: string
+  ): void {
+    const now = new Date();
+    const timeStr = `${now.toTimeString().split(' ')[0]}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+    const entry: CommandLogEntry = {
+      id: ++this.logIdCounter,
+      timeStr,
+      relativeSec: performance.now() / 1000,
+      type,
+      source,
+      message,
+    };
+    this.commandLogs.push(entry);
+    if (this.commandLogs.length > 250) {
+      this.commandLogs.shift();
+    }
+    this.renderCommandLogEntry(entry);
+    this.updateLogCountBadge();
+  }
+
+  private renderCommandLogEntry(entry: CommandLogEntry): void {
+    const stream = this.rootElement.querySelector('#telem-log-stream');
+    if (!stream) return;
+
+    const emptyMsg = stream.querySelector('#telem-log-empty');
+    if (emptyMsg) emptyMsg.remove();
+
+    const matchesFilter =
+      this.logFilter === 'ALL' ||
+      (this.logFilter === 'DRIVE' && (entry.type === 'DRIVE' || entry.type === 'STOP')) ||
+      (this.logFilter === 'BRAKE' && entry.type === 'BRAKE') ||
+      (this.logFilter === 'MOTOR' && entry.type === 'MOTOR');
+
+    const row = document.createElement('div');
+    row.className = 'telem-log-entry';
+    row.setAttribute('data-log-type', entry.type);
+    if (!matchesFilter) row.style.display = 'none';
+
+    const badgeClass = `badge-${entry.type.toLowerCase()}`;
+    row.innerHTML = `
+      <span class="telem-log-time">${entry.timeStr}</span>
+      <span class="telem-log-badge ${badgeClass}">${entry.type}</span>
+      <span class="telem-log-msg"><span style="color: #94a3b8;">[${entry.source}]</span> ${entry.message}</span>
+    `;
+
+    stream.appendChild(row);
+
+    while (stream.children.length > 250) {
+      stream.firstElementChild?.remove();
+    }
+
+    if (this.autoScrollLogs) {
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }
+
+  private updateLogCountBadge(): void {
+    const badge = this.rootElement.querySelector('#telem-logs-count');
+    if (badge) badge.textContent = `${this.commandLogs.length}`;
+  }
+
+  private applyLogFilter(filter: 'ALL' | 'DRIVE' | 'BRAKE' | 'MOTOR'): void {
+    this.logFilter = filter;
+    const filterBtns = this.rootElement.querySelectorAll('.telem-logs-filters .filter-btn');
+    filterBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+    });
+    const stream = this.rootElement.querySelector('#telem-log-stream');
+    if (!stream) return;
+    const entries = stream.querySelectorAll('.telem-log-entry');
+    entries.forEach((el) => {
+      const type = el.getAttribute('data-log-type');
+      const matches =
+        filter === 'ALL' ||
+        (filter === 'DRIVE' && (type === 'DRIVE' || type === 'STOP')) ||
+        (filter === 'BRAKE' && type === 'BRAKE') ||
+        (filter === 'MOTOR' && type === 'MOTOR');
+      (el as HTMLElement).style.display = matches ? 'flex' : 'none';
+    });
+  }
+
+  private clearCommandLogs(): void {
+    this.commandLogs = [];
+    this.updateLogCountBadge();
+    const stream = this.rootElement.querySelector('#telem-log-stream');
+    if (stream) {
+      stream.innerHTML = '<div class="telem-log-empty" id="telem-log-empty">No commands issued yet. Use WASD keys or Word Blocks to drive.</div>';
+    }
+  }
+
+  private setupTelemetryPanelEvents(): void {
+    // 1. Resizing & Window actions
+    this.setupTelemetryResizing();
+
+    // 2. Tabs
+    this.setupTelemetryTabs();
+
+    // 3. Tab 1 Sensor Quick Buttons
+    const btnZeroGyro = this.rootElement.querySelector('#btn-telem-zero-gyro');
+    btnZeroGyro?.addEventListener('click', () => {
+      this.callbacks.onResetGyro?.();
+    });
+
+    const btnCapturePose = this.rootElement.querySelector('#btn-telem-capture-pose');
+    btnCapturePose?.addEventListener('click', () => {
+      this.callbacks.onCaptureCurrentPose?.();
+    });
+
+    // 4. Tab 2 Motor Quick Buttons
+    const btnStopAll = this.rootElement.querySelector('#btn-telem-stop-all-motors');
+    btnStopAll?.addEventListener('click', () => {
+      this.stopAllManualDriving();
+      this.logCommand('STOP', 'UI Button', 'Stop All Motors triggered: Ports A-F braked');
+    });
+
+    const btnResetEnc = this.rootElement.querySelector('#btn-telem-reset-encoders');
+    btnResetEnc?.addEventListener('click', () => {
+      this.callbacks.onResetEncoders?.();
+    });
+
+    // 5. Tab 3 Command Log Actions
+    const btnClearLogs = this.rootElement.querySelector('#btn-telem-clear-logs');
+    btnClearLogs?.addEventListener('click', () => {
+      this.clearCommandLogs();
+    });
+
+    const chkAutoScroll = this.rootElement.querySelector('#telem-autoscroll-chk') as HTMLInputElement | null;
+    chkAutoScroll?.addEventListener('change', () => {
+      this.autoScrollLogs = chkAutoScroll.checked;
+    });
+
+    const filterBtns = this.rootElement.querySelectorAll('.telem-logs-filters .filter-btn');
+    filterBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const filter = btn.getAttribute('data-filter') as 'ALL' | 'DRIVE' | 'BRAKE' | 'MOTOR';
+        if (filter) this.applyLogFilter(filter);
+      });
+    });
+
+    // 6. Driver Drawer Link to Telemetry
+    const btnDriverOpenTelem = this.rootElement.querySelector('#btn-driver-open-telem');
+    btnDriverOpenTelem?.addEventListener('click', () => {
+      this.toggleTelemetryPanel(true);
+    });
+  }
+
+  private setupTelemetryResizing(): void {
+    const panel = this.telemetryPanel;
+    if (!panel) return;
+
+    // Load saved dimensions from localStorage if available
+    try {
+      const savedW = localStorage.getItem('fll_telem_width');
+      const savedH = localStorage.getItem('fll_telem_height');
+      if (savedW) panel.style.width = `${Math.max(440, parseInt(savedW, 10))}px`;
+      if (savedH) panel.style.height = `${Math.max(280, parseInt(savedH, 10))}px`;
+    } catch (_) {}
+
+    const btnReset = this.rootElement.querySelector('#btn-telem-reset-size');
+    btnReset?.addEventListener('click', () => {
+      panel.style.width = '640px';
+      panel.style.height = '480px';
+      try {
+        localStorage.setItem('fll_telem_width', '640');
+        localStorage.setItem('fll_telem_height', '480');
+      } catch (_) {}
+    });
+
+    const btnClose = this.rootElement.querySelector('#btn-telem-close');
+    btnClose?.addEventListener('click', () => {
+      this.toggleTelemetryPanel(false);
+    });
+
+    const initDrag = (handleId: string, dir: 'w' | 'n' | 'nw') => {
+      const handle = this.rootElement.querySelector(handleId) as HTMLElement | null;
+      if (!handle) return;
+
+      handle.addEventListener('pointerdown', (e: PointerEvent) => {
+        e.preventDefault();
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch (_) {}
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const rect = panel.getBoundingClientRect();
+        const startW = rect.width;
+        const startH = rect.height;
+
+        const onMove = (ev: PointerEvent) => {
+          if (dir === 'w' || dir === 'nw') {
+            const deltaX = startX - ev.clientX; // moving left expands width
+            const newW = Math.min(Math.max(440, startW + deltaX), window.innerWidth - 40);
+            panel.style.width = `${newW}px`;
+            try { localStorage.setItem('fll_telem_width', `${newW}`); } catch (_) {}
+          }
+          if (dir === 'n' || dir === 'nw') {
+            const deltaY = startY - ev.clientY; // moving up expands height
+            const newH = Math.min(Math.max(280, startH + deltaY), window.innerHeight - 80);
+            panel.style.height = `${newH}px`;
+            try { localStorage.setItem('fll_telem_height', `${newH}`); } catch (_) {}
+          }
+        };
+
+        const onUp = (ev: PointerEvent) => {
+          try {
+            if (handle.hasPointerCapture(ev.pointerId)) {
+              handle.releasePointerCapture(ev.pointerId);
+            }
+          } catch (_) {}
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        };
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    };
+
+    initDrag('#telem-resizer-w', 'w');
+    initDrag('#telem-resizer-n', 'n');
+    initDrag('#telem-resizer-nw', 'nw');
+  }
+
+  private setupTelemetryTabs(): void {
+    const tabBtns = this.rootElement.querySelectorAll('.telem-tab-btn[data-telem-tab]');
+    const tabSensors = this.rootElement.querySelector('#telem-content-sensors') as HTMLElement | null;
+    const tabMotors = this.rootElement.querySelector('#telem-content-motors') as HTMLElement | null;
+    const tabLogs = this.rootElement.querySelector('#telem-content-logs') as HTMLElement | null;
+
+    tabBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-telem-tab') as 'sensors' | 'motors' | 'logs';
+        if (!target) return;
+        this.activeTelemTab = target;
+
+        tabBtns.forEach((b) => b.classList.toggle('active', b === btn));
+        if (tabSensors) tabSensors.style.display = target === 'sensors' ? 'flex' : 'none';
+        if (tabMotors) tabMotors.style.display = target === 'motors' ? 'flex' : 'none';
+        if (tabLogs) tabLogs.style.display = target === 'logs' ? 'flex' : 'none';
+      });
+    });
+  }
+
+  public getActiveTelemetryTab(): 'sensors' | 'motors' | 'logs' {
+    return this.activeTelemTab;
+  }
+
+  public setTelemetryTab(tab: 'sensors' | 'motors' | 'logs'): void {
+    const tabBtn = this.rootElement.querySelector(`.telem-tab-btn[data-telem-tab="${tab}"]`) as HTMLButtonElement | null;
+    tabBtn?.click();
   }
 
   private renderMotorCardsHtml(): string {
@@ -2184,6 +2593,16 @@ export class SimulatorHud {
       this.releaseDriverKey(';', 'physical');
       this.releaseDriverKey(':', 'physical');
     }
+
+    // Safety: if NO physical keys are held anymore, make sure heldPhysicalKeys is fully cleared
+    // and if pointer is not active, clear heldDriverKeys completely
+    if (this.heldPhysicalKeys.size === 0 && this.heldPointerKeys.size === 0) {
+      if (this.heldDriverKeys.size > 0) {
+        this.heldDriverKeys.clear();
+        this.updateDriverKeyOutputs();
+        this.updateDriverKeyHighlights();
+      }
+    }
   }
 
   private pressDriverKey(key: string, source: 'physical' | 'pointer' = 'physical'): void {
@@ -2212,34 +2631,45 @@ export class SimulatorHud {
       this.heldPointerKeys.delete(k);
     }
 
-    // Only completely release from heldDriverKeys if neither physical nor pointer holds it
+    let changed = false;
+    // Remove from heldDriverKeys if neither physical nor pointer holds it
     if (!this.heldPhysicalKeys.has(k) && !this.heldPointerKeys.has(k)) {
-      let changed = false;
       if (this.heldDriverKeys.has(k)) {
         this.heldDriverKeys.delete(k);
         changed = true;
       }
-      if (k === ';' && this.heldDriverKeys.has(':')) {
-        this.heldDriverKeys.delete(':');
-        this.heldPhysicalKeys.delete(':');
-        this.heldPointerKeys.delete(':');
+    } else if (source === 'physical' && !this.heldPointerKeys.has(k)) {
+      // Releasing physical key: remove from heldDriverKeys unless pointer key is active
+      if (this.heldDriverKeys.has(k)) {
+        this.heldDriverKeys.delete(k);
         changed = true;
       }
-      if (k === ':' && this.heldDriverKeys.has(';')) {
+    } else if (source === 'pointer' && !this.heldPhysicalKeys.has(k)) {
+      if (this.heldDriverKeys.has(k)) {
+        this.heldDriverKeys.delete(k);
+        changed = true;
+      }
+    }
+
+    if (k === ';' || k === ':') {
+      if (!this.heldPhysicalKeys.has(';') && !this.heldPointerKeys.has(';')) {
         this.heldDriverKeys.delete(';');
-        this.heldPhysicalKeys.delete(';');
-        this.heldPointerKeys.delete(';');
         changed = true;
       }
-      if (changed) {
-        this.updateDriverKeyOutputs();
-        this.updateDriverKeyHighlights();
+      if (!this.heldPhysicalKeys.has(':') && !this.heldPointerKeys.has(':')) {
+        this.heldDriverKeys.delete(':');
+        changed = true;
       }
+    }
+
+    if (changed) {
+      this.updateDriverKeyOutputs();
+      this.updateDriverKeyHighlights();
     }
   }
 
   private updateDriverKeyOutputs(): void {
-    if (!this.isDriverArmed) {
+    if (!this.isDriverArmed || this.heldDriverKeys.size === 0) {
       this.callbacks.onManualDriveBaseStop?.();
       for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
         this.callbacks.onManualMotorStop?.(port);
@@ -2658,19 +3088,17 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
   }
 
   public updateTelemetry(state: TelemetryState): void {
+    // 1. Update legacy telemetry elements
     this.telemPosX.textContent = `${state.robot.x.toFixed(2)}m, ${state.robot.z.toFixed(2)}m`;
     this.telemYaw.textContent = `${state.robot.yawDegrees.toFixed(1)}°`;
-
     this.telemMotorA.textContent = `${state.motors.left.degrees}° (${state.motors.left.speed} d/s)`;
     this.telemMotorB.textContent = `${state.motors.right.degrees}° (${state.motors.right.speed} d/s)`;
-
     this.telemColorC.textContent = `${state.sensors.colorC.reflectedLight}% [${state.sensors.colorC.color}]`;
     this.telemColorD.textContent = `${state.sensors.colorD.reflectedLight}% [${state.sensors.colorD.color}]`;
-
     this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
     this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz)} Hz`;
 
-    // Update always-visible bottom FPS meter
+    // 2. Update always-visible bottom FPS meter
     const fpsRound = Math.round(state.fps);
     this.bottomFpsVal.textContent = `${fpsRound} FPS`;
     const frameMs = state.fps > 0 ? (1000 / state.fps).toFixed(1) : '16.7';
@@ -2687,9 +3115,121 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       this.updateProfilerModal();
     }
 
-    // Update live sensor & motor readings in Driver Mode drawer view
+    const gyroYaw = state.sensors.gyroYaw !== undefined ? state.sensors.gyroYaw : state.robot.yawDegrees;
+
+    // 3. Update TAB 1: Sensors & Pose in Telemetry Modal
+    const tBadgeC = this.rootElement.querySelector('#telem-badge-color-c');
+    if (tBadgeC) {
+      tBadgeC.textContent = state.sensors.colorC.color.toUpperCase();
+      tBadgeC.className = `sensor-badge badge-color-${state.sensors.colorC.color}`;
+    }
+    const tValLightC = this.rootElement.querySelector('#telem-val-light-c');
+    if (tValLightC) tValLightC.textContent = `${state.sensors.colorC.reflectedLight}%`;
+    const tMeterC = this.rootElement.querySelector('#telem-meter-light-c') as HTMLElement | null;
+    if (tMeterC) tMeterC.style.width = `${state.sensors.colorC.reflectedLight}%`;
+    const tSwatchC = this.rootElement.querySelector('#telem-swatch-c') as HTMLElement | null;
+    if (tSwatchC) tSwatchC.style.backgroundColor = `rgb(${state.sensors.colorC.rgb.join(',')})`;
+    const tRgbC = this.rootElement.querySelector('#telem-rgb-c');
+    if (tRgbC) tRgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
+
+    const tBadgeD = this.rootElement.querySelector('#telem-badge-color-d');
+    if (tBadgeD) {
+      tBadgeD.textContent = state.sensors.colorD.color.toUpperCase();
+      tBadgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
+    }
+    const tValLightD = this.rootElement.querySelector('#telem-val-light-d');
+    if (tValLightD) tValLightD.textContent = `${state.sensors.colorD.reflectedLight}%`;
+    const tMeterD = this.rootElement.querySelector('#telem-meter-light-d') as HTMLElement | null;
+    if (tMeterD) tMeterD.style.width = `${state.sensors.colorD.reflectedLight}%`;
+    const tSwatchD = this.rootElement.querySelector('#telem-swatch-d') as HTMLElement | null;
+    if (tSwatchD) tSwatchD.style.backgroundColor = `rgb(${state.sensors.colorD.rgb.join(',')})`;
+    const tRgbD = this.rootElement.querySelector('#telem-rgb-d');
+    if (tRgbD) tRgbD.textContent = `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
+
+    // Ultrasonic Distance
+    const tValDist = this.rootElement.querySelector('#telem-val-dist');
+    if (tValDist) tValDist.textContent = `${state.sensors.distanceCm} cm`;
+    const tMeterDist = this.rootElement.querySelector('#telem-meter-dist') as HTMLElement | null;
+    if (tMeterDist) {
+      const pct = Math.min(100, Math.max(0, (state.sensors.distanceCm / 150) * 100));
+      tMeterDist.style.width = `${pct}%`;
+    }
+    const tLblProx = this.rootElement.querySelector('#telem-dist-prox-label');
+    if (tLblProx) {
+      if (state.sensors.distanceCm < 10) tLblProx.textContent = '⚠️ Obstacle (<10cm)';
+      else if (state.sensors.distanceCm < 25) tLblProx.textContent = '🔶 Close';
+      else if (state.sensors.distanceCm < 60) tLblProx.textContent = '🟡 Approaching';
+      else tLblProx.textContent = '🟢 Clear';
+    }
+    const tDistRaw = this.rootElement.querySelector('#telem-dist-raw');
+    if (tDistRaw) tDistRaw.textContent = `Raw: ${state.sensors.distanceCm}cm`;
+
+    // Gyro
+    const tValGyro = this.rootElement.querySelector('#telem-val-gyro');
+    if (tValGyro) tValGyro.textContent = `${gyroYaw.toFixed(1)}°`;
+    const tNeedle = this.rootElement.querySelector('#telem-compass-needle') as HTMLElement | null;
+    if (tNeedle) tNeedle.style.transform = `rotate(${gyroYaw}deg)`;
+
+    // Pose
+    const tPosX = this.rootElement.querySelector('#telem-pos-x');
+    if (tPosX) tPosX.textContent = `${state.robot.x.toFixed(2)} m`;
+    const tPosZ = this.rootElement.querySelector('#telem-pos-z');
+    if (tPosZ) tPosZ.textContent = `${state.robot.z.toFixed(2)} m`;
+    const tPosYaw = this.rootElement.querySelector('#telem-pos-yaw');
+    if (tPosYaw) tPosYaw.textContent = `${gyroYaw.toFixed(1)}°`;
+
+    // 4. Update TAB 2: Motors & Speeds in Telemetry Modal
+    const sumSpdA = this.rootElement.querySelector('#telem-live-spd-a');
+    const sumSpdB = this.rootElement.querySelector('#telem-live-spd-b');
+    const spdL = state.motors.left.targetPercent ?? 0;
+    const spdR = state.motors.right.targetPercent ?? 0;
+    if (sumSpdA) sumSpdA.textContent = `${spdL > 0 ? '+' : ''}${spdL}%`;
+    if (sumSpdB) sumSpdB.textContent = `${spdR > 0 ? '+' : ''}${spdR}%`;
+
+    const allPorts: MotorPort[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    for (const p of allPorts) {
+      let mState: { port: MotorPort; degrees: number; speed: number; targetPercent?: number; status?: 'IDLE' | 'RUNNING' | 'BRAKING' } | undefined;
+      if (p === 'A') mState = state.motors.left;
+      else if (p === 'B') mState = state.motors.right;
+      else if (state.motors.all) mState = state.motors.all[p];
+
+      if (!mState) continue;
+
+      const stateBadge = this.rootElement.querySelector(`#telem-motor-state-${p}`);
+      const st = mState.status || (Math.abs(mState.speed) > 1 ? 'RUNNING' : 'IDLE');
+      if (stateBadge) {
+        stateBadge.textContent = st;
+        stateBadge.className = `telem-motor-state-badge state-${st.toLowerCase()}`;
+      }
+
+      const cmdEl = this.rootElement.querySelector(`#telem-motor-cmd-${p}`);
+      const tp = mState.targetPercent ?? 0;
+      if (cmdEl) cmdEl.textContent = tp !== 0 ? `${tp > 0 ? '+' : ''}${tp}%` : '0% (IDLE)';
+
+      const spdEl = this.rootElement.querySelector(`#telem-motor-spd-${p}`);
+      const rpm = Math.round(Math.abs(mState.speed) / 6);
+      if (spdEl) spdEl.textContent = `${mState.speed > 0 ? '+' : ''}${mState.speed} °/s (~${rpm} RPM)`;
+
+      const degEl = this.rootElement.querySelector(`#telem-motor-deg-${p}`);
+      if (degEl) degEl.textContent = `${mState.degrees.toFixed(1)}°`;
+
+      const meterEl = this.rootElement.querySelector(`#telem-motor-meter-${p}`) as HTMLElement | null;
+      if (meterEl) {
+        const pct = Math.min(100, Math.max(0, 50 + (mState.speed / 1000) * 50));
+        meterEl.style.width = `${pct}%`;
+      }
+    }
+
+    // 5. Update Driver Drawer live indicators if present
     if (this.viewDriver) {
-      // Color C
+      const qGyro = this.viewDriver.querySelector('#driver-quick-gyro');
+      if (qGyro) qGyro.textContent = `${gyroYaw.toFixed(1)}°`;
+      const qDist = this.viewDriver.querySelector('#driver-quick-dist');
+      if (qDist) qDist.textContent = `${state.sensors.distanceCm} cm`;
+      const qColC = this.viewDriver.querySelector('#driver-quick-color-c');
+      if (qColC) qColC.textContent = state.sensors.colorC.color.toUpperCase();
+
+      // Legacy drawer sensor elements if still present
       const badgeC = this.viewDriver.querySelector('#driver-badge-color-c');
       if (badgeC) {
         badgeC.textContent = state.sensors.colorC.color.toUpperCase();
@@ -2704,7 +3244,6 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       const rgbC = this.viewDriver.querySelector('#driver-rgb-c');
       if (rgbC) rgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
 
-      // Color D
       const badgeD = this.viewDriver.querySelector('#driver-badge-color-d');
       if (badgeD) {
         badgeD.textContent = state.sensors.colorD.color.toUpperCase();
@@ -2719,7 +3258,6 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       const rgbD = this.viewDriver.querySelector('#driver-rgb-d');
       if (rgbD) rgbD.textContent = `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
 
-      // Distance
       const valDist = this.viewDriver.querySelector('#driver-val-dist');
       if (valDist) valDist.textContent = `${state.sensors.distanceCm} cm`;
       const meterDist = this.viewDriver.querySelector('#driver-meter-dist') as HTMLElement | null;
@@ -2735,8 +3273,6 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
         else lblProx.textContent = '🟢 Clear';
       }
 
-      // Gyro & Odometry
-      const gyroYaw = state.sensors.gyroYaw !== undefined ? state.sensors.gyroYaw : state.robot.yawDegrees;
       const valGyro = this.viewDriver.querySelector('#driver-val-gyro');
       if (valGyro) valGyro.textContent = `${gyroYaw.toFixed(1)}°`;
       const yawText = this.viewDriver.querySelector('#driver-yaw-text');
@@ -2746,7 +3282,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       const posText = this.viewDriver.querySelector('#driver-pos-text');
       if (posText) posText.textContent = `${state.robot.x.toFixed(2)}m, ${state.robot.z.toFixed(2)}m`;
 
-      // Encoders
+      // Drawer Encoders
       const encDegA = this.viewDriver.querySelector('#motor-enc-deg-A');
       const encSpdA = this.viewDriver.querySelector('#motor-enc-spd-A');
       if (encDegA) encDegA.textContent = `${state.motors.left.degrees}°`;
@@ -2766,6 +3302,16 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
           if (es) es.textContent = `${m.speed}°/s`;
         }
       }
+    }
+
+    // 6. Safety heartbeat: If no keys are held by user, guarantee driver keys are cleared
+    if (!this.isDriverArmed || (this.heldPhysicalKeys.size === 0 && this.heldPointerKeys.size === 0 && this.heldDriverKeys.size > 0)) {
+      this.heldDriverKeys.clear();
+      this.callbacks.onManualDriveBaseStop?.();
+      for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
+        this.callbacks.onManualMotorStop?.(port);
+      }
+      this.updateDriverKeyHighlights();
     }
   }
 

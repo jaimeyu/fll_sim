@@ -209,6 +209,8 @@ export class RobotPhysicsBody {
     }
   }
 
+  public onBrakeEngaged?: () => void;
+
   /**
    * Applies an active electromagnetic brake to wheels and chassis, bringing the robot to an
    * immediate standstill without coasting or micro-creeping across the mat.
@@ -218,23 +220,26 @@ export class RobotPhysicsBody {
     for (const wb of this.wheelBodies.values()) {
       wb.setAngularDamping(50.0);
       wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      const wLin = wb.linvel();
+      wb.setLinvel({ x: 0, y: wLin.y, z: 0 }, true);
     }
     for (const joint of this.joints.values()) {
       try {
         (joint as any).configureMotorVelocity(0.0, 5.0);
       } catch (_) {}
     }
-    this.chassisBody.setAngularDamping(15.0);
-    this.chassisBody.setLinearDamping(12.0);
+    this.chassisBody.setAngularDamping(20.0);
+    this.chassisBody.setLinearDamping(20.0);
     const lin = this.chassisBody.linvel();
     const horizSpd = Math.sqrt(lin.x * lin.x + lin.z * lin.z);
-    if (horizSpd < 0.25) {
+    if (horizSpd < 0.35) {
       this.chassisBody.setLinvel({ x: 0, y: lin.y, z: 0 }, true);
       this.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
     } else {
       // Rapid deceleration simulating rubber tire skidding to dead stop
-      this.chassisBody.setLinvel({ x: lin.x * 0.1, y: lin.y, z: lin.z * 0.1 }, true);
+      this.chassisBody.setLinvel({ x: lin.x * 0.2, y: lin.y, z: lin.z * 0.2 }, true);
     }
+    this.onBrakeEngaged?.();
   }
 
   public straightTargetYaw: number | null = null;
@@ -315,6 +320,8 @@ export class RobotPhysicsBody {
             // Electromagnetic holding brake: locks wheel axle and prevents creeping
             wb.setAngularDamping(50.0);
             wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            const curWLin = wb.linvel();
+            wb.setLinvel({ x: 0, y: curWLin.y, z: 0 }, true);
             if (joint) {
               try {
                 (joint as any).configureMotorVelocity(0.0, 5.0);
@@ -333,6 +340,9 @@ export class RobotPhysicsBody {
 
             const wAng = wb.angvel();
             const currentSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
+            // Record physical measured spin in motor
+            motor.step(dt, currentSpin);
+
             const spinError = targetRadPerSec - currentSpin;
             const Kp = 0.005; // Smooth stable velocity governor for low-inertia wheels
             const maxTorque = 0.06; // 0.06 Nm max drive torque eliminates slippage and reaction flipping
@@ -345,14 +355,21 @@ export class RobotPhysicsBody {
     }
 
     if (!anyDriveActive) {
-      // Both drive motors idle: apply holding brake to chassis to eliminate residual coasting
-      this.chassisBody.setLinearDamping(12.0);
-      this.chassisBody.setAngularDamping(8.0);
+      // Both drive motors idle: apply holding brake to chassis and wheels to eliminate residual coasting
+      this.chassisBody.setLinearDamping(20.0);
+      this.chassisBody.setAngularDamping(20.0);
       const cv = this.chassisBody.linvel();
       const horizSpd = Math.sqrt(cv.x * cv.x + cv.z * cv.z);
-      if (horizSpd < 0.15) {
+      if (horizSpd < 0.30) {
         this.chassisBody.setLinvel({ x: 0, y: cv.y, z: 0 }, true);
         this.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      } else {
+        this.chassisBody.setLinvel({ x: cv.x * 0.4, y: cv.y, z: cv.z * 0.4 }, true);
+      }
+      for (const wb of this.wheelBodies.values()) {
+        wb.setLinvel({ x: 0, y: wb.linvel().y, z: 0 }, true);
+        wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        wb.setAngularDamping(50.0);
       }
     } else {
       // Actively driving: standard chassis damping

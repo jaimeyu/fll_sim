@@ -254,5 +254,43 @@ while True:
     const encB = engine.robot.motors.get('B')?.degrees ?? 0;
     expect(Math.abs(encA - encB)).toBeLessThan(1.0);
   });
+
+  it('triggers onBrakeEngaged callback when brakeChassisAndWheels is executed', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    let brakeCalled = false;
+    engine.robot.onBrakeEngaged = () => {
+      brakeCalled = true;
+    };
+
+    engine.robot.setDriveSpeeds(100, 100);
+    engine.update(1 / 60);
+
+    engine.robot.brakeChassisAndWheels();
+    expect(brakeCalled).toBe(true);
+  });
+
+  it('supports motor telemetry targets and status IDLE, RUNNING, and BRAKING', async () => {
+    const engine = new SimulationPhysicsEngine();
+    await engine.init();
+
+    const robot = engine.robot;
+    const motorA = robot.motors.get('A');
+    expect(motorA).toBeDefined();
+
+    // Idle initial state
+    expect(motorA?.targetSpeedDegPerSec).toBe(0);
+
+    // Running state
+    robot.setDriveSpeeds(75, 75);
+    expect(motorA?.targetSpeedDegPerSec).toBeGreaterThan(0);
+
+    // Stop / Brake
+    robot.setDriveSpeeds(0, 0);
+    expect(motorA?.targetSpeedDegPerSec).toBe(0);
+    expect(motorA?.velocityDegPerSec).toBe(0);
+  });
 });
+
 

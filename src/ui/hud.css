@@ -1087,65 +1087,514 @@ body, html {
   background: rgba(56, 189, 248, 0.35);
 }
 
-/* Telemetry Dashboard (Bottom-Right) */
+/* Wide Resizable Telemetry Modal (Bottom-Right) */
 .hud-telemetry-panel {
   position: absolute;
   right: 20px;
   bottom: 20px;
-  width: 380px;
+  width: 640px;
+  min-width: 440px;
+  max-width: calc(100vw - 40px);
+  height: 480px;
+  min-height: 280px;
+  max-height: calc(100vh - 80px);
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 14px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  z-index: 25;
+  overflow: hidden;
+  user-select: none;
 }
 
-.telem-header {
+/* Resize Handles on top and left */
+.telem-resizer {
+  position: absolute;
+  z-index: 30;
+}
+
+.telem-resizer-w {
+  left: 0;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.telem-resizer-w:hover, .telem-resizer-w:active {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+.telem-resizer-n {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 8px;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.telem-resizer-n:hover, .telem-resizer-n:active {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+.telem-resizer-nw {
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+  z-index: 35;
+}
+
+.telem-resizer-nw:hover, .telem-resizer-nw:active {
+  background: rgba(56, 189, 248, 0.6);
+  border-bottom-right-radius: 4px;
+}
+
+/* Modal Header */
+.telem-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
-.fps-badge {
-  font-size: 11px;
-  color: var(--accent-green);
-  font-family: monospace;
-}
-
-.telem-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.telem-header-left {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.telem-item {
+.telem-header-icon {
+  font-size: 15px;
+}
+
+.telem-header-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-main);
+}
+
+.telem-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Tabs Bar */
+.telem-tabs-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
   background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  flex-shrink: 0;
+}
+
+.telem-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.telem-tab-btn:hover {
+  background: rgba(51, 65, 85, 0.4);
+  color: var(--text-main);
+}
+
+.telem-tab-btn.active {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-blue);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.telem-tab-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  background: rgba(51, 65, 85, 0.6);
+  color: var(--text-muted);
+}
+
+.telem-tab-btn.active .telem-tab-badge {
+  background: rgba(56, 189, 248, 0.3);
+  color: var(--accent-blue);
+}
+
+.badge-logs-count {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+/* Modal Body */
+.telem-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.telem-tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TAB 1: Sensors & Pose Grid */
+.telem-sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.telem-sensor-card {
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.telem-card-fullwidth {
+  grid-column: 1 / -1;
+}
+
+.telem-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telem-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.telem-gyro-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.telem-big-stat {
+  font-size: 20px;
+  font-weight: 800;
+  font-family: monospace;
+  color: var(--accent-yellow);
+}
+
+.telem-subtext {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.telem-pose-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.pose-stat-box {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.4);
   border-radius: 6px;
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
 }
 
-.telem-item .label {
+.pose-stat-box .label {
   font-size: 10px;
   color: var(--text-muted);
   font-weight: 600;
 }
 
-.telem-item .value {
+.pose-stat-box .value {
+  font-size: 13px;
   font-family: monospace;
-  font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   margin-top: 2px;
 }
 
-.telem-item .highlight {
-  color: var(--accent-yellow);
+/* TAB 2: Motors & Speeds */
+.telem-motors-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  font-size: 11px;
+}
+
+.telem-drivebase-summary {
+  color: var(--text-muted);
+}
+
+.telem-drivebase-summary b {
+  color: var(--accent-blue);
+}
+
+.telem-motor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.telem-motors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.telem-motor-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.telem-motor-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telem-motor-port-tag {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.telem-motor-role-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  margin-left: 8px;
+}
+
+.telem-motor-state-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.telem-motor-state-badge.state-idle {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.telem-motor-state-badge.state-running {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.telem-motor-state-badge.state-braking {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.telem-motor-card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.telem-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telem-stat-row .label {
+  color: var(--text-muted);
+}
+
+.telem-stat-row .value {
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.telem-stat-row .highlight {
+  color: var(--accent-blue);
+}
+
+.telem-motor-meter-track {
+  height: 6px;
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.telem-motor-meter-fill {
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, #38bdf8, #10b981);
+  transition: width 0.08s ease;
+}
+
+/* TAB 3: Command & Braking Logs */
+.telem-logs-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  flex-shrink: 0;
+}
+
+.telem-logs-filters {
+  display: flex;
+  gap: 4px;
+}
+
+.telem-logs-filters .filter-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--accent-blue);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.telem-logs-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.telem-autoscroll-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.telem-log-stream {
+  flex: 1;
+  overflow-y: auto;
+  background: #090d16;
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 200px;
+}
+
+.telem-log-empty {
+  color: #64748b;
+  font-style: italic;
+  padding: 12px;
+  text-align: center;
+}
+
+.telem-log-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.telem-log-entry:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.telem-log-time {
+  color: #64748b;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.telem-log-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.badge-cmd {
+  background: rgba(147, 51, 234, 0.2);
+  color: #c084fc;
+}
+
+.badge-drive {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.badge-brake {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
+
+.badge-stop {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.badge-motor {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.badge-physics {
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+}
+
+.telem-log-msg {
+  color: #cbd5e1;
+  flex: 1;
 }
 
 /* Starting Pose Section in Telemetry Panel */
@@ -2663,3 +3112,34 @@ body, html {
   color: #e2e8f0;
   font-family: monospace;
 }
+
+/* Quick telemetry row in Driver Mode drawer */
+.driver-quick-telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.driver-quick-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.quick-stat-label {
+  color: var(--text-muted);
+}
+
+.quick-stat-val {
+  color: #38bdf8;
+  font-family: monospace;
+  font-weight: 700;
+}
+

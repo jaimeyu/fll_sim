@@ -445,27 +445,41 @@ async function bootstrapSimulator() {
     },
     onManualDriveBase: (leftSpeed: number, rightSpeed: number) => {
       engine.robot.setDriveSpeeds(leftSpeed, rightSpeed);
+      hud.logCommand(
+        'DRIVE',
+        'WASD Keys',
+        `DriveBase commanded: Left=${leftSpeed > 0 ? '+' : ''}${leftSpeed.toFixed(0)}%, Right=${rightSpeed > 0 ? '+' : ''}${rightSpeed.toFixed(0)}%`
+      );
     },
     onManualDriveBaseStop: () => {
       engine.robot.setDriveSpeeds(0, 0);
+      hud.logCommand('STOP', 'WASD Release', 'DriveBase stopped: Electromagnetic brake engaged (Left=0%, Right=0%)');
     },
     onManualMotorSpeed: (port, speed) => {
       engine.robot.setMotorSpeed(port, speed);
+      hud.logCommand('MOTOR', `Port ${port}`, `Speed commanded: ${speed > 0 ? '+' : ''}${speed.toFixed(0)}%`);
     },
     onManualMotorStop: (port) => {
       engine.robot.stopMotor(port);
+      hud.logCommand('STOP', `Port ${port}`, `Motor stopped: Brake engaged`);
     },
     onResetEncoders: () => {
       for (const m of engine.robot.motors.values()) {
         m.resetDegrees();
       }
       hud.logConsole('🔄 Zeroed all virtual motor encoders.');
+      hud.logCommand('CMD', 'UI Button', 'Zeroed all motor encoders to 0.0°');
     },
     onResetGyro: () => {
       sensors.resetYaw();
       hud.logConsole('🧭 Zeroed Gyro heading to 0.0°.');
+      hud.logCommand('CMD', 'UI Button', 'Calibrated and zeroed Gyro IMU heading to 0.0°');
     },
   });
+
+  engine.robot.onBrakeEngaged = () => {
+    hud.logCommand('BRAKE', 'Physics Engine', 'Active electromagnetic brake: Chassis & wheels clamped (0.00 Nm torque)');
+  };
 
   // 7. Initialize CAD Model Inspector & Diagnostic Validator
   cadInspector = new CadModelInspector({
@@ -650,14 +664,37 @@ async function bootstrapSimulator() {
     const t4 = performance.now();
     profiler.recordSensorsTime(t4 - t3);
 
-    const allMotorsState: Record<string, { port: any; degrees: number; speed: number }> = {};
+    const allMotorsState: Record<
+      string,
+      {
+        port: any;
+        degrees: number;
+        speed: number;
+        targetPercent: number;
+        status: 'IDLE' | 'RUNNING' | 'BRAKING';
+      }
+    > = {};
     for (const [port, m] of engine.robot.motors.entries()) {
+      const isTargetActive = Math.abs(m.targetSpeedDegPerSec) > 0.1;
+      const targetPct = Math.round((m.targetSpeedDegPerSec / m.maxSpeedDegPerSec) * 100);
+      const measuredSpeed = Math.round(m.velocityDegPerSec || 0);
+      const status: 'IDLE' | 'RUNNING' | 'BRAKING' = isTargetActive
+        ? 'RUNNING'
+        : Math.abs(measuredSpeed) > 1
+        ? 'BRAKING'
+        : 'IDLE';
+
       allMotorsState[port] = {
         port,
         degrees: Math.round(m.degrees || 0),
-        speed: Math.round(m.velocityDegPerSec || 0),
+        speed: measuredSpeed,
+        targetPercent: targetPct,
+        status,
       };
     }
+
+    const leftTargetPct = Math.round(((motorA?.targetSpeedDegPerSec || 0) / (motorA?.maxSpeedDegPerSec || 1000)) * 100);
+    const rightTargetPct = Math.round(((motorB?.targetSpeedDegPerSec || 0) / (motorB?.maxSpeedDegPerSec || 1000)) * 100);
 
     hud.updateTelemetry({
       timeSeconds: now / 1000,
@@ -675,11 +712,15 @@ async function bootstrapSimulator() {
           port: 'A',
           degrees: Math.round(motorA?.degrees || 0),
           speed: Math.round(motorA?.velocityDegPerSec || 0),
+          targetPercent: leftTargetPct,
+          status: Math.abs(motorA?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorA?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
         },
         right: {
           port: 'B',
           degrees: Math.round(motorB?.degrees || 0),
           speed: Math.round(motorB?.velocityDegPerSec || 0),
+          targetPercent: rightTargetPct,
+          status: Math.abs(motorB?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorB?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
         },
         all: allMotorsState,
       },
