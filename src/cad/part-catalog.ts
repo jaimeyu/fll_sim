@@ -156,19 +156,59 @@ export function isChainPart(partNumber: string, submodel?: string): boolean {
   return false;
 }
 
+/**
+ * Checks whether a part is any LEGO Technic pin, axle, bush, or connector.
+ */
+export function isFastenerPart(partNumber: string): boolean {
+  const clean = partNumber.replace(/\.dat$/i, '').replace(/^bl_/, '').trim().toLowerCase();
+  return (
+    /^(2780|3673|6558|32054|32556|32556b|43093|11214|3749|4274|32002|4304|6562|18651|18654|3713|32123|32123a|32123b|4265|4265c|2736|3704|3705|3706|3707|3708|32062|4519|32073|44294|23948|50450|15462|87083|55013|59443|6538|6538c|32013|32014|32015|32016|32034|32039|41678|6536|32184|32291)$/i.test(
+      clean
+    ) || /pin|axle|bush|connector/i.test(clean)
+  );
+}
+
+/**
+ * Checks whether a fastener specifically acts as a mechanical pivot / rotation axle
+ * (e.g. cross axles, frictionless pins) rather than a rigid locking friction pin.
+ */
+export function isPivotFastener(partNumber: string): boolean {
+  const clean = partNumber.replace(/\.dat$/i, '').replace(/^bl_/, '').trim().toLowerCase();
+  return /^(3673|3749|43093|3704|3705|3706|3707|3708|32062|4519|32073|44294|23948|50450)$/i.test(
+    clean
+  );
+}
+
 export function lookupPartRole(partNumber: string): PartRole {
-  const cleanPart = partNumber.replace(/\.dat$/i, '').trim();
+  const cleanPart = partNumber.replace(/\.dat$/i, '').replace(/^bl_/, '').trim();
   const entry = TECHNIC_PART_CATALOG[cleanPart];
   if (entry) return entry.role;
 
   // Chain and flexible linkages
   if (isChainPart(cleanPart)) return 'CHAIN_LINK';
 
+  // Fasteners
+  if (
+    /axle/i.test(cleanPart) ||
+    /^(3704|3705|3706|3707|3708|32062|4519|32073|44294|23948|50450|15462|87083|55013|59443|6538|6538c)$/i.test(cleanPart)
+  ) {
+    return 'FASTENER_AXLE';
+  }
+  if (
+    /bush/i.test(cleanPart) ||
+    /^(3713|32123|32123a|32123b|4265|4265c)$/i.test(cleanPart)
+  ) {
+    return 'FASTENER_BUSH';
+  }
+  if (isFastenerPart(cleanPart)) {
+    return 'FASTENER_PIN';
+  }
+
   // Fallback heuristics based on common naming / numbering
-  if (/pin|bush|axle.*pin/i.test(cleanPart)) return 'FASTENER_PIN';
   if (/motor/i.test(cleanPart)) return 'MOTOR_STATOR';
   if (/wheel|tire|rim/i.test(cleanPart)) return 'WHEEL_RIM';
   if (/beam|liftarm|frame/i.test(cleanPart)) return 'STRUCTURAL_BEAM';
   if (/sensor.*color/i.test(cleanPart)) return 'SENSOR_COLOR';
+  if (/sensor.*dist/i.test(cleanPart)) return 'SENSOR_DISTANCE';
   return 'GENERIC_RIGID';
 }

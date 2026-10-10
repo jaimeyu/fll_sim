@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { PlacedPart, ConnectionLink, RobotAssemblySpec, PartBomEntry } from './types';
-import { lookupPartRole, isChainPart } from './part-catalog';
+import { lookupPartRole, isChainPart, isFastenerPart, isPivotFastener } from './part-catalog';
 import { CadClusteringPreSolver } from './clustering-solver';
 import { LDRAW_COLOR_MAP, isKnownLegoPart } from '../view/lego-visuals';
 
@@ -350,7 +350,7 @@ export class LDrawImporter {
         if (hasWheelLink) continue;
 
         // 3. Fasteners & Concentric Pin Holes / Coincident Mounts
-        const connPoints: { pos: [number, number, number]; pa: PlacedPart; pb: PlacedPart; fastenerPart: PlacedPart | null }[] = [];
+        const connPoints: { pos: [number, number, number]; pa: PlacedPart; pb: PlacedPart; pivotPart: PlacedPart | null }[] = [];
         let bestPair: { pa: PlacedPart; pb: PlacedPart; d: number } | null = null;
         let minD = Infinity;
 
@@ -365,14 +365,10 @@ export class LDrawImporter {
               bestPair = { pa, pb, d };
             }
 
-            const isFastener =
-              pa.role === 'FASTENER_PIN' ||
-              pb.role === 'FASTENER_PIN' ||
-              pa.role === 'FASTENER_AXLE' ||
-              pb.role === 'FASTENER_AXLE';
+            const isFastener = isFastenerPart(pa.partNumber) || isFastenerPart(pb.partNumber);
 
-            // Either engaged pin/axle fastener (within 22mm) or concentric hole/mounting point (within 4mm)
-            if ((isFastener && d <= 22.0) || d <= 4.0) {
+            // Either engaged pin/axle fastener (within 24mm) or concentric / abutting contact (within 16mm)
+            if ((isFastener && d <= 24.0) || d <= 16.0) {
               const ptPos: [number, number, number] = [
                 (pa.position[0] + pb.position[0]) / 2,
                 (pa.position[1] + pb.position[1]) / 2,
@@ -386,9 +382,9 @@ export class LDrawImporter {
                 return Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz) <= 12.0;
               });
               if (!exists) {
-                const fastenerPart = (pa.role === 'FASTENER_PIN' || pa.role === 'FASTENER_AXLE') ? pa :
-                                     (pb.role === 'FASTENER_PIN' || pb.role === 'FASTENER_AXLE') ? pb : null;
-                connPoints.push({ pos: ptPos, pa, pb, fastenerPart });
+                const pivotPart = isPivotFastener(pa.partNumber) ? pa :
+                                  isPivotFastener(pb.partNumber) ? pb : null;
+                connPoints.push({ pos: ptPos, pa, pb, pivotPart });
               }
             }
           }
@@ -401,16 +397,31 @@ export class LDrawImporter {
             toPartId: bestPair.pb.id,
             connectionType: 'RIGID_PIN',
           });
-        } else if (connPoints.length === 1) {
-          // Exactly 1 pin/axle or pivot hole: 1-DOF Revolute Joint
+        } else if (connPoints.length === 1 && connPoints[0].pivotPart) {
+          // Exactly 1 axle or frictionless pivot pin: 1-DOF Revolute Joint
           const cp = connPoints[0];
-          const axis: [number, number, number] = cp.fastenerPart ? getPinAxis(cp.fastenerPart.rotation) : [0, 1, 0];
+          const pivotPart = cp.pivotPart!;
+          const axis: [number, number, number] = getPinAxis(pivotPart.rotation);
           links.push({
             fromPartId: cp.pa.id,
             toPartId: cp.pb.id,
             connectionType: 'REVOLUTE_AXLE',
             jointAxis: axis,
             anchor: [cp.pos[0] / 1000, cp.pos[1] / 1000, cp.pos[2] / 1000],
+          });
+        } else if (connPoints.length === 1 && bestPair) {
+          // Single friction pin or single stud connection: rigid connection (does not rotate freely)
+          links.push({
+            fromPartId: bestPair.pa.id,
+            toPartId: bestPair.pb.id,
+            connectionType: 'RIGID_PIN',
+          });
+        } else if (minD <= 16.0 && bestPair) {
+          // Abutting bricks / plates / structural contact within 16mm (standard stud pitch / brick wall contact)
+          links.push({
+            fromPartId: bestPair.pa.id,
+            toPartId: bestPair.pb.id,
+            connectionType: 'RIGID_PIN',
           });
         }
       }

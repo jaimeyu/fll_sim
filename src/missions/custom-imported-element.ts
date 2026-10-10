@@ -458,6 +458,11 @@ export class CustomImportedMissionElement implements MissionElement {
             );
         const rapierJoint = this.world.createImpulseJoint(jointData, parentBody, childBody, true);
         rapierJoint.setContactsEnabled(false);
+        if (jointSpec.type === 'REVOLUTE') {
+          // Apply realistic physical axle friction and damping so mechanisms rotate smoothly without snapping or flailing
+          (rapierJoint as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 1.0);
+          (rapierJoint as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.5);
+        }
         this.joints.push(rapierJoint);
       }
     }
