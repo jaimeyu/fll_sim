@@ -115,6 +115,50 @@ describe('LDrawImporter & MPD Submodel Recursion', () => {
       }
     }
   });
+
+  it('extracts and validates complete parts BOM and decomposed colliders from M01.io', async () => {
+    const filePath = path.resolve(__dirname, '../../public/missions/M01.io');
+    const buffer = fs.readFileSync(filePath);
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+    const spec = await LDrawImporter.parseStudioIo(arrayBuffer);
+
+    // 1. BOM should be attached and non-empty
+    expect(spec.bom).toBeDefined();
+    expect(spec.bom!.length).toBeGreaterThan(30);
+
+    // 2. Validate key parts in M01
+    const part50450 = spec.bom!.find((b) => b.partNumber === '50450');
+    expect(part50450).toBeDefined();
+    expect(part50450!.count).toBe(4);
+    expect(part50450!.name).toContain('Axle 32L');
+    expect(part50450!.hasAccurateMesh).toBe(true);
+
+    const part32013 = spec.bom!.find((b) => b.partNumber === '32013');
+    expect(part32013).toBeDefined();
+    expect(part32013!.hasAccurateMesh).toBe(true);
+
+    const part32555 = spec.bom!.find((b) => b.partNumber === '32555');
+    expect(part32555).toBeDefined();
+    expect(part32555!.hasAccurateMesh).toBe(true);
+
+    const part3020 = spec.bom!.find((b) => b.partNumber === '3020');
+    expect(part3020).toBeDefined();
+    expect(part3020!.hasAccurateMesh).toBe(true);
+
+    // 3. Verify decomposed colliders (no giant >300mm single block covering empty air)
+    const chassisRoot = spec.clusters.find((c) => c.isRootChassis)!;
+    expect(chassisRoot).toBeDefined();
+    // Chassis root has 10 decomposed submodel colliders
+    expect(chassisRoot.colliders.length).toBeGreaterThan(1);
+    for (const col of chassisRoot.colliders) {
+      if (col.shape === 'box' && col.halfExtents) {
+        const fullSpanX = col.halfExtents[0] * 2;
+        // No single collider should span > 300mm (0.30m)
+        expect(fullSpanX).toBeLessThan(0.30);
+      }
+    }
+  });
 });
 
 describe('Season Missions Configuration', () => {

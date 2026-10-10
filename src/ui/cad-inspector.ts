@@ -216,11 +216,27 @@ export class CadModelInspector {
               </div>
             </div>
 
-            <!-- Clusters Breakdown -->
+            <!-- Clusters Breakdown & Parts BOM Tabs -->
             <div class="inspector-section-card">
-              <div class="section-card-title">🧩 Kinematic Clusters & Rigidity</div>
+              <div class="inspector-tab-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button class="btn btn-xs btn-outline active" id="btn-tab-clusters">🧩 Clusters</button>
+                <button class="btn btn-xs btn-outline" id="btn-tab-bom">📋 Parts List / BOM</button>
+              </div>
               <div class="clusters-list" id="inspector-clusters-list">
                 <!-- Dynamically populated -->
+              </div>
+              <div class="bom-table-container" id="inspector-bom-container" style="display: none; max-height: 240px; overflow-y: auto;">
+                <table class="bom-table" style="width: 100%; font-size: 11px; border-collapse: collapse;">
+                  <thead>
+                    <tr style="text-align: left; border-bottom: 1px solid #334155; color: #94a3b8;">
+                      <th style="padding: 4px;">Part #</th>
+                      <th style="padding: 4px;">Qty</th>
+                      <th style="padding: 4px;">Description</th>
+                      <th style="padding: 4px;">3D Mesh</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inspector-bom-tbody"></tbody>
+                </table>
               </div>
             </div>
 
@@ -362,6 +378,26 @@ export class CadModelInspector {
         this.stopStepPlay();
         this.startStepPlay();
       }
+    });
+
+    // Clusters vs BOM tab toggle
+    const btnTabClusters = this.overlay.querySelector('#btn-tab-clusters');
+    const btnTabBom = this.overlay.querySelector('#btn-tab-bom');
+    const clustersList = this.overlay.querySelector('#inspector-clusters-list') as HTMLElement;
+    const bomContainer = this.overlay.querySelector('#inspector-bom-container') as HTMLElement;
+
+    btnTabClusters?.addEventListener('click', () => {
+      btnTabClusters.classList.add('active');
+      btnTabBom?.classList.remove('active');
+      clustersList.style.display = 'block';
+      bomContainer.style.display = 'none';
+    });
+
+    btnTabBom?.addEventListener('click', () => {
+      btnTabBom.classList.add('active');
+      btnTabClusters?.classList.remove('active');
+      clustersList.style.display = 'none';
+      bomContainer.style.display = 'block';
     });
 
     // Deploy to mat
@@ -919,6 +955,31 @@ export class CadModelInspector {
         `;
       })
       .join('');
+
+    // Parts List / BOM Table DOM
+    const bomTbody = this.overlay.querySelector('#inspector-bom-tbody') as HTMLElement | null;
+    if (bomTbody) {
+      const bom =
+        spec.bom && spec.bom.length > 0
+          ? spec.bom
+          : LDrawImporter.extractBomFromParts(spec.clusters.flatMap((c) => c.parts || []));
+
+      bomTbody.innerHTML = bom
+        .map((entry) => {
+          const badgeHtml = entry.hasAccurateMesh
+            ? '<span style="color:#4ade80; font-weight: 600;">✅ 3D Mesh</span>'
+            : '<span style="color:#f59e0b; font-weight: 600;">⚠️ 2x2 Plate</span>';
+          return `
+            <tr style="border-bottom: 1px solid #1e293b;">
+              <td style="padding: 4px; font-family: monospace; color: #38bdf8;">${entry.partNumber}</td>
+              <td style="padding: 4px; font-weight: bold;">${entry.count}x</td>
+              <td style="padding: 4px; color: #cbd5e1;" title="${entry.name}">${entry.name}</td>
+              <td style="padding: 4px;">${badgeHtml}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
   }
 
   private setWireframe(wireframe: boolean): void {

@@ -274,6 +274,34 @@ export const LDRAW_COLOR_MAP: Record<number, number> = {
 };
 
 /**
+ * Returns true if the part is recognized with custom 3D geometry
+ * rather than the generic 2x2 fallback plate.
+ */
+export function isKnownLegoPart(partNumber: string, role?: string): boolean {
+  const clean = partNumber.toLowerCase().replace(/\.dat$/, '').replace(/^bl_/, '');
+  if (role === 'WHEEL_RIM' || role === 'TIRE_RUBBER' || role === 'CHASSIS_CORE' || role === 'MOTOR_STATOR') return true;
+  if (clean.includes('57539') || clean.includes('ribbed') || clean.includes('hose')) return true;
+  if (clean === '50450') return true;
+  if (role === 'FASTENER_PIN' || role === 'FASTENER_BUSH' || /^(2780|3673|6558|32054|43093|3713|4265c|26287|4304|3749|11214)$/.test(clean)) return true;
+  if (role === 'FASTENER_AXLE' || /^370[4-9]/.test(clean) || clean === '32062' || clean === '18654' || clean === '4519' || clean === '32073' || clean === '44294' || clean === '3737') return true;
+  if (clean === '64179' || clean === '39794' || clean === '32531') return true;
+  if (/^(32555|32556|32556b|32348|80431)$/.test(clean)) return true;
+  if (role === 'STRUCTURAL_BEAM' || /^(3252[3-6]|32316|40490|60483|32009|32271|87618)/.test(clean)) return true;
+  if (/^(32013|32014|32015|32016|89678|32034|32184|62462|25214|1750|42003|59443)$/.test(clean)) return true;
+  if (/^(4740|43898)$/.test(clean)) return true;
+  if (clean === '4079') return true;
+  if (clean.includes('970') || clean.includes('973') || clean.includes('3626') || /^(30124b|53118|2447b|64644)$/.test(clean)) return true;
+  if (clean === '64782') return true;
+  if (/^(32607|24866|209|2417|33183)$/.test(clean)) return true;
+  if (/^(3039|3040|3040b|15068|11477|14719|85984|28192)$/.test(clean)) return true;
+  if (/^(2654|15535|4032|4032a|2447|85861|18674|30340|11213|61485|98138|6141)$/.test(clean)) return true;
+  if (/^(18980|77850|68568|35480|88072|74611)$/.test(clean)) return true;
+  if (/^(2431|3069|3069b|3068|3068b|6636|87079)$/.test(clean)) return true;
+  if (/^(3024|3005|3023|3023b|3004|3700|3022|3003|3021|3002|3020|3001|3710|3010|3666|3009|3460|3008|3795|3034|3832|3031|3032|3035|3030|3036|3028)$/.test(clean)) return true;
+  return false;
+}
+
+/**
  * Creates an authentic 3D visual mesh for a specific LEGO element,
  * with embossed cylindrical studs, hollow pin holes, or curved surfaces.
  */

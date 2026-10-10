@@ -144,9 +144,6 @@ export class CadClusteringPreSolver {
       const cx = hasParts ? (minX + maxX) / 2 : 0;
       const cy = hasParts ? (minY + maxY) / 2 : 0;
       const cz = hasParts ? (minZ + maxZ) / 2 : 0;
-      const hx = hasParts ? Math.max(0.008, (maxX - minX) / 2 + 0.004) : 0.02;
-      const hy = hasParts ? Math.max(0.004, (maxY - minY) / 2 + 0.003) : 0.015;
-      const hz = hasParts ? Math.max(0.008, (maxZ - minZ) / 2 + 0.004) : 0.02;
 
       if (isRoot && hasCore) {
         // 1. Compound box for main chassis frame (88mm wide frame, leaving clean clearance to wheels).
@@ -191,14 +188,63 @@ export class CadClusteringPreSolver {
           restitution: 0.0,
         });
       } else {
-        colliders.push({
-          shape: 'box',
-          halfExtents: [hx, hy, hz],
-          offset: [cx, cy, cz],
-          rotation: [0, 0, 0, 1],
-          friction: isRoot ? 0.8 : 0.5,
-          restitution: 0.05,
-        });
+        // Group parts by submodel instance to create decomposed, tight compound colliders
+        const subGroups = new Map<string, PlacedPart[]>();
+        for (const id of componentPartIds) {
+          const p = partMap.get(id);
+          if (!p) continue;
+          const key = p.submodelInstance || p.submodel || 'main';
+          if (!subGroups.has(key)) subGroups.set(key, []);
+          subGroups.get(key)!.push(p);
+        }
+
+        if (subGroups.size > 1) {
+          for (const pList of subGroups.values()) {
+            let sMinX = Infinity, sMaxX = -Infinity;
+            let sMinY = Infinity, sMaxY = -Infinity;
+            let sMinZ = Infinity, sMaxZ = -Infinity;
+            for (const p of pList) {
+              const px = p.position[0] / 1000;
+              const py = p.position[1] / 1000;
+              const pz = p.position[2] / 1000;
+              if (px < sMinX) sMinX = px;
+              if (px > sMaxX) sMaxX = px;
+              if (py < sMinY) sMinY = py;
+              if (py > sMaxY) sMaxY = py;
+              if (pz < sMinZ) sMinZ = pz;
+              if (pz > sMaxZ) sMaxZ = pz;
+            }
+            // Minimal 1.5mm margin per submodel so components don't envelope empty air
+            const sHx = Math.max(0.003, (sMaxX - sMinX) / 2 + 0.0015);
+            const sHy = Math.max(0.002, (sMaxY - sMinY) / 2 + 0.0015);
+            const sHz = Math.max(0.003, (sMaxZ - sMinZ) / 2 + 0.0015);
+            const sCx = (sMinX + sMaxX) / 2;
+            const sCy = (sMinY + sMaxY) / 2;
+            const sCz = (sMinZ + sMaxZ) / 2;
+
+            colliders.push({
+              shape: 'box',
+              halfExtents: [sHx, sHy, sHz],
+              offset: [sCx, sCy, sCz],
+              rotation: [0, 0, 0, 1],
+              friction: isRoot ? 0.8 : 0.5,
+              restitution: 0.05,
+            });
+          }
+        } else {
+          // Single tight box collider with minimal 1.5mm margin
+          const tightHx = Math.max(0.004, (maxX - minX) / 2 + 0.0015);
+          const tightHy = Math.max(0.003, (maxY - minY) / 2 + 0.0015);
+          const tightHz = Math.max(0.004, (maxZ - minZ) / 2 + 0.0015);
+          colliders.push({
+            shape: 'box',
+            halfExtents: [tightHx, tightHy, tightHz],
+            offset: [cx, cy, cz],
+            rotation: [0, 0, 0, 1],
+            friction: isRoot ? 0.8 : 0.5,
+            restitution: 0.05,
+          });
+        }
       }
 
       const clusterParts: PlacedPart[] = componentPartIds

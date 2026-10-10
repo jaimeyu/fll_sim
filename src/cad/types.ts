@@ -77,11 +77,21 @@ export interface ExtractedJoint {
   maxVelocityDegPerSec: number;
 }
 
+export interface PartBomEntry {
+  partNumber: string;
+  name: string;
+  count: number;
+  role: string;
+  colorHex?: number;
+  hasAccurateMesh: boolean;
+}
+
 export interface RobotAssemblySpec {
   name: string;
   clusters: ClusteredCompoundBody[];
   joints: ExtractedJoint[];
   parts?: PlacedPart[];
+  bom?: PartBomEntry[];
   sensors: Array<{
     id: string;
     type: 'COLOR' | 'DISTANCE' | 'GYRO';

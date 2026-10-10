@@ -1,9 +1,8 @@
 import JSZip from 'jszip';
-import { PlacedPart, ConnectionLink } from './types';
+import { PlacedPart, ConnectionLink, RobotAssemblySpec, PartBomEntry } from './types';
 import { lookupPartRole } from './part-catalog';
 import { CadClusteringPreSolver } from './clustering-solver';
-import { RobotAssemblySpec } from './types';
-import { LDRAW_COLOR_MAP } from '../view/lego-visuals';
+import { LDRAW_COLOR_MAP, isKnownLegoPart } from '../view/lego-visuals';
 
 export interface ParsedLDrawModel {
   name: string;
@@ -272,7 +271,35 @@ export class LDrawImporter {
   }
 
   /**
+   * Generates a complete Bill of Materials (BOM) summarizing unique parts,
+   * quantities, authentic catalog descriptions, and procedural visual mesh status.
+   */
+  public static extractBomFromParts(
+    parts: PlacedPart[],
+    descriptions: Map<string, string> = new Map()
+  ): PartBomEntry[] {
+    const bomMap = new Map<string, PartBomEntry>();
+    for (const p of parts) {
+      const clean = p.partNumber;
+      if (!bomMap.has(clean)) {
+        const name = descriptions.get(clean.toLowerCase()) || `LEGO Element ${clean}`;
+        bomMap.set(clean, {
+          partNumber: clean,
+          name,
+          count: 0,
+          role: p.role,
+          colorHex: p.colorHex,
+          hasAccurateMesh: isKnownLegoPart(clean, p.role),
+        });
+      }
+      bomMap.get(clean)!.count++;
+    }
+    return Array.from(bomMap.values()).sort((a, b) => b.count - a.count);
+  }
+
+  /**
    * Unzips a BrickLink Studio (.io) binary file and parses the inner model.ldr
+   * along with authentic part descriptions embedded in model2.ldr
    */
   public static async parseStudioIo(fileBuffer: ArrayBuffer | Blob): Promise<RobotAssemblySpec> {
     const zip = new JSZip();
@@ -292,9 +319,47 @@ export class LDrawImporter {
       throw new Error('No LDraw (.ldr or .mpd) model found inside Studio .io file');
     }
 
+    // Extract official part descriptions from model2.ldr if present
+    const descriptions = new Map<string, string>();
+    const model2File = contents.file('model2.ldr');
+    if (model2File) {
+      const text2 = await model2File.async('text');
+      const chunks = text2.split(/(?:^|\r?\n)0\s+FILE\s+/i).filter(Boolean);
+      for (const c of chunks) {
+        const lines = c.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (!lines.length) continue;
+        const filename = lines[0].toLowerCase().replace(/\.(dat|ldr|mpd|io)$/, '');
+        const desc = lines.find(
+          (l) =>
+            l.startsWith('0 ') &&
+            !l.startsWith('0 FILE') &&
+            !l.startsWith('0 Name:') &&
+            !l.startsWith('0 Author') &&
+            !l.startsWith('0 !') &&
+            !l.startsWith('0 BL_') &&
+            !l.startsWith('0 IsSubModel') &&
+            !l.startsWith('0 CustomBrick') &&
+            !l.startsWith('0 Flexible') &&
+            !l.startsWith('0 NumOfBricks') &&
+            !l.startsWith('0 RenderAngle') &&
+            !l.startsWith('0 Untitled') &&
+            !l.startsWith('0 BFC') &&
+            !l.startsWith('0 //')
+        )?.replace(/^0\s+/, '');
+        if (desc) {
+          descriptions.set(filename, desc);
+        }
+      }
+    }
+
     const ldrText = await ldrFile.async('text');
     const parsed = LDrawImporter.parseLDrawText(ldrText, 'Studio Model');
-    return CadClusteringPreSolver.solve(parsed);
+    const spec = CadClusteringPreSolver.solve(parsed);
+
+    // Attach complete Bill of Materials (BOM) to spec
+    spec.bom = LDrawImporter.extractBomFromParts(parsed.parts, descriptions);
+
+    return spec;
   }
 }
 
