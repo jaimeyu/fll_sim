@@ -1,15 +1,21 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import JSZip from 'jszip';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec, PlacedPart } from '../cad/types';
 import { LEGO_COLORS } from '../view/lego-visuals';
 import { legoAssetManager } from '../cad/lego-asset-manager';
-import { SEASON_MISSIONS_CONFIG } from '../missions/season-config';
+import {
+  SEASON_MISSIONS_CONFIG,
+  saveMissionArenaPosition,
+  getMissionArenaPosition,
+} from '../missions/season-config';
 
 export interface CadInspectorCallbacks {
-  onDeployToField?: (missionId: string) => void;
+  onDeployToField?: (missionId: string, customSpec?: RobotAssemblySpec) => void;
   onToggleSolidMode?: (missionId: string, solid: boolean) => void;
+  onUpdateFieldPosition?: (missionId: string, pos: { x: number; y: number; z: number }, yaw: number) => void;
 }
 
 export interface InspectedStepItem {
@@ -26,8 +32,9 @@ export interface InspectedStepItem {
  * 
  * Provides an interactive 3D inspection studio for BrickLink Studio (.io)
  * and LDraw (.ldr) models, displaying side-by-side official Studio renders,
- * step-by-step assembly build playback, part hierarchy breakdown, physical
- * collider diagnostics, and kinematic validation.
+ * step-by-step assembly build playback, live Rapier physics sandbox,
+ * virtual mouse "hand" interaction tool, cluster field-anchor toggles,
+ * and competition mat placement controls.
  */
 export class CadModelInspector {
   private overlay: HTMLElement;
@@ -55,6 +62,27 @@ export class CadModelInspector {
   private stepPlayTimer: number | null = null;
   private highlightHelper: THREE.BoxHelper | null = null;
 
+  // Live Rapier Physics Sandbox & Multi-Object Interaction State
+  private physicsWorld: RAPIER.World | null = null;
+  private isPhysicsRunning: boolean = false;
+  private physicsBodies: Map<string, RAPIER.RigidBody> = new Map();
+  private clusterMeshGroups: Map<string, THREE.Group> = new Map();
+  private initialMeshPoses: Map<string, { pos: THREE.Vector3; quat: THREE.Quaternion }> = new Map();
+  private selectedClusterId: string | null = null;
+
+  // Virtual Mouse Hand Tool
+  private handMesh: THREE.Mesh | null = null;
+  private handLine: THREE.Line | null = null;
+  private reticleMesh: THREE.Mesh | null = null;
+  private isHandDragging: boolean = false;
+  private draggedBody: RAPIER.RigidBody | null = null;
+  private draggedLocalAnchor: THREE.Vector3 = new THREE.Vector3();
+  private dragPlane: THREE.Plane = new THREE.Plane();
+  private mouseRay: THREE.Raycaster = new THREE.Raycaster();
+  private mouseCoords: THREE.Vector2 = new THREE.Vector2();
+
+  private callbacks: CadInspectorCallbacks;
+
   public getCurrentSpec(): RobotAssemblySpec | null {
     return this.currentSpec;
   }
@@ -66,8 +94,6 @@ export class CadModelInspector {
   public getSolidMode(): boolean {
     return this.isSolidMode;
   }
-
-  private callbacks: CadInspectorCallbacks;
 
   constructor(callbacks: CadInspectorCallbacks = {}) {
     this.callbacks = callbacks;
@@ -89,7 +115,7 @@ export class CadModelInspector {
             <span class="inspector-icon">🔬</span>
             <div class="inspector-title-text">
               <h2>LEGO® CAD Model Inspector & Validator</h2>
-              <p class="inspector-subtitle">Verify official Studio 2.0 (.io) geometry, step-by-step assembly, and kinematic solver</p>
+              <p class="inspector-subtitle">Verify official Studio 2.0 (.io) geometry, step build, live physics & field anchors</p>
             </div>
           </div>
           <div class="inspector-header-controls">
@@ -120,6 +146,9 @@ export class CadModelInspector {
               <div class="inspector-canvas-toolbar">
                 <button class="btn btn-xs btn-outline" id="btn-toggle-wireframe">🕸️ Wireframe: OFF</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-colliders">🔲 Colliders: OFF</button>
+                <button class="btn btn-xs btn-outline" id="btn-toggle-physics" title="Run live Rapier physics in inspector">▶ Live Physics: OFF</button>
+                <button class="btn btn-xs btn-outline btn-hand-active" id="btn-toggle-hand" style="display: none;" title="Use mouse to push, pull, lift and test pieces">✋ Hand Tool: ACTIVE</button>
+                <button class="btn btn-xs btn-outline" id="btn-reset-physics" style="display: none;" title="Reset parts back to initial CAD positions">🔄 Reset Poses</button>
                 <button class="btn btn-xs btn-outline" id="btn-reset-view">🎯 Reset Camera</button>
               </div>
             </div>
@@ -157,7 +186,7 @@ export class CadModelInspector {
           </div>
 
           <!-- Right Column: Validation & Kinematics Report -->
-          <div class="inspector-right-col">
+          <div class="inspector-right-col" style="overflow-y: auto;">
             <div class="inspector-panel-title">📊 Validation & Kinematics Report</div>
             
             <div class="status-banner status-pass" id="inspector-status-banner">
@@ -223,6 +252,30 @@ export class CadModelInspector {
                 <button class="btn btn-xs btn-outline active" id="btn-tab-clusters">🧩 Clusters</button>
                 <button class="btn btn-xs btn-outline" id="btn-tab-bom">📋 Parts List / BOM</button>
               </div>
+
+              <!-- Quick Presets -->
+              <div class="cluster-quick-presets" id="cluster-quick-presets">
+                <button class="btn btn-xs btn-ghost" id="btn-preset-fix-base" title="Anchor base plate, make mechanisms dynamic">📌 Fix Base Only</button>
+                <button class="btn btn-xs btn-ghost" id="btn-preset-all-dynamic" title="Make all pieces free and movable">🔓 All Movable</button>
+                <button class="btn btn-xs btn-ghost" id="btn-preset-lock-all" title="Freeze entire model as solid immovable base">🔒 Lock All</button>
+              </div>
+
+              <!-- Selected Cluster Nudge & Position Adjuster -->
+              <div class="cluster-nudge-box" id="cluster-nudge-card" style="display: none;">
+                <span class="nudge-title" id="cluster-nudge-title">Adjust Selected Element Position:</span>
+                <div class="nudge-btn-row">
+                  <span>X:</span>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="-8">-8mm</button>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="8">+8mm</button>
+                  <span>Y:</span>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="-3.2">-3.2mm</button>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="3.2">+3.2mm</button>
+                  <span>Z:</span>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="-8">-8mm</button>
+                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="8">+8mm</button>
+                </div>
+              </div>
+
               <div class="clusters-list" id="inspector-clusters-list">
                 <!-- Dynamically populated -->
               </div>
@@ -239,6 +292,23 @@ export class CadModelInspector {
                   <tbody id="inspector-bom-tbody"></tbody>
                 </table>
               </div>
+            </div>
+
+            <!-- Competition Mat Position Settings -->
+            <div class="inspector-section-card">
+              <div class="section-card-title">📍 Competition Field Placement</div>
+              <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
+                <label style="font-size: 10px; color: #94a3b8;">X (m):
+                  <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-x" value="0.00">
+                </label>
+                <label style="font-size: 10px; color: #94a3b8;">Z (m):
+                  <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-z" value="0.00">
+                </label>
+                <label style="font-size: 10px; color: #94a3b8;">Yaw (°):
+                  <input type="number" step="15" class="hud-input hud-input-sm w-100" id="input-field-yaw" value="0">
+                </label>
+              </div>
+              <button class="btn btn-xs btn-outline w-100" style="margin-top: 8px;" id="btn-save-field-pos">💾 Save Mat Coordinates</button>
             </div>
 
             <!-- 3D Mesh Engine Mode (Draco GLB vs Native Procedural) -->
@@ -269,7 +339,7 @@ export class CadModelInspector {
             </div>
 
             <!-- Action Buttons -->
-            <div class="inspector-actions">
+            <div class="inspector-actions" style="margin-top: 12px;">
               <button class="btn btn-sm btn-primary w-100" id="btn-deploy-inspected">🚀 Deploy Model to Mat</button>
             </div>
           </div>
@@ -282,12 +352,10 @@ export class CadModelInspector {
     const btnClose = this.overlay.querySelector('#btn-close-inspector')!;
     btnClose.addEventListener('click', () => this.close());
 
-    // Close on overlay click outside window
     this.overlay.addEventListener('click', (e) => {
       if (e.target === this.overlay) this.close();
     });
 
-    // Escape key
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.overlay.style.display !== 'none') {
         this.close();
@@ -334,6 +402,13 @@ export class CadModelInspector {
     // Reset camera
     const btnResetCam = this.overlay.querySelector('#btn-reset-view')!;
     btnResetCam.addEventListener('click', () => this.resetCamera());
+
+    // Live Rapier Physics Sandbox Toggle
+    const btnTogglePhysics = this.overlay.querySelector('#btn-toggle-physics') as HTMLButtonElement;
+    btnTogglePhysics.addEventListener('click', () => this.toggleLivePhysics());
+
+    const btnResetPhysics = this.overlay.querySelector('#btn-reset-physics') as HTMLButtonElement;
+    btnResetPhysics.addEventListener('click', () => this.resetPhysicsPoses());
 
     // Mission selector
     const missionSelect = this.overlay.querySelector('#inspector-mission-select') as HTMLSelectElement;
@@ -413,6 +488,52 @@ export class CadModelInspector {
       bomContainer.style.display = 'block';
     });
 
+    // Quick Presets
+    this.overlay.querySelector('#btn-preset-fix-base')?.addEventListener('click', () => {
+      if (!this.currentSpec) return;
+      this.currentSpec.clusters.forEach((c) => {
+        c.isFixed = c.isRootChassis;
+      });
+      this.saveClusterOverrides();
+      this.rebuildPhysicsIfRunning();
+      this.renderClusterList();
+    });
+
+    this.overlay.querySelector('#btn-preset-all-dynamic')?.addEventListener('click', () => {
+      if (!this.currentSpec) return;
+      this.currentSpec.clusters.forEach((c) => {
+        c.isFixed = false;
+      });
+      this.saveClusterOverrides();
+      this.rebuildPhysicsIfRunning();
+      this.renderClusterList();
+    });
+
+    this.overlay.querySelector('#btn-preset-lock-all')?.addEventListener('click', () => {
+      if (!this.currentSpec) return;
+      this.currentSpec.clusters.forEach((c) => {
+        c.isFixed = true;
+      });
+      this.saveClusterOverrides();
+      this.rebuildPhysicsIfRunning();
+      this.renderClusterList();
+    });
+
+    // Nudge Buttons
+    this.overlay.querySelectorAll('.btn-nudge').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.selectedClusterId) return;
+        const axis = btn.getAttribute('data-axis') as 'x' | 'y' | 'z';
+        const delta = parseFloat(btn.getAttribute('data-delta') || '0');
+        this.nudgeCluster(this.selectedClusterId, axis, delta);
+      });
+    });
+
+    // Save field coordinates button
+    this.overlay.querySelector('#btn-save-field-pos')?.addEventListener('click', () => {
+      this.saveFieldCoordinates();
+    });
+
     // 3D Mesh Engine Mode buttons (Draco GLB vs Native Procedural)
     const btnDraco = this.overlay.querySelector('#btn-engine-draco') as HTMLButtonElement | null;
     const btnProc = this.overlay.querySelector('#btn-engine-procedural') as HTMLButtonElement | null;
@@ -453,7 +574,8 @@ export class CadModelInspector {
     const btnDeploy = this.overlay.querySelector('#btn-deploy-inspected')!;
     btnDeploy.addEventListener('click', () => {
       if (this.currentMissionId) {
-        this.callbacks.onDeployToField?.(this.currentMissionId);
+        this.saveFieldCoordinates();
+        this.callbacks.onDeployToField?.(this.currentMissionId, this.currentSpec || undefined);
         this.close();
       }
     });
@@ -465,12 +587,14 @@ export class CadModelInspector {
       if (radioArticulated.checked) {
         this.isSolidMode = false;
         this.callbacks.onToggleSolidMode?.(this.currentMissionId, false);
+        this.rebuildPhysicsIfRunning();
       }
     });
     radioSolid.addEventListener('change', () => {
       if (radioSolid.checked) {
         this.isSolidMode = true;
         this.callbacks.onToggleSolidMode?.(this.currentMissionId, true);
+        this.rebuildPhysicsIfRunning();
       }
     });
   }
@@ -525,7 +649,188 @@ export class CadModelInspector {
     this.scene.add(this.colliderGroup);
     this.colliderGroup.visible = false;
 
+    // Build Virtual Hand & Reticle 3D indicators
+    this.initVirtualHand();
+
+    // Attach Pointer events for hover targeting and physical mouse grab
+    canvas.addEventListener('pointermove', (e) => this.onPointerMove(e, canvas));
+    canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e, canvas));
+    canvas.addEventListener('pointerup', () => this.onPointerUp());
+    canvas.addEventListener('pointercancel', () => this.onPointerUp());
+    canvas.addEventListener('pointerleave', () => this.onPointerUp());
+
     window.addEventListener('resize', () => this.onResize());
+  }
+
+  private initVirtualHand(): void {
+    // 1. Targeting reticle (ring)
+    const reticleGeom = new THREE.RingGeometry(0.006, 0.009, 20);
+    const reticleMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    this.reticleMesh = new THREE.Mesh(reticleGeom, reticleMat);
+    this.reticleMesh.visible = false;
+    this.scene.add(this.reticleMesh);
+
+    // 2. 3D Virtual Hand Gripper Sphere
+    const handGeom = new THREE.SphereGeometry(0.012, 16, 16);
+    const handMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.9,
+      roughness: 0.2,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.85,
+    });
+    this.handMesh = new THREE.Mesh(handGeom, handMat);
+    this.handMesh.visible = false;
+    this.scene.add(this.handMesh);
+
+    // 3. Tractor beam / spring line
+    const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0xfacc15,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.9,
+    });
+    this.handLine = new THREE.Line(lineGeom, lineMat);
+    this.handLine.visible = false;
+    this.scene.add(this.handLine);
+  }
+
+  private onPointerMove(e: PointerEvent, canvas: HTMLCanvasElement): void {
+    const rect = canvas.getBoundingClientRect();
+    this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (!this.isPhysicsRunning) return;
+
+    if (this.isHandDragging && this.draggedBody) {
+      // Dragging a piece with the virtual hand
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const targetPoint = new THREE.Vector3();
+      if (this.mouseRay.ray.intersectPlane(this.dragPlane, targetPoint)) {
+        if (this.handMesh) {
+          this.handMesh.position.copy(targetPoint);
+          this.handMesh.visible = true;
+        }
+
+        const bTrans = this.draggedBody.translation();
+        const bRot = this.draggedBody.rotation();
+        const bQuat = new THREE.Quaternion(bRot.x, bRot.y, bRot.z, bRot.w);
+        const worldAnchor = this.draggedLocalAnchor.clone().applyQuaternion(bQuat).add(new THREE.Vector3(bTrans.x, bTrans.y, bTrans.z));
+
+        if (this.handLine) {
+          this.handLine.geometry.setFromPoints([worldAnchor, targetPoint]);
+          this.handLine.visible = true;
+        }
+
+        // Apply physical tractor spring impulse
+        const diff = targetPoint.clone().sub(worldAnchor);
+        const linvel = this.draggedBody.linvel();
+        const forceX = diff.x * 220 - linvel.x * 12;
+        const forceY = diff.y * 220 - linvel.y * 12;
+        const forceZ = diff.z * 220 - linvel.z * 12;
+
+        this.draggedBody.applyImpulseAtPoint(
+          { x: forceX * 0.016, y: forceY * 0.016, z: forceZ * 0.016 },
+          { x: worldAnchor.x, y: worldAnchor.y, z: worldAnchor.z },
+          true
+        );
+        this.draggedBody.wakeUp();
+      }
+    } else {
+      // Hover targeting
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const hits = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      if (hits.length > 0) {
+        const hit = hits[0];
+        const clusterId = this.findClusterIdFromObject(hit.object);
+        const body = clusterId ? this.physicsBodies.get(clusterId) : null;
+
+        if (body && body.isDynamic()) {
+          if (this.reticleMesh) {
+            this.reticleMesh.position.copy(hit.point);
+            if (hit.face?.normal) {
+              const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+              this.reticleMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), norm);
+              this.reticleMesh.position.addScaledVector(norm, 0.001);
+            }
+            this.reticleMesh.visible = true;
+          }
+          canvas.style.cursor = 'grab';
+        } else {
+          if (this.reticleMesh) this.reticleMesh.visible = false;
+          canvas.style.cursor = 'default';
+        }
+      } else {
+        if (this.reticleMesh) this.reticleMesh.visible = false;
+        canvas.style.cursor = 'default';
+      }
+    }
+  }
+
+  private onPointerDown(e: PointerEvent, canvas: HTMLCanvasElement): void {
+    if (e.button !== 0 || !this.isPhysicsRunning) return;
+
+    const rect = canvas.getBoundingClientRect();
+    this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+    const hits = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+
+    if (hits.length > 0) {
+      const hit = hits[0];
+      const clusterId = this.findClusterIdFromObject(hit.object);
+      const body = clusterId ? this.physicsBodies.get(clusterId) : null;
+
+      if (body && body.isDynamic()) {
+        this.controls.enabled = false;
+        this.isHandDragging = true;
+        this.draggedBody = body;
+
+        const bTrans = body.translation();
+        const bRot = body.rotation();
+        const bQuat = new THREE.Quaternion(bRot.x, bRot.y, bRot.z, bRot.w);
+        this.draggedLocalAnchor = hit.point.clone()
+          .sub(new THREE.Vector3(bTrans.x, bTrans.y, bTrans.z))
+          .applyQuaternion(bQuat.clone().invert());
+
+        const camDir = new THREE.Vector3();
+        this.camera.getWorldDirection(camDir).negate();
+        this.dragPlane.setFromNormalAndCoplanarPoint(camDir, hit.point);
+
+        canvas.style.cursor = 'grabbing';
+        if (this.reticleMesh) this.reticleMesh.visible = false;
+      }
+    }
+  }
+
+  private onPointerUp(): void {
+    if (this.isHandDragging) {
+      this.isHandDragging = false;
+      this.draggedBody = null;
+      this.controls.enabled = true;
+      if (this.handMesh) this.handMesh.visible = false;
+      if (this.handLine) this.handLine.visible = false;
+      const canvas = this.overlay.querySelector('#inspector-canvas') as HTMLCanvasElement;
+      if (canvas) canvas.style.cursor = 'default';
+    }
+  }
+
+  private findClusterIdFromObject(obj: THREE.Object3D | null): string | null {
+    let curr: THREE.Object3D | null = obj;
+    while (curr && curr !== this.modelGroup) {
+      if (curr.userData?.clusterId) return curr.userData.clusterId;
+      curr = curr.parent;
+    }
+    return null;
   }
 
   private onResize(): void {
@@ -542,6 +847,21 @@ export class CadModelInspector {
     if (this.animationId !== null) return;
     const loop = () => {
       this.animationId = requestAnimationFrame(loop);
+
+      // Step Live Rapier physics and synchronize Three.js visual meshes
+      if (this.isPhysicsRunning && this.physicsWorld) {
+        this.physicsWorld.step();
+        for (const [clusterId, body] of this.physicsBodies.entries()) {
+          const grp = this.clusterMeshGroups.get(clusterId);
+          if (grp) {
+            const t = body.translation();
+            const r = body.rotation();
+            grp.position.set(t.x, t.y, t.z);
+            grp.quaternion.set(r.x, r.y, r.z, r.w);
+          }
+        }
+      }
+
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     };
@@ -568,6 +888,7 @@ export class CadModelInspector {
   public close(): void {
     this.overlay.style.display = 'none';
     this.stopStepPlay();
+    this.stopPhysicsSandbox();
     this.stopLoop();
   }
 
@@ -621,17 +942,13 @@ export class CadModelInspector {
 
     try {
       const archive = await zip.loadAsync(buffer);
-
-      // Extract official thumbnail
       const thumbFile = archive.file('thumbnail.png');
       if (thumbFile) {
         const b64 = await thumbFile.async('base64');
         thumbUrl = `data:image/png;base64,${b64}`;
       }
-
       spec = await LDrawImporter.parseStudioIo(buffer);
     } catch {
-      // Flat LDraw text
       const dec = new TextDecoder();
       const text = dec.decode(buffer);
       const parsed = LDrawImporter.parseLDrawText(text, name);
@@ -662,12 +979,30 @@ export class CadModelInspector {
   private async build3DRepresentation(spec: RobotAssemblySpec): Promise<void> {
     this.modelGroup.clear();
     this.colliderGroup.clear();
+    this.clusterMeshGroups.clear();
+    this.initialMeshPoses.clear();
     this.inspectedSteps = [];
     if (this.highlightHelper) {
       this.scene.remove(this.highlightHelper);
       this.highlightHelper = null;
     }
     legoAssetManager.resetStats();
+
+    // Restore any custom cluster isFixed overrides
+    try {
+      const key = `fll_mission_${this.currentMissionId}_clusters_override`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const overrides = JSON.parse(raw);
+        for (const c of spec.clusters) {
+          if (overrides[c.clusterId]?.isFixed !== undefined) {
+            c.isFixed = overrides[c.clusterId].isFixed;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
 
     const clusterPalette = [
       LEGO_COLORS.DARK_BLUE,
@@ -712,6 +1047,8 @@ export class CadModelInspector {
 
       const clusterObj = new THREE.Group();
       clusterObj.position.set(offsetX, offsetY, offsetZ);
+      clusterObj.userData = { clusterId: cluster.clusterId };
+      this.clusterMeshGroups.set(cluster.clusterId, clusterObj);
 
       // Render authentic LEGO bricks with Draco GLB / procedural engine
       if (cluster.parts && cluster.parts.length > 0) {
@@ -720,6 +1057,7 @@ export class CadModelInspector {
           const mesh = await legoAssetManager.loadPartMesh(part.partNumber, pColor, part.role);
           mesh.position.set(part.position[0] / 1000, part.position[1] / 1000, part.position[2] / 1000);
           mesh.quaternion.set(part.rotation[0], part.rotation[1], part.rotation[2], part.rotation[3]);
+          mesh.userData = { clusterId: cluster.clusterId, partId: part.id };
           clusterObj.add(mesh);
 
           this.inspectedSteps.push({
@@ -733,6 +1071,10 @@ export class CadModelInspector {
         }
       }
       this.modelGroup.add(clusterObj);
+      this.initialMeshPoses.set(cluster.clusterId, {
+        pos: clusterObj.position.clone(),
+        quat: clusterObj.quaternion.clone(),
+      });
 
       // Build collider visualization
       for (const col of cluster.colliders) {
@@ -764,213 +1106,379 @@ export class CadModelInspector {
 
     const slider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement | null;
     if (slider) {
-      slider.min = '1';
-      slider.max = Math.max(1, this.inspectedSteps.length).toString();
-      slider.value = this.isStepMode ? this.currentStepIndex.toString() : this.inspectedSteps.length.toString();
+      slider.max = `${Math.max(1, this.inspectedSteps.length)}`;
+      slider.value = `${this.inspectedSteps.length}`;
     }
 
-    if (this.isStepMode) {
-      if (this.currentStepIndex === 0 || this.currentStepIndex > this.inspectedSteps.length) {
-        this.currentStepIndex = 1;
-      }
-      this.updateStepDisplay();
+    // Rebuild physics world if Live Physics is currently active
+    if (this.isPhysicsRunning) {
+      await this.buildPhysicsWorld();
+    }
+  }
+
+  /**
+   * Toggles the live Rapier physics simulation sandbox within the inspector
+   */
+  public async toggleLivePhysics(): Promise<void> {
+    if (this.isPhysicsRunning) {
+      this.stopPhysicsSandbox();
     } else {
-      for (const item of this.inspectedSteps) {
-        item.mesh.visible = true;
-      }
-      const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
-      if (counter) counter.textContent = `All ${this.inspectedSteps.length} parts visible`;
+      await this.startPhysicsSandbox();
     }
   }
 
-  public toggleStepMode(active?: boolean): void {
-    this.isStepMode = active !== undefined ? active : !this.isStepMode;
-    const btn = this.overlay.querySelector('#btn-toggle-step-mode') as HTMLButtonElement | null;
-    const controls = this.overlay.querySelector('#step-playback-controls') as HTMLElement | null;
-    const sliderRow = this.overlay.querySelector('#step-slider-row') as HTMLElement | null;
+  public async startPhysicsSandbox(): Promise<void> {
+    if (!this.currentSpec) return;
+    await RAPIER.init();
+    await this.buildPhysicsWorld();
+    this.isPhysicsRunning = true;
 
-    if (btn) {
-      btn.textContent = `🧱 Step Build Mode: ${this.isStepMode ? 'ON' : 'OFF'}`;
-      btn.classList.toggle('active', this.isStepMode);
+    const btnTogglePhysics = this.overlay.querySelector('#btn-toggle-physics') as HTMLButtonElement | null;
+    if (btnTogglePhysics) {
+      btnTogglePhysics.classList.add('btn-physics-active');
+      btnTogglePhysics.textContent = '⏸ Pause Physics: ON';
     }
-    if (controls) controls.style.display = this.isStepMode ? 'flex' : 'none';
-    if (sliderRow) sliderRow.style.display = this.isStepMode ? 'flex' : 'none';
 
-    if (this.isStepMode) {
-      if (this.currentStepIndex === 0 || this.currentStepIndex > this.inspectedSteps.length) {
-        this.currentStepIndex = 1;
+    const btnHand = this.overlay.querySelector('#btn-toggle-hand') as HTMLElement | null;
+    const btnResetPhys = this.overlay.querySelector('#btn-reset-physics') as HTMLElement | null;
+    if (btnHand) btnHand.style.display = 'inline-flex';
+    if (btnResetPhys) btnResetPhys.style.display = 'inline-flex';
+  }
+
+  public stopPhysicsSandbox(): void {
+    this.isPhysicsRunning = false;
+    this.onPointerUp();
+
+    const btnTogglePhysics = this.overlay.querySelector('#btn-toggle-physics') as HTMLButtonElement | null;
+    if (btnTogglePhysics) {
+      btnTogglePhysics.classList.remove('btn-physics-active');
+      btnTogglePhysics.textContent = '▶ Live Physics: OFF';
+    }
+
+    const btnHand = this.overlay.querySelector('#btn-toggle-hand') as HTMLElement | null;
+    const btnResetPhys = this.overlay.querySelector('#btn-reset-physics') as HTMLElement | null;
+    if (btnHand) btnHand.style.display = 'none';
+    if (btnResetPhys) btnResetPhys.style.display = 'none';
+
+    if (this.reticleMesh) this.reticleMesh.visible = false;
+  }
+
+  private async buildPhysicsWorld(): Promise<void> {
+    if (!this.currentSpec) return;
+
+    if (this.physicsWorld) {
+      this.physicsWorld.free();
+      this.physicsWorld = null;
+    }
+    this.physicsBodies.clear();
+
+    this.physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+
+    // Static ground plane at workbench floor level (Y = 0)
+    const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0);
+    const groundBody = this.physicsWorld.createRigidBody(groundDesc);
+    this.physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(5.0, 0.05, 5.0), groundBody);
+
+    for (const cluster of this.currentSpec.clusters) {
+      const isFixed = cluster.isFixed !== undefined ? cluster.isFixed : cluster.isRootChassis;
+      const clusterGroup = this.clusterMeshGroups.get(cluster.clusterId);
+      const initPos = clusterGroup?.position || new THREE.Vector3();
+      const initQuat = clusterGroup?.quaternion || new THREE.Quaternion();
+
+      let bodyDesc: RAPIER.RigidBodyDesc;
+      if (isFixed || this.isSolidMode) {
+        bodyDesc = RAPIER.RigidBodyDesc.fixed()
+          .setTranslation(initPos.x, initPos.y, initPos.z)
+          .setRotation({ x: initQuat.x, y: initQuat.y, z: initQuat.z, w: initQuat.w });
+      } else {
+        bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+          .setTranslation(initPos.x, initPos.y, initPos.z)
+          .setRotation({ x: initQuat.x, y: initQuat.y, z: initQuat.z, w: initQuat.w })
+          .setLinearDamping(1.5)
+          .setAngularDamping(2.0)
+          .setAdditionalMass(Math.max(0.05, cluster.totalMassKg));
       }
-      this.updateStepDisplay();
+
+      const body = this.physicsWorld.createRigidBody(bodyDesc);
+      this.physicsBodies.set(cluster.clusterId, body);
+
+      for (const col of cluster.colliders) {
+        let colDesc: RAPIER.ColliderDesc;
+        if (col.shape === 'sphere') {
+          colDesc = RAPIER.ColliderDesc.ball(col.radius || 0.015);
+        } else if (col.shape === 'cylinder') {
+          colDesc = RAPIER.ColliderDesc.cylinder(col.halfHeight || 0.02, col.radius || 0.015);
+        } else {
+          const hx = col.halfExtents ? col.halfExtents[0] : 0.03;
+          const hy = col.halfExtents ? col.halfExtents[1] : 0.015;
+          const hz = col.halfExtents ? col.halfExtents[2] : 0.03;
+          colDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
+        }
+        colDesc.setTranslation(col.offset[0], col.offset[1], col.offset[2])
+          .setFriction(col.friction || 0.6)
+          .setRestitution(col.restitution || 0.05);
+        this.physicsWorld.createCollider(colDesc, body);
+      }
+    }
+
+    // Connect kinematic joints
+    for (const joint of this.currentSpec.joints) {
+      const parentBody = this.physicsBodies.get(joint.parentClusterId);
+      const childBody = this.physicsBodies.get(joint.childClusterId);
+      if (parentBody && childBody) {
+        this.physicsWorld.createImpulseJoint(
+          RAPIER.JointData.revolute(
+            { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
+            { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
+            { x: joint.axis[0], y: joint.axis[1], z: joint.axis[2] }
+          ),
+          parentBody,
+          childBody,
+          true
+        );
+      }
+    }
+  }
+
+  public resetPhysicsPoses(): void {
+    if (!this.currentSpec) return;
+
+    for (const [clusterId, body] of this.physicsBodies.entries()) {
+      const initPose = this.initialMeshPoses.get(clusterId);
+      if (initPose) {
+        body.setTranslation({ x: initPose.pos.x, y: initPose.pos.y, z: initPose.pos.z }, true);
+        body.setRotation({ x: initPose.quat.x, y: initPose.quat.y, z: initPose.quat.z, w: initPose.quat.w }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+    }
+
+    // Sync visual meshes immediately
+    for (const [clusterId, grp] of this.clusterMeshGroups.entries()) {
+      const initPose = this.initialMeshPoses.get(clusterId);
+      if (initPose) {
+        grp.position.copy(initPose.pos);
+        grp.quaternion.copy(initPose.quat);
+      }
+    }
+  }
+
+  private rebuildPhysicsIfRunning(): void {
+    if (this.isPhysicsRunning) {
+      this.buildPhysicsWorld();
+    }
+  }
+
+  private toggleClusterAnchor(clusterId: string): void {
+    if (!this.currentSpec) return;
+    const cluster = this.currentSpec.clusters.find((c) => c.clusterId === clusterId);
+    if (!cluster) return;
+
+    const currentFixed = cluster.isFixed !== undefined ? cluster.isFixed : cluster.isRootChassis;
+    cluster.isFixed = !currentFixed;
+
+    this.saveClusterOverrides();
+
+    // If physics is running, update the body immediately
+    if (this.isPhysicsRunning && this.physicsBodies.has(clusterId)) {
+      const body = this.physicsBodies.get(clusterId)!;
+      body.setBodyType(
+        cluster.isFixed ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
+        true
+      );
+      if (!cluster.isFixed) {
+        body.wakeUp();
+      }
+    }
+
+    this.renderClusterList();
+  }
+
+  private selectCluster(clusterId: string): void {
+    this.selectedClusterId = clusterId;
+    const clusterGroup = this.clusterMeshGroups.get(clusterId);
+
+    if (this.highlightHelper) {
+      this.scene.remove(this.highlightHelper);
+      this.highlightHelper = null;
+    }
+
+    const nudgeCard = this.overlay.querySelector('#cluster-nudge-card') as HTMLElement | null;
+    const nudgeTitle = this.overlay.querySelector('#cluster-nudge-title') as HTMLElement | null;
+
+    if (clusterGroup) {
+      this.highlightHelper = new THREE.BoxHelper(clusterGroup, 0x38bdf8);
+      this.scene.add(this.highlightHelper);
+
+      if (nudgeCard && nudgeTitle) {
+        const cluster = this.currentSpec?.clusters.find((c) => c.clusterId === clusterId);
+        nudgeTitle.textContent = `Nudge Position: ${cluster?.name || clusterId}`;
+        nudgeCard.style.display = 'block';
+      }
     } else {
-      this.stopStepPlay();
-      for (const item of this.inspectedSteps) {
-        item.mesh.visible = true;
-      }
-      if (this.highlightHelper) this.highlightHelper.visible = false;
-      const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
-      if (counter) counter.textContent = `All ${this.inspectedSteps.length} parts visible`;
-      const stepCard = this.overlay.querySelector('#inspector-active-step-card') as HTMLElement | null;
-      if (stepCard) stepCard.style.display = 'none';
+      if (nudgeCard) nudgeCard.style.display = 'none';
     }
+
+    this.renderClusterList();
   }
 
-  public setStep(step: number): void {
-    const total = this.inspectedSteps.length;
-    if (total === 0) return;
-    this.currentStepIndex = Math.max(1, Math.min(total, step));
-    this.updateStepDisplay();
-  }
+  private nudgeCluster(clusterId: string, axis: 'x' | 'y' | 'z', deltaMm: number): void {
+    if (!this.currentSpec) return;
+    const cluster = this.currentSpec.clusters.find((c) => c.clusterId === clusterId);
+    if (!cluster || !cluster.parts) return;
 
-  public startStepPlay(): void {
-    if (this.stepPlayTimer !== null) return;
-    const speedSelect = this.overlay.querySelector('#step-speed-select') as HTMLSelectElement | null;
-    const speedMult = parseFloat(speedSelect?.value || '5');
-    const intervalMs = Math.max(30, Math.round(500 / speedMult));
+    const deltaM = deltaMm / 1000;
 
-    const btnPlay = this.overlay.querySelector('#btn-step-play') as HTMLButtonElement | null;
-    if (btnPlay) {
-      btnPlay.textContent = '⏸ Pause';
-      btnPlay.classList.add('btn-warning');
-      btnPlay.classList.remove('btn-primary');
+    for (const p of cluster.parts) {
+      if (axis === 'x') p.position[0] += deltaMm;
+      if (axis === 'y') p.position[1] += deltaMm;
+      if (axis === 'z') p.position[2] += deltaMm;
     }
 
-    this.stepPlayTimer = window.setInterval(() => {
-      if (this.currentStepIndex >= this.inspectedSteps.length) {
-        this.stopStepPlay();
-        return;
-      }
-      this.setStep(this.currentStepIndex + 1);
-    }, intervalMs);
-  }
-
-  public stopStepPlay(): void {
-    if (this.stepPlayTimer !== null) {
-      clearInterval(this.stepPlayTimer);
-      this.stepPlayTimer = null;
-    }
-    const btnPlay = this.overlay.querySelector('#btn-step-play') as HTMLButtonElement | null;
-    if (btnPlay) {
-      btnPlay.textContent = '▶ Play';
-      btnPlay.classList.add('btn-primary');
-      btnPlay.classList.remove('btn-warning');
-    }
-  }
-
-  private updateStepDisplay(): void {
-    const total = this.inspectedSteps.length;
-    if (total === 0) return;
-
-    const slider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement | null;
-    const counter = this.overlay.querySelector('#step-counter-display') as HTMLElement | null;
-    const stepCard = this.overlay.querySelector('#inspector-active-step-card') as HTMLElement | null;
-    const stepDetails = this.overlay.querySelector('#active-step-details') as HTMLElement | null;
-
-    if (slider) {
-      slider.max = total.toString();
-      slider.value = this.currentStepIndex.toString();
+    for (const col of cluster.colliders) {
+      if (axis === 'x') col.offset[0] += deltaM;
+      if (axis === 'y') col.offset[1] += deltaM;
+      if (axis === 'z') col.offset[2] += deltaM;
     }
 
-    for (let i = 0; i < total; i++) {
-      const item = this.inspectedSteps[i];
-      item.mesh.visible = (i < this.currentStepIndex);
-    }
+    const grp = this.clusterMeshGroups.get(clusterId);
+    if (grp) {
+      if (axis === 'x') grp.position.x += deltaM;
+      if (axis === 'y') grp.position.y += deltaM;
+      if (axis === 'z') grp.position.z += deltaM;
 
-    const activeItem = this.inspectedSteps[this.currentStepIndex - 1];
-
-    if (counter) {
-      if (activeItem) {
-        counter.textContent = `Step ${this.currentStepIndex} / ${total} (Part ${activeItem.part.partNumber})`;
-      } else {
-        counter.textContent = `Step ${this.currentStepIndex} / ${total}`;
+      const initPose = this.initialMeshPoses.get(clusterId);
+      if (initPose) {
+        initPose.pos.copy(grp.position);
       }
     }
 
-    if (activeItem && this.isStepMode) {
-      if (!this.highlightHelper) {
-        this.highlightHelper = new THREE.BoxHelper(activeItem.mesh, 0x38bdf8);
-        this.scene.add(this.highlightHelper);
-      } else {
-        this.highlightHelper.setFromObject(activeItem.mesh);
-        this.highlightHelper.visible = true;
+    if (this.physicsBodies.has(clusterId)) {
+      const body = this.physicsBodies.get(clusterId)!;
+      const trans = body.translation();
+      body.setTranslation({
+        x: axis === 'x' ? trans.x + deltaM : trans.x,
+        y: axis === 'y' ? trans.y + deltaM : trans.y,
+        z: axis === 'z' ? trans.z + deltaM : trans.z,
+      }, true);
+      body.wakeUp();
+    }
+
+    if (this.highlightHelper && grp) {
+      this.highlightHelper.update();
+    }
+  }
+
+  private saveClusterOverrides(): void {
+    if (!this.currentSpec) return;
+    try {
+      const key = `fll_mission_${this.currentMissionId}_clusters_override`;
+      const overrides: Record<string, { isFixed?: boolean }> = {};
+      for (const c of this.currentSpec.clusters) {
+        overrides[c.clusterId] = { isFixed: c.isFixed };
       }
+      localStorage.setItem(key, JSON.stringify(overrides));
+    } catch {
+      // ignore
+    }
+  }
 
-      if (stepCard && stepDetails) {
-        stepCard.style.display = 'flex';
-        const p = activeItem.part;
-        const px = p.position[0];
-        const py = p.position[1];
-        const pz = p.position[2];
-        const studsX = (px / 8).toFixed(1);
-        const studsZ = (pz / 8).toFixed(1);
-        const platesY = (py / 3.2).toFixed(1);
-        const q = p.rotation;
-        const colorHexStr = p.colorHex !== undefined ? `#${p.colorHex.toString(16).padStart(6, '0')}` : 'default';
+  private saveFieldCoordinates(): void {
+    const inputX = this.overlay.querySelector('#input-field-x') as HTMLInputElement | null;
+    const inputZ = this.overlay.querySelector('#input-field-z') as HTMLInputElement | null;
+    const inputYaw = this.overlay.querySelector('#input-field-yaw') as HTMLInputElement | null;
+    if (!inputX || !inputZ || !inputYaw) return;
 
-        stepDetails.innerHTML = `
-          <div class="step-detail-row">
-            <span class="dim-label">Element / Part #:</span>
-            <span class="dim-val highlight-blue"><strong>${p.partNumber}</strong> (${p.role || 'brick'})</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Submodel Context:</span>
-            <span class="dim-val">${p.submodelInstance || p.submodel || 'main assembly'}</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Cluster Body:</span>
-            <span class="dim-val">${activeItem.clusterName} (${activeItem.isRootChassis ? '🔒 Base' : '⚙️ Articulated'})</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Position (X, Y, Z):</span>
-            <span class="dim-val font-mono">${px.toFixed(1)}, ${py.toFixed(1)}, ${pz.toFixed(1)} mm</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Stud Coordinates:</span>
-            <span class="dim-val font-mono">${studsX}s, ${platesY}p, ${studsZ}s</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Rotation (x, y, z, w):</span>
-            <span class="dim-val font-mono text-xs">${q[0].toFixed(2)}, ${q[1].toFixed(2)}, ${q[2].toFixed(2)}, ${q[3].toFixed(2)}</span>
-          </div>
-          <div class="step-detail-row">
-            <span class="dim-label">Color:</span>
-            <span class="dim-val"><span class="color-sample-dot" style="background-color: ${colorHexStr};"></span> ${colorHexStr}</span>
+    const x = parseFloat(inputX.value) || 0;
+    const z = parseFloat(inputZ.value) || 0;
+    const yaw = parseFloat(inputYaw.value) || 0;
+
+    saveMissionArenaPosition(this.currentMissionId, { x, y: 0.002, z }, yaw);
+    this.callbacks.onUpdateFieldPosition?.(this.currentMissionId, { x, y: 0.002, z }, yaw);
+  }
+
+  private renderClusterList(): void {
+    if (!this.currentSpec) return;
+    const clusterList = this.overlay.querySelector('#inspector-clusters-list') as HTMLElement;
+    if (!clusterList) return;
+
+    clusterList.innerHTML = this.currentSpec.clusters
+      .map((c, i) => {
+        const isFixed = c.isFixed !== undefined ? c.isFixed : c.isRootChassis;
+        const pCount = c.parts?.length || c.partIds.length;
+        const isSelected = this.selectedClusterId === c.clusterId;
+
+        return `
+          <div class="cluster-item ${isSelected ? 'selected' : ''}" data-cluster-id="${c.clusterId}">
+            <div class="cluster-item-header">
+              <span class="cluster-name">Cluster ${i + 1}: ${c.name}</span>
+              <button class="btn btn-xs ${isFixed ? 'btn-fixed' : 'btn-dynamic'} btn-toggle-anchor" data-cluster-id="${c.clusterId}" title="Toggle anchor to field mat">
+                ${isFixed ? '📌 Fixed to Field' : '🔄 Dynamic / Movable'}
+              </button>
+            </div>
+            <div class="cluster-item-meta">${pCount} LEGO elements • Mass: ${Math.round(c.totalMassKg * 1000)}g</div>
+            <div class="cluster-item-actions">
+              <button class="btn btn-xs btn-outline btn-select-cluster" data-cluster-id="${c.clusterId}">
+                ${isSelected ? '🎯 Selected' : '🔍 Select / Nudge'}
+              </button>
+            </div>
           </div>
         `;
-      }
-    } else {
-      if (this.highlightHelper) {
-        this.highlightHelper.visible = false;
-      }
-      if (stepCard) {
-        stepCard.style.display = 'none';
-      }
-    }
-  }
+      })
+      .join('');
 
-  private updateReportDom(spec: RobotAssemblySpec, _name: string, _id: string): void {
-    const totalParts = spec.clusters.reduce((sum, c) => sum + (c.parts?.length || c.partIds.length), 0);
-    const submodels = new Set<string>();
-    spec.clusters.forEach((c) => {
-      c.parts?.forEach((p) => {
-        if (p.submodel) submodels.add(p.submodel);
+    // Attach row events
+    clusterList.querySelectorAll('.btn-toggle-anchor').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cid = btn.getAttribute('data-cluster-id');
+        if (cid) this.toggleClusterAnchor(cid);
       });
     });
 
-    (this.overlay.querySelector('#metric-parts-count') as HTMLElement).textContent = totalParts.toString();
-    (this.overlay.querySelector('#metric-submodels-count') as HTMLElement).textContent = (submodels.size || 1).toString();
-    (this.overlay.querySelector('#metric-clusters-count') as HTMLElement).textContent = spec.clusters.length.toString();
+    clusterList.querySelectorAll('.btn-select-cluster').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cid = btn.getAttribute('data-cluster-id');
+        if (cid) this.selectCluster(cid);
+      });
+    });
 
-    const totalMassKg = spec.clusters.reduce((sum, c) => sum + c.totalMassKg, 0);
-    (this.overlay.querySelector('#metric-mass') as HTMLElement).textContent = `${Math.round(totalMassKg * 1000)} g`;
+    clusterList.querySelectorAll('.cluster-item').forEach((row) => {
+      row.addEventListener('click', () => {
+        const cid = row.getAttribute('data-cluster-id');
+        if (cid) this.selectCluster(cid);
+      });
+    });
+  }
 
-    // Calculate bounding box in meters and studs
+  private updateReportDom(spec: RobotAssemblySpec, _name: string, id: string): void {
+    const totalParts = spec.clusters.reduce((sum, c) => sum + (c.parts?.length || c.partIds.length), 0);
+    const totalMass = Math.round(spec.clusters.reduce((sum, c) => sum + c.totalMassKg, 0) * 1000);
+
+    const submodelNames = new Set<string>();
+    for (const c of spec.clusters) {
+      if (c.parts) {
+        for (const p of c.parts) {
+          if (p.submodel) submodelNames.add(p.submodel);
+        }
+      }
+    }
+    const submodelCount = Math.max(1, submodelNames.size);
+
+    (this.overlay.querySelector('#metric-parts-count') as HTMLElement).textContent = `${totalParts}`;
+    (this.overlay.querySelector('#metric-submodels-count') as HTMLElement).textContent = `${submodelCount}`;
+    (this.overlay.querySelector('#metric-clusters-count') as HTMLElement).textContent = `${spec.clusters.length}`;
+    (this.overlay.querySelector('#metric-mass') as HTMLElement).textContent = `${totalMass} g`;
+
+    // Calculate dimensions in mm
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
 
-    for (const c of spec.clusters) {
-      if (c.parts) {
-        for (const p of c.parts) {
+    for (const cluster of spec.clusters) {
+      if (cluster.parts) {
+        for (const p of cluster.parts) {
           const px = p.position[0];
           const py = p.position[1];
           const pz = p.position[2];
@@ -996,25 +1504,20 @@ export class CadModelInspector {
     (this.overlay.querySelector('#dim-z') as HTMLElement).textContent = `${sizeZ.toFixed(1)} mm (${studsZ} studs)`;
     (this.overlay.querySelector('#dim-y') as HTMLElement).textContent = `${sizeY.toFixed(1)} mm (${platesY} plates)`;
 
-    // Clusters Breakdown DOM
-    const clusterList = this.overlay.querySelector('#inspector-clusters-list') as HTMLElement;
-    clusterList.innerHTML = spec.clusters
-      .map((c, i) => {
-        const isRoot = c.isRootChassis;
-        const pCount = c.parts?.length || c.partIds.length;
-        return `
-          <div class="cluster-item">
-            <div class="cluster-item-header">
-              <span class="cluster-name">Cluster ${i + 1}: ${c.name}</span>
-              <span class="badge ${isRoot ? 'badge-fixed' : 'badge-dynamic'}">
-                ${isRoot ? '🔒 FIXED BASE' : '⚙️ MECHANISM'}
-              </span>
-            </div>
-            <div class="cluster-item-meta">${pCount} LEGO elements • Mass: ${Math.round(c.totalMassKg * 1000)}g</div>
-          </div>
-        `;
-      })
-      .join('');
+    // Render cluster list with interactive anchor toggles
+    this.renderClusterList();
+
+    // Populate field position inputs
+    const config = SEASON_MISSIONS_CONFIG.find((m) => m.id === id);
+    if (config) {
+      const pose = getMissionArenaPosition(config);
+      const inputX = this.overlay.querySelector('#input-field-x') as HTMLInputElement | null;
+      const inputZ = this.overlay.querySelector('#input-field-z') as HTMLInputElement | null;
+      const inputYaw = this.overlay.querySelector('#input-field-yaw') as HTMLInputElement | null;
+      if (inputX) inputX.value = `${pose.x.toFixed(2)}`;
+      if (inputZ) inputZ.value = `${pose.z.toFixed(2)}`;
+      if (inputYaw) inputYaw.value = `${pose.yawDegrees}`;
+    }
 
     // Parts List / BOM Table DOM
     const bomTbody = this.overlay.querySelector('#inspector-bom-tbody') as HTMLElement | null;
@@ -1071,6 +1574,116 @@ export class CadModelInspector {
       this.camera.position.set(0.35, 0.25, 0.35);
       this.controls.target.set(0, 0.05, 0);
     }
-    this.controls.update();
+  }
+
+  // =========================================================================
+  // Assembly Step Debugger Methods
+  // =========================================================================
+
+  private toggleStepMode(): void {
+    this.isStepMode = !this.isStepMode;
+    const btnToggle = this.overlay.querySelector('#btn-toggle-step-mode');
+    const controls = this.overlay.querySelector('#step-playback-controls') as HTMLElement;
+    const sliderRow = this.overlay.querySelector('#step-slider-row') as HTMLElement;
+    const activeStepCard = this.overlay.querySelector('#inspector-active-step-card') as HTMLElement;
+
+    if (this.isStepMode) {
+      if (btnToggle) btnToggle.textContent = '🧱 Step Build Mode: ON';
+      controls.style.display = 'flex';
+      sliderRow.style.display = 'flex';
+      activeStepCard.style.display = 'block';
+      this.setStep(1);
+    } else {
+      this.stopStepPlay();
+      if (btnToggle) btnToggle.textContent = '🧱 Step Build Mode: OFF';
+      controls.style.display = 'none';
+      sliderRow.style.display = 'none';
+      activeStepCard.style.display = 'none';
+      if (this.highlightHelper) {
+        this.scene.remove(this.highlightHelper);
+        this.highlightHelper = null;
+      }
+      for (const item of this.inspectedSteps) {
+        item.mesh.visible = true;
+      }
+      const counter = this.overlay.querySelector('#step-counter-display');
+      if (counter) counter.textContent = 'All parts visible';
+    }
+  }
+
+  private setStep(stepIndex: number): void {
+    if (!this.inspectedSteps.length) return;
+    const target = Math.max(1, Math.min(stepIndex, this.inspectedSteps.length));
+    this.currentStepIndex = target;
+
+    const slider = this.overlay.querySelector('#step-scrubber-slider') as HTMLInputElement;
+    if (slider) slider.value = `${target}`;
+
+    const counter = this.overlay.querySelector('#step-counter-display');
+    if (counter) counter.textContent = `Step ${target} of ${this.inspectedSteps.length}`;
+
+    for (let i = 0; i < this.inspectedSteps.length; i++) {
+      this.inspectedSteps[i].mesh.visible = i < target;
+    }
+
+    const currentItem = this.inspectedSteps[target - 1];
+    if (currentItem) {
+      if (this.highlightHelper) {
+        this.scene.remove(this.highlightHelper);
+      }
+      this.highlightHelper = new THREE.BoxHelper(currentItem.mesh, 0x38bdf8);
+      this.scene.add(this.highlightHelper);
+
+      const detailsEl = this.overlay.querySelector('#active-step-details');
+      if (detailsEl) {
+        const p = currentItem.part;
+        const colorHex = '#' + (p.colorHex || 0xffffff).toString(16).padStart(6, '0');
+        detailsEl.innerHTML = `
+          <div class="step-detail-row">
+            <span>Part:</span>
+            <span class="font-mono highlight-blue">${p.partNumber} (${p.role})</span>
+          </div>
+          <div class="step-detail-row">
+            <span>Submodel:</span>
+            <span class="text-xs">${p.submodel || 'main'}</span>
+          </div>
+          <div class="step-detail-row">
+            <span>Color:</span>
+            <span><span class="color-sample-dot" style="background-color: ${colorHex};"></span> ${colorHex}</span>
+          </div>
+          <div class="step-detail-row">
+            <span>Cluster:</span>
+            <span>${currentItem.clusterName} (${currentItem.isRootChassis ? '📌 Fixed' : '🔄 Dynamic'})</span>
+          </div>
+        `;
+      }
+    }
+  }
+
+  private startStepPlay(): void {
+    if (this.stepPlayTimer !== null) return;
+    const btnPlay = this.overlay.querySelector('#btn-step-play');
+    if (btnPlay) btnPlay.textContent = '⏸ Pause';
+
+    const speedSelect = this.overlay.querySelector('#step-speed-select') as HTMLSelectElement;
+    const speed = speedSelect ? parseFloat(speedSelect.value) || 5 : 5;
+    const intervalMs = Math.max(30, 1000 / speed);
+
+    this.stepPlayTimer = window.setInterval(() => {
+      if (this.currentStepIndex >= this.inspectedSteps.length) {
+        this.setStep(1);
+      } else {
+        this.setStep(this.currentStepIndex + 1);
+      }
+    }, intervalMs);
+  }
+
+  private stopStepPlay(): void {
+    if (this.stepPlayTimer !== null) {
+      clearInterval(this.stepPlayTimer);
+      this.stepPlayTimer = null;
+    }
+    const btnPlay = this.overlay.querySelector('#btn-step-play');
+    if (btnPlay) btnPlay.textContent = '▶ Play';
   }
 }

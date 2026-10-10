@@ -6,6 +6,7 @@ import { VirtualSpikeApi } from './runtime/spike-api';
 import { PythonScriptRunner } from './runtime/python-runner';
 import { SimulatorHud } from './ui/hud';
 import { LDrawImporter } from './cad/ldraw-importer';
+import { RobotAssemblySpec } from './cad/types';
 import { MissionManager } from './missions/mission-manager';
 import { SandboxInteractionTool } from './sandbox/interaction-tool';
 import { CustomImportedMissionElement } from './missions/custom-imported-element';
@@ -346,8 +347,8 @@ async function bootstrapSimulator() {
 
   // 7. Initialize CAD Model Inspector & Diagnostic Validator
   cadInspector = new CadModelInspector({
-    onDeployToField: async (missionId: string) => {
-      await missionManager.toggleSeasonMission(missionId, true);
+    onDeployToField: async (missionId: string, customSpec?: RobotAssemblySpec) => {
+      await missionManager.toggleSeasonMission(missionId, true, customSpec);
       syncHudMissionElements();
       viewport.selectMissionElement(missionId);
       const elem = missionManager.getElement(missionId);

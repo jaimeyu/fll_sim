@@ -47,6 +47,8 @@ export interface ClusteredCompoundBody {
   clusterId: string;
   name: string;
   isRootChassis: boolean;
+  isFixed?: boolean;
+  fieldPositionOffset?: [number, number, number];
   partIds: string[];
   totalMassKg: number;
   parts?: PlacedPart[];

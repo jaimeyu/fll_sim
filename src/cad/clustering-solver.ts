@@ -255,6 +255,7 @@ export class CadClusteringPreSolver {
         clusterId,
         name: clusterName,
         isRootChassis: isRoot,
+        isFixed: isRoot,
         partIds: componentPartIds,
         parts: clusterParts,
         totalMassKg: massKg,
@@ -267,6 +268,7 @@ export class CadClusteringPreSolver {
       if (clusters.length > 0) {
         clusters.sort((a, b) => b.partIds.length - a.partIds.length);
         clusters[0].isRootChassis = true;
+        clusters[0].isFixed = true;
         clusters[0].clusterId = 'chassis_root';
       }
     }

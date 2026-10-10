@@ -7,11 +7,13 @@ import { CascadeGearDialMission } from './gear-cascade';
 
 import { CustomImportedMissionElement } from './custom-imported-element';
 import { LDrawImporter } from '../cad/ldraw-importer';
+import { RobotAssemblySpec } from '../cad/types';
 import {
   SEASON_MISSIONS_CONFIG,
   SeasonMissionSpec,
   isMissionConfigEnabled,
   saveStoredSeasonMissionOverride,
+  getMissionArenaPosition,
 } from './season-config';
 
 export type SimulatorAppMode = 'ARENA' | 'SANDBOX_RISER' | 'SANDBOX_DIAL' | 'SANDBOX_CASCADE';
@@ -96,12 +98,15 @@ export class MissionManager {
   /**
    * Asynchronously loads a specific season mission .io model
    */
-  public async loadSeasonMission(spec: SeasonMissionSpec): Promise<CustomImportedMissionElement | null> {
+  public async loadSeasonMission(spec: SeasonMissionSpec, customSpec?: RobotAssemblySpec): Promise<CustomImportedMissionElement | null> {
     if (this.elements.has(spec.id)) {
-      const existing = this.elements.get(spec.id) as CustomImportedMissionElement;
-      existing.isPlacedOnField = true;
-      existing.rootGroup.visible = true;
-      return existing;
+      if (!customSpec) {
+        const existing = this.elements.get(spec.id) as CustomImportedMissionElement;
+        existing.isPlacedOnField = true;
+        existing.rootGroup.visible = true;
+        return existing;
+      }
+      this.removeElement(spec.id);
     }
     if (this.loadingMissions.has(spec.id)) return null;
 
@@ -109,21 +114,40 @@ export class MissionManager {
     this.onMissionListChanged?.();
 
     try {
-      if (typeof window === 'undefined' || typeof fetch === 'undefined') {
-        this.loadingMissions.delete(spec.id);
-        return null;
+      let parsedSpec = customSpec;
+      if (!parsedSpec) {
+        if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+          this.loadingMissions.delete(spec.id);
+          return null;
+        }
+        const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
+        const fileUrl = `${baseUrl}${spec.ioFile.replace(/^\//, '')}`;
+        const res = await fetch(fileUrl);
+        if (!res.ok) {
+          console.warn(`[MissionManager] Failed to fetch ${fileUrl}: HTTP ${res.status}`);
+          this.loadingMissions.delete(spec.id);
+          this.onMissionListChanged?.();
+          return null;
+        }
+        const buffer = await res.arrayBuffer();
+        parsedSpec = await LDrawImporter.parseStudioIo(buffer);
       }
-      const baseUrl = (import.meta.env?.BASE_URL || './').replace(/\/$/, '') + '/';
-      const fileUrl = `${baseUrl}${spec.ioFile.replace(/^\//, '')}`;
-      const res = await fetch(fileUrl);
-      if (!res.ok) {
-        console.warn(`[MissionManager] Failed to fetch ${fileUrl}: HTTP ${res.status}`);
-        this.loadingMissions.delete(spec.id);
-        this.onMissionListChanged?.();
-        return null;
+
+      // Restore custom cluster fixed/dynamic overrides from localStorage
+      try {
+        const storedClusters = localStorage.getItem(`fll_mission_${spec.id}_clusters_override`);
+        if (storedClusters) {
+          const overrides = JSON.parse(storedClusters);
+          for (const c of parsedSpec.clusters) {
+            if (overrides[c.clusterId]?.isFixed !== undefined) {
+              c.isFixed = overrides[c.clusterId].isFixed;
+            }
+          }
+        }
+      } catch {
+        // ignore
       }
-      const buffer = await res.arrayBuffer();
-      const parsedSpec = await LDrawImporter.parseStudioIo(buffer);
+
       const customElem = new CustomImportedMissionElement(parsedSpec, {
         id: spec.id,
         name: spec.name,
@@ -132,7 +156,8 @@ export class MissionManager {
         isBaseFixed: spec.isFixedBase,
       });
 
-      customElem.init(this.world, spec.arenaPosition, spec.yawDegrees);
+      const pose = getMissionArenaPosition(spec);
+      customElem.init(this.world, pose, pose.yawDegrees);
       this.registerCustomElement(customElem);
       this.loadingMissions.delete(spec.id);
       this.onMissionListChanged?.();
@@ -159,7 +184,7 @@ export class MissionManager {
   /**
    * Toggles a season mission model on or off, updating persistent storage
    */
-  public async toggleSeasonMission(id: string, enable: boolean): Promise<boolean> {
+  public async toggleSeasonMission(id: string, enable: boolean, customSpec?: RobotAssemblySpec): Promise<boolean> {
     saveStoredSeasonMissionOverride(id, enable);
     if (!enable) {
       this.removeElement(id);
@@ -168,7 +193,22 @@ export class MissionManager {
     } else {
       const config = SEASON_MISSIONS_CONFIG.find((m) => m.id === id);
       if (config) {
-        await this.loadSeasonMission(config);
+        await this.loadSeasonMission(config, customSpec);
+        return true;
+      } else if (customSpec) {
+        if (this.elements.has(id)) {
+          this.removeElement(id);
+        }
+        const customElem = new CustomImportedMissionElement(customSpec, {
+          id,
+          name: 'Custom Model',
+          description: 'User uploaded custom model',
+          isBaseFixed: true,
+        });
+        const pose = { x: 0, y: 0.002, z: 0, yawDegrees: 0 };
+        customElem.init(this.world, pose, 0);
+        this.registerCustomElement(customElem);
+        this.onMissionListChanged?.();
         return true;
       }
       return false;

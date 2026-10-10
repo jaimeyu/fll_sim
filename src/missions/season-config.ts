@@ -213,3 +213,34 @@ export function isMissionConfigEnabled(config: SeasonMissionSpec): boolean {
   }
   return config.enabledByDefault;
 }
+
+export function getMissionArenaPosition(spec: SeasonMissionSpec): { x: number; y: number; z: number; yawDegrees: number } {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(`fll_mission_${spec.id}_arena_pose`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          x: typeof parsed.x === 'number' ? parsed.x : spec.arenaPosition.x,
+          y: typeof parsed.y === 'number' ? parsed.y : spec.arenaPosition.y,
+          z: typeof parsed.z === 'number' ? parsed.z : spec.arenaPosition.z,
+          yawDegrees: typeof parsed.yaw === 'number' ? parsed.yaw : spec.yawDegrees,
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return { ...spec.arenaPosition, yawDegrees: spec.yawDegrees };
+}
+
+export function saveMissionArenaPosition(id: string, pos: { x: number; y: number; z: number }, yawDegrees: number): void {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(`fll_mission_${id}_arena_pose`, JSON.stringify({ ...pos, yaw: yawDegrees }));
+    } catch {
+      // ignore
+    }
+  }
+}
+

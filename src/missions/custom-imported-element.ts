@@ -141,15 +141,17 @@ export class CustomImportedMissionElement implements MissionElement {
     let colorIdx = 0;
 
     for (const cluster of this.spec.clusters) {
-      const isBase = cluster.isRootChassis;
+      const isFixedCluster = cluster.isFixed !== undefined
+        ? cluster.isFixed
+        : (cluster.isRootChassis && this.isBaseFixed);
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
       colorIdx++;
 
       // Create Rapier RigidBody:
-      // Fixed if in solid rigid mode, or if isBaseFixed and this is the base anchor cluster.
-      // All other mechanisms/articulated clusters are dynamic so they react to robot pushes & tools!
+      // Fixed if in solid rigid mode, or if tagged fixed (anchored to field mat).
+      // Dynamic clusters react to robot pushes, tools, and collisions!
       let bodyDesc: RAPIER.RigidBodyDesc;
-      if (this.isSolidRigidMode || (this.isBaseFixed && isBase)) {
+      if (this.isSolidRigidMode || isFixedCluster) {
         bodyDesc = RAPIER.RigidBodyDesc.fixed()
           .setTranslation(this.basePos.x, initialY, this.basePos.z)
           .setRotation({ x: 0, y: qy, z: 0, w: qw });
@@ -220,7 +222,7 @@ export class CustomImportedMissionElement implements MissionElement {
             });
           }
 
-          if (!isBase || !this.isBaseFixed) {
+          if (!isFixedCluster) {
             this.interactiveMeshes.push(partMesh);
           }
         }
@@ -238,7 +240,7 @@ export class CustomImportedMissionElement implements MissionElement {
           colMesh.receiveShadow = true;
           clusterGroup.add(colMesh);
 
-          if (!isBase || !this.isBaseFixed) {
+          if (!isFixedCluster) {
             this.interactiveMeshes.push(colMesh);
           }
         }

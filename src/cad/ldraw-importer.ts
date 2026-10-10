@@ -234,25 +234,35 @@ export class LDrawImporter {
       }
     }
 
-    // B. Proximity connections across submodels (within 32mm / 4 studs)
+    // B. Selective connections across distinct submodels (fasteners and revolute joints)
     for (let i = 0; i < parts.length; i++) {
       for (let j = i + 1; j < parts.length; j++) {
         const p1 = parts[i];
         const p2 = parts[j];
+        if (p1.submodelInstance && p2.submodelInstance && p1.submodelInstance === p2.submodelInstance) {
+          continue; // Already rigidly linked in Section A
+        }
+
         const dx = p1.position[0] - p2.position[0];
         const dy = p1.position[1] - p2.position[1];
         const dz = p1.position[2] - p2.position[2];
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (dist <= 32.0) {
-          if (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM') {
-            links.push({
-              fromPartId: p1.role === 'WHEEL_RIM' ? p2.id : p1.id,
-              toPartId: p1.role === 'WHEEL_RIM' ? p1.id : p2.id,
-              connectionType: 'REVOLUTE_AXLE',
-              jointAxis: [1, 0, 0],
-            });
-          } else {
+        if (dist <= 32.0 && (p1.role === 'WHEEL_RIM' || p2.role === 'WHEEL_RIM')) {
+          links.push({
+            fromPartId: p1.role === 'WHEEL_RIM' ? p2.id : p1.id,
+            toPartId: p1.role === 'WHEEL_RIM' ? p1.id : p2.id,
+            connectionType: 'REVOLUTE_AXLE',
+            jointAxis: [1, 0, 0],
+          });
+        } else if (dist <= 9.0) {
+          // Only link distinct submodels if physically fastened with a pin/axle or in direct contact (<8.5mm)
+          const isFastener =
+            p1.role === 'FASTENER_PIN' ||
+            p2.role === 'FASTENER_PIN' ||
+            p1.role === 'FASTENER_AXLE' ||
+            p2.role === 'FASTENER_AXLE';
+          if (isFastener || dist <= 8.5) {
             links.push({
               fromPartId: p1.id,
               toPartId: p2.id,
