@@ -591,6 +591,141 @@ body, html {
   line-height: 1.4;
 }
 
+/* Field Fastener & Dual Lock Toolbar (Above Telemetry Panel) */
+.hud-field-fastener-toolbar {
+  position: absolute;
+  right: 20px;
+  bottom: 245px;
+  width: 380px;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+  z-index: 25;
+  transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hud-field-fastener-toolbar.telemetry-collapsed {
+  bottom: 20px;
+}
+
+.fastener-toolbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.fastener-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fastener-layout-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-fastener {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-fastener:hover {
+  background: linear-gradient(135deg, #0369a1, #1d4ed8);
+}
+
+.btn-fastener.active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+  border-color: #34d399;
+}
+
+.fastener-tip-bar {
+  margin-top: 6px;
+  padding: 5px 8px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #7dd3fc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-dropdown-menu {
+  position: absolute;
+  right: 0;
+  bottom: 35px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  padding: 6px 0;
+  min-width: 195px;
+  z-index: 30;
+}
+
+.layout-dropdown-menu .dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.layout-dropdown-menu .dropdown-item:hover {
+  background: #1e293b;
+  color: #fff;
+}
+
+.layout-dropdown-menu .dropdown-item.file-label {
+  margin: 0;
+  cursor: pointer;
+}
+
+.layout-dropdown-menu .dropdown-divider {
+  height: 1px;
+  background: #334155;
+  margin: 4px 0;
+}
+
+.btn-fixed {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.btn-fixed:hover {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.btn-dynamic {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.btn-dynamic:hover {
+  background: rgba(56, 189, 248, 0.35);
+}
+
 /* Telemetry Dashboard (Bottom-Right) */
 .hud-telemetry-panel {
   position: absolute;

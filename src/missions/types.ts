@@ -89,4 +89,24 @@ export interface MissionElement {
    * Called when user finishes/releases mouse drag on the mechanism
    */
   stopUserDrag?(): void;
+
+  /**
+   * Parent mission ID if decomposed from a multi-object mission model
+   */
+  parentMissionId?: string;
+
+  /**
+   * Whether the element is currently Dual-Locked (fixed) to the competition field mat
+   */
+  isDualLocked?: boolean;
+
+  /**
+   * Sets Dual-Lock fastening status (true = fixed, false = dynamic)
+   */
+  setDualLocked?(locked: boolean, anchorPoint?: { x: number; z: number }): void;
+
+  /**
+   * Returns current Dual Lock anchor position on the mat
+   */
+  getDualLockPosition?(): { x: number; z: number } | null;
 }

@@ -10,6 +10,7 @@ import { RobotAssemblySpec } from './cad/types';
 import { MissionManager } from './missions/mission-manager';
 import { SandboxInteractionTool } from './sandbox/interaction-tool';
 import { CustomImportedMissionElement } from './missions/custom-imported-element';
+import { FieldLayoutManager } from './missions/field-layout-manager';
 import { CadModelInspector } from './ui/cad-inspector';
 import './ui/cad-inspector.css';
 
@@ -60,6 +61,7 @@ async function bootstrapSimulator() {
       position: elem.getPosition(),
       yawDegrees: elem.getYawDegrees ? elem.getYawDegrees() : 0,
       isCustom: elem instanceof CustomImportedMissionElement,
+      isDualLocked: elem.isDualLocked ?? (elem instanceof CustomImportedMissionElement ? elem.getIsBaseFixed() : true),
     }));
     hud.setMissionElements(allElems, missionManager.getSeasonMissionsStatus());
   };
@@ -343,6 +345,95 @@ async function bootstrapSimulator() {
         viewport.setRobotYaw(-90);
       }
     },
+    onToggleDualLockTool: (active) => {
+      viewport.setDualLockToolActive(active);
+    },
+    onToggleDualLockSelected: () => {
+      const selected = viewport.getSelectedElement();
+      if (selected) {
+        const willLock = !selected.isDualLocked;
+        if (selected.setDualLocked) {
+          selected.setDualLocked(willLock);
+        }
+        hud.setSelectedElement(selected.id, willLock, selected.name);
+        hud.showFastenerStatus(`${willLock ? '🔒 Dual-Locked' : '🔓 Unfastened'}: "${selected.name}"`);
+        hud.logConsole(`${willLock ? '🔒 [Dual Lock] Fastened' : '🔓 [Dual Lock] Unfastened'} "${selected.name}".`);
+        syncHudMissionElements();
+      }
+    },
+    onToggleDualLockElement: (id) => {
+      const elem = missionManager.getElement(id);
+      if (elem) {
+        const willLock = !elem.isDualLocked;
+        if (elem.setDualLocked) {
+          elem.setDualLocked(willLock);
+        }
+        if (viewport.getSelectedElement()?.id === id) {
+          hud.setSelectedElement(id, willLock, elem.name);
+        }
+        hud.showFastenerStatus(`${willLock ? '🔒 Dual-Locked' : '🔓 Unfastened'}: "${elem.name}"`);
+        hud.logConsole(`${willLock ? '🔒 [Dual Lock] Fastened' : '🔓 [Dual Lock] Unfastened'} "${elem.name}".`);
+        syncHudMissionElements();
+      }
+    },
+    onSaveFieldLayout: () => {
+      const layout = FieldLayoutManager.saveCurrentLayout(missionManager.getAllElements());
+      const lockedCount = layout.elements.filter((e) => e.isDualLocked).length;
+      hud.showFastenerStatus(`💾 Layout saved (${layout.elements.length} objects, ${lockedCount} Dual-Locked)`);
+      hud.logConsole(`💾 [Layout] Saved custom field layout (${layout.elements.length} objects, ${lockedCount} Dual-Locked) to browser storage.`);
+    },
+    onLoadFieldLayout: async () => {
+      const saved = FieldLayoutManager.loadSavedLayout();
+      if (!saved) {
+        hud.showFastenerStatus('⚠️ No saved layout found in browser storage');
+        hud.logConsole('⚠️ [Layout] No saved field layout found in local storage.');
+        return;
+      }
+      const { restoredCount, dualLockedCount } = await FieldLayoutManager.applyLayout(saved, missionManager);
+      syncHudMissionElements();
+      hud.showFastenerStatus(`📂 Restored layout (${restoredCount} objects, ${dualLockedCount} Dual-Locked)`);
+      hud.logConsole(`📂 [Layout] Restored field layout (${restoredCount} objects, ${dualLockedCount} Dual-Locked).`);
+    },
+    onExportFieldLayout: () => {
+      const layout = FieldLayoutManager.saveCurrentLayout(missionManager.getAllElements());
+      FieldLayoutManager.exportLayoutToFile(layout);
+      hud.logConsole(`📥 [Layout] Exported layout file "fll-competition-layout.json".`);
+    },
+    onImportFieldLayout: async (file) => {
+      try {
+        const data = await FieldLayoutManager.importLayoutFromFile(file);
+        const { restoredCount, dualLockedCount } = await FieldLayoutManager.applyLayout(data, missionManager);
+        syncHudMissionElements();
+        hud.showFastenerStatus(`📤 Imported layout "${file.name}"`);
+        hud.logConsole(`📤 [Layout] Successfully imported layout "${file.name}" (${restoredCount} objects, ${dualLockedCount} Dual-Locked).`);
+      } catch (err: any) {
+        hud.logConsole(`❌ [Layout] Import failed: ${err.message || err}`);
+      }
+    },
+    onDualLockAllBases: () => {
+      let count = 0;
+      for (const elem of missionManager.getAllElements()) {
+        if (elem.setDualLocked) {
+          elem.setDualLocked(true);
+          count++;
+        }
+      }
+      syncHudMissionElements();
+      hud.showFastenerStatus(`🔒 Dual-Locked all ${count} objects`);
+      hud.logConsole(`🔒 [Dual Lock] Fastened all ${count} objects to the field mat.`);
+    },
+    onUnlockAllElements: () => {
+      let count = 0;
+      for (const elem of missionManager.getAllElements()) {
+        if (elem.setDualLocked) {
+          elem.setDualLocked(false);
+          count++;
+        }
+      }
+      syncHudMissionElements();
+      hud.showFastenerStatus(`🔓 Released all ${count} objects (Dynamic)`);
+      hud.logConsole(`🔓 [Dual Lock] Released all ${count} objects to dynamic physics.`);
+    },
   });
 
   // 7. Initialize CAD Model Inspector & Diagnostic Validator
@@ -435,8 +526,21 @@ async function bootstrapSimulator() {
 
   viewport.onElementSelected = (id: string | null) => {
     if (id) {
-      hud.logConsole(`Selected mission element "${id}". Use mouse wheel or R key to rotate.`);
+      const elem = missionManager.getElement(id);
+      const isLocked = elem?.isDualLocked ?? (elem instanceof CustomImportedMissionElement ? elem.getIsBaseFixed() : true);
+      hud.setSelectedElement(id, isLocked, elem?.name);
+      hud.logConsole(`Selected mission element "${elem?.name || id}". Use mouse wheel or R key to rotate.`);
+    } else {
+      hud.setSelectedElement(null);
     }
+  };
+
+  viewport.onDualLockToggle = (elementId: string, locked: boolean) => {
+    const elem = missionManager.getElement(elementId);
+    hud.setSelectedElement(elementId, locked, elem?.name);
+    hud.showFastenerStatus(`${locked ? '🔒 Dual-Locked' : '🔓 Unlocked'}: "${elem?.name || elementId}"`);
+    hud.logConsole(`${locked ? '🔒 [Dual Lock] Fastened' : '🔓 [Dual Lock] Unfastened'} "${elem?.name || elementId}".`);
+    syncHudMissionElements();
   };
 
   // 7. Main Animation & Physics Loop

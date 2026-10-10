@@ -8,6 +8,7 @@ import { CascadeGearDialMission } from './gear-cascade';
 import { CustomImportedMissionElement } from './custom-imported-element';
 import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec } from '../cad/types';
+import { decomposeMissionAssembly } from './mission-decomposer';
 import {
   SEASON_MISSIONS_CONFIG,
   SeasonMissionSpec,
@@ -148,20 +149,28 @@ export class MissionManager {
         // ignore
       }
 
-      const customElem = new CustomImportedMissionElement(parsedSpec, {
-        id: spec.id,
-        name: spec.name,
-        description: spec.description,
-        sourceFile: spec.ioFile,
-        isBaseFixed: spec.isFixedBase,
-      });
-
       const pose = getMissionArenaPosition(spec);
-      customElem.init(this.world, pose, pose.yawDegrees);
-      this.registerCustomElement(customElem);
+      const decomposedObjects = decomposeMissionAssembly(parsedSpec, spec.id, pose, pose.yawDegrees);
+
+      let mainElem: CustomImportedMissionElement | null = null;
+      for (const obj of decomposedObjects) {
+        const customElem = new CustomImportedMissionElement(obj.spec, {
+          id: obj.id,
+          name: obj.name,
+          description: `${spec.description} (${obj.name})`,
+          sourceFile: spec.ioFile,
+          isBaseFixed: obj.isBaseFixed,
+          parentMissionId: spec.id,
+        });
+
+        customElem.init(this.world, obj.initialPos, obj.yawDegrees);
+        this.registerCustomElement(customElem);
+        if (obj.id === spec.id) mainElem = customElem;
+      }
+
       this.loadingMissions.delete(spec.id);
       this.onMissionListChanged?.();
-      return customElem;
+      return mainElem || (this.elements.get(spec.id) as CustomImportedMissionElement) || null;
     } catch (err) {
       console.error(`[MissionManager] Failed to load season mission ${spec.id}:`, err);
       this.loadingMissions.delete(spec.id);
@@ -199,15 +208,19 @@ export class MissionManager {
         if (this.elements.has(id)) {
           this.removeElement(id);
         }
-        const customElem = new CustomImportedMissionElement(customSpec, {
-          id,
-          name: 'Custom Model',
-          description: 'User uploaded custom model',
-          isBaseFixed: true,
-        });
         const pose = { x: 0, y: 0.002, z: 0, yawDegrees: 0 };
-        customElem.init(this.world, pose, 0);
-        this.registerCustomElement(customElem);
+        const decomposedObjects = decomposeMissionAssembly(customSpec, id, pose, 0);
+        for (const obj of decomposedObjects) {
+          const customElem = new CustomImportedMissionElement(obj.spec, {
+            id: obj.id,
+            name: obj.name,
+            description: 'User uploaded custom model',
+            isBaseFixed: obj.isBaseFixed,
+            parentMissionId: id,
+          });
+          customElem.init(this.world, obj.initialPos, obj.yawDegrees);
+          this.registerCustomElement(customElem);
+        }
         this.onMissionListChanged?.();
         return true;
       }
@@ -309,11 +322,21 @@ export class MissionManager {
   }
 
   public removeElement(id: string): void {
-    const elem = this.elements.get(id);
-    if (!elem) return;
-    this.rootGroup.remove(elem.rootGroup);
-    elem.destroy();
-    this.elements.delete(id);
+    const toRemove: string[] = [];
+    for (const [key, elem] of this.elements.entries()) {
+      if (key === id || elem.parentMissionId === id) {
+        toRemove.push(key);
+      }
+    }
+
+    for (const removeId of toRemove) {
+      const elem = this.elements.get(removeId);
+      if (elem) {
+        this.rootGroup.remove(elem.rootGroup);
+        elem.destroy();
+        this.elements.delete(removeId);
+      }
+    }
   }
 
   public setElementTransform(id: string, pos: { x: number; y: number; z: number }, yawDegrees?: number): void {

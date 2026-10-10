@@ -12,6 +12,7 @@ export interface CustomElementOptions {
   sourceFile?: string;
   isBaseFixed?: boolean;
   isSolidRigidMode?: boolean;
+  parentMissionId?: string;
 }
 
 /**
@@ -26,6 +27,8 @@ export class CustomImportedMissionElement implements MissionElement {
   public readonly name: string;
   public readonly description: string;
   public readonly sourceFile?: string;
+  public parentMissionId?: string;
+  public isDualLocked: boolean = true;
   public isPlacedOnField: boolean = true;
   public readonly rootGroup: THREE.Group;
 
@@ -36,6 +39,8 @@ export class CustomImportedMissionElement implements MissionElement {
   private isBaseFixed: boolean;
   private isSolidRigidMode: boolean;
   private groundCorrectionY: number = 0;
+  private dualLockMesh: THREE.Group | null = null;
+  private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
 
   // Physics Bodies
   private bodies: Map<string, RAPIER.RigidBody> = new Map();
@@ -43,7 +48,7 @@ export class CustomImportedMissionElement implements MissionElement {
   private joints: RAPIER.ImpulseJoint[] = [];
 
   // Visual Groups
-  private clusterMeshes: Map<string, THREE.Group> = new Map();
+  public readonly clusterMeshes: Map<string, THREE.Group> = new Map();
   private interactiveMeshes: THREE.Object3D[] = [];
 
   // Scored state
@@ -55,7 +60,9 @@ export class CustomImportedMissionElement implements MissionElement {
     this.name = options.name;
     this.description = options.description || `Imported mission model: ${options.name}`;
     this.sourceFile = options.sourceFile;
+    this.parentMissionId = options.parentMissionId;
     this.isBaseFixed = options.isBaseFixed ?? true;
+    this.isDualLocked = this.isBaseFixed;
     this.isSolidRigidMode = options.isSolidRigidMode ?? false;
     this.rootGroup = new THREE.Group();
   }
@@ -88,6 +95,98 @@ export class CustomImportedMissionElement implements MissionElement {
     return this.isBaseFixed;
   }
 
+  /**
+   * Sets Dual-Lock fastening status (true = fixed, false = dynamic)
+   */
+  public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }): void {
+    this.isDualLocked = locked;
+    this.isBaseFixed = locked;
+
+    if (anchorPoint) {
+      this.dualLockAnchorOffset = {
+        x: anchorPoint.x - this.basePos.x,
+        z: anchorPoint.z - this.basePos.z,
+      };
+    }
+
+    // Immediately update Rapier bodies without rebuilding
+    for (const [cid, body] of this.bodies.entries()) {
+      const cluster = this.spec.clusters.find((c) => c.clusterId === cid);
+      const shouldBeFixed = locked && (this.isSolidRigidMode || cluster?.isRootChassis || cluster?.isFixed !== false || this.spec.clusters.length === 1);
+      body.setBodyType(
+        shouldBeFixed ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic,
+        true
+      );
+      if (!shouldBeFixed) {
+        body.setLinearDamping(2.0);
+        body.setAngularDamping(3.0);
+        body.wakeUp();
+      }
+    }
+
+    this.updateDualLockVisualMesh();
+  }
+
+  public getDualLockPosition(): { x: number; z: number } | null {
+    if (!this.isDualLocked) return null;
+    return {
+      x: this.basePos.x + this.dualLockAnchorOffset.x,
+      z: this.basePos.z + this.dualLockAnchorOffset.z,
+    };
+  }
+
+  private updateDualLockVisualMesh(): void {
+    if (!this.dualLockMesh) {
+      this.dualLockMesh = this.createDualLockPadMesh();
+      this.rootGroup.add(this.dualLockMesh);
+    }
+
+    this.dualLockMesh.visible = this.isDualLocked;
+    if (this.isDualLocked) {
+      this.dualLockMesh.position.set(
+        this.dualLockAnchorOffset.x,
+        0.0015,
+        this.dualLockAnchorOffset.z
+      );
+    }
+  }
+
+  private createDualLockPadMesh(): THREE.Group {
+    const padGroup = new THREE.Group();
+    padGroup.name = 'dual-lock-pad';
+
+    // 1. Lower base plate (3M black plastic backing)
+    const baseGeo = new THREE.BoxGeometry(0.038, 0.003, 0.038);
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: 0x18181b,
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.y = 0.0015;
+    padGroup.add(baseMesh);
+
+    // 2. Interlocking Mushroom Grid Top (textured look)
+    const gridGeo = new THREE.BoxGeometry(0.034, 0.002, 0.034);
+    const gridMat = new THREE.MeshStandardMaterial({
+      color: 0x27272a,
+      roughness: 0.9,
+      metalness: 0.2,
+    });
+    const gridMesh = new THREE.Mesh(gridGeo, gridMat);
+    gridMesh.position.y = 0.0035;
+    padGroup.add(gridMesh);
+
+    // 3. Official 3M Dual Lock peel tab accent
+    const tabGeo = new THREE.BoxGeometry(0.008, 0.001, 0.008);
+    const tabMat = new THREE.MeshBasicMaterial({ color: 0xeab308 });
+    const tabMesh = new THREE.Mesh(tabGeo, tabMat);
+    tabMesh.position.set(0.015, 0.004, 0.015);
+    padGroup.add(tabMesh);
+
+    return padGroup;
+  }
+
   public getSpec(): RobotAssemblySpec {
     return this.spec;
   }
@@ -99,6 +198,7 @@ export class CustomImportedMissionElement implements MissionElement {
 
     this.createPhysicsAndVisuals();
     this.reset();
+    this.updateDualLockVisualMesh();
   }
 
   private createPhysicsAndVisuals(): void {
@@ -307,6 +407,12 @@ export class CustomImportedMissionElement implements MissionElement {
       const r = body.rotation();
       group.position.set(t.x, t.y, t.z);
       group.quaternion.set(r.x, r.y, r.z, r.w);
+
+      const cluster = this.spec.clusters.find((c) => c.clusterId === id);
+      if (cluster?.isRootChassis || id === 'chassis_root' || this.spec.clusters.length === 1) {
+        this.basePos.x = t.x;
+        this.basePos.z = t.z;
+      }
     }
   }
 
@@ -378,6 +484,11 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public destroy(): void {
+    if (this.dualLockMesh) {
+      this.rootGroup.remove(this.dualLockMesh);
+      this.dualLockMesh = null;
+    }
+
     for (const joint of this.joints) {
       this.world.removeImpulseJoint(joint, true);
     }

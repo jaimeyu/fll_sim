@@ -428,10 +428,12 @@ describe('FLL Mission Elements Physics Integration', () => {
       customElem.init(world, { x: 0.1, y: 0.002, z: -0.2 });
 
       // Visuals should contain real LEGO pieces (not coarse collider box)
-      expect(customElem.rootGroup.children.length).toBe(1);
-      const clusterGroup = customElem.rootGroup.children[0] as THREE.Group;
+      const clusterGroup = customElem.clusterMeshes.get('base_frame') as THREE.Group;
+      expect(clusterGroup).toBeDefined();
       // clusterGroup should have the 2 detailed parts
       expect(clusterGroup.children.length).toBe(2);
+      // Dual-lock pad is attached to rootGroup
+      expect(customElem.rootGroup.children.some((c) => c.name === 'dual-lock-pad')).toBe(true);
 
       // Verify ground correction: lowest part is at -16mm (-0.016m)
       // groundCorrectionY should be +0.016m so the lowest part sits exactly at y = 0.002m

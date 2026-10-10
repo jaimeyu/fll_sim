@@ -21,6 +21,10 @@ export class Viewport3D {
   public onElementDragMove?: (elementId: string, x: number, z: number, yawDegrees: number) => void;
   public onElementDrop?: (elementId: string, x: number, z: number, yawDegrees: number) => void;
   public onElementSelected?: (elementId: string | null) => void;
+  public onDualLockToggle?: (elementId: string, locked: boolean, point: { x: number; z: number }) => void;
+
+  private isDualLockToolActive: boolean = false;
+  private dualLockHoverPad!: THREE.Group;
 
   private tableMesh!: THREE.Group;
   private container: HTMLElement;
@@ -91,6 +95,7 @@ export class Viewport3D {
     // 7. Interactive Drag-and-Drop Placement Support
     this.createDropReticle();
     this.createElementReticle();
+    this.createDualLockHoverPad();
     this.createRobotHitProxy();
     this.setupDragAndDrop();
 
@@ -451,6 +456,36 @@ export class Viewport3D {
     this.scene.add(this.elementReticle);
   }
 
+  private createDualLockHoverPad(): void {
+    this.dualLockHoverPad = new THREE.Group();
+    this.dualLockHoverPad.visible = false;
+
+    // Outer cyan highlight frame
+    const ringGeo = new THREE.RingGeometry(0.025, 0.040, 24);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    this.dualLockHoverPad.add(new THREE.Mesh(ringGeo, ringMat));
+
+    // 3D Pad box preview
+    const boxGeo = new THREE.BoxGeometry(0.040, 0.004, 0.040);
+    const boxMat = new THREE.MeshBasicMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.65,
+      wireframe: true,
+    });
+    const box = new THREE.Mesh(boxGeo, boxMat);
+    box.position.y = 0.002;
+    this.dualLockHoverPad.add(box);
+
+    this.scene.add(this.dualLockHoverPad);
+  }
+
   private createRobotHitProxy(): void {
     // Generous bounding hit cylinder around the robot (diameter 32cm, height 20cm)
     const geom = new THREE.CylinderGeometry(0.16, 0.16, 0.20, 16);
@@ -538,6 +573,18 @@ export class Viewport3D {
         }
       }
     }
+  }
+
+  public setDualLockToolActive(active: boolean): void {
+    this.isDualLockToolActive = active;
+    if (!active && this.dualLockHoverPad) {
+      this.dualLockHoverPad.visible = false;
+    }
+    this.container.style.cursor = active ? 'crosshair' : 'default';
+  }
+
+  public isDualLockToolActiveMode(): boolean {
+    return this.isDualLockToolActive;
   }
 
   private setupDragAndDrop(): void {
@@ -731,6 +778,24 @@ export class Viewport3D {
       if (e.button !== 0) return;
       const coords = getPointerCoords(e);
 
+      // 0. Check if Dual Lock Toolpoint mode is active
+      if (this.isDualLockToolActive) {
+        const entireElemHit = getMissionElementEntireHit(coords);
+        if (entireElemHit) {
+          const groundHit = getGroundIntersection(coords);
+          const clickPoint = groundHit ? { x: groundHit.x, z: groundHit.z } : entireElemHit.getPosition();
+          const willLock = !entireElemHit.isDualLocked;
+          if (entireElemHit.setDualLocked) {
+            entireElemHit.setDualLocked(willLock, clickPoint);
+          }
+          this.selectMissionElement(entireElemHit.id);
+          this.onDualLockToggle?.(entireElemHit.id, willLock, clickPoint);
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+      }
+
       // 1. Check if clicking sandbox mouse pusher tool
       if (isPusherHit(coords)) {
         this.isDraggingTool = true;
@@ -886,7 +951,18 @@ export class Viewport3D {
         this.isHoveringRobot = isRobotHit(coords);
         this.hoveredElement = getMissionElementEntireHit(coords);
 
-        if (
+        if (this.isDualLockToolActive) {
+          this.container.style.cursor = 'crosshair';
+          if (this.hoveredElement) {
+            const groundHit = getGroundIntersection(coords);
+            if (groundHit) {
+              this.dualLockHoverPad.position.set(groundHit.x, 0.002, groundHit.z);
+              this.dualLockHoverPad.visible = true;
+            }
+          } else {
+            this.dualLockHoverPad.visible = false;
+          }
+        } else if (
           isPusherHit(coords) ||
           getSpawnedBlockHit(coords) ||
           getMissionMechanismHit(coords) ||

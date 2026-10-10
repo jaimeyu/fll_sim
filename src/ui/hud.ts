@@ -31,6 +31,15 @@ export interface HudCallbacks {
   onToggleSeasonMission?: (id: string, enable: boolean) => void;
   onApplyMissionPreset?: (presetKey: string) => void;
   onOpenInspector?: (missionId?: string) => void;
+  onToggleDualLockTool?: (active: boolean) => void;
+  onToggleDualLockSelected?: () => void;
+  onToggleDualLockElement?: (id: string) => void;
+  onSaveFieldLayout?: () => void;
+  onLoadFieldLayout?: () => void;
+  onExportFieldLayout?: () => void;
+  onImportFieldLayout?: (file: File) => void;
+  onDualLockAllBases?: () => void;
+  onUnlockAllElements?: () => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string }> = {
@@ -168,6 +177,17 @@ export class SimulatorHud {
   private telemetryPanel!: HTMLElement;
   private isTelemetryOpen: boolean = true;
 
+  // Fastener & Dual Lock Toolbar
+  private fastenerToolbar!: HTMLElement;
+  private dualLockBadge!: HTMLElement;
+  private btnToggleDualLock!: HTMLElement;
+  private btnToggleSelectedLock!: HTMLButtonElement;
+  private btnSelLockIcon!: HTMLElement;
+  private btnSelLockText!: HTMLElement;
+  private fastenerTipBar!: HTMLElement;
+  private fastenerTipText!: HTMLElement;
+  private isDualLockToolActive: boolean = false;
+
   // Telemetry DOM elements
   private telemPosX!: HTMLElement;
   private telemYaw!: HTMLElement;
@@ -204,6 +224,7 @@ export class SimulatorHud {
     position: { x: number; y: number; z: number };
     yawDegrees: number;
     isCustom?: boolean;
+    isDualLocked?: boolean;
   }> = [];
 
   private isToolActive = true;
@@ -527,6 +548,50 @@ export class SimulatorHud {
         </div>
       </div>
 
+      <!-- Field Fastener & Dual Lock Toolbar (Above Telemetry Panel) -->
+      <div class="hud-field-fastener-toolbar" id="hud-field-fastener-toolbar">
+        <div class="fastener-toolbar-content">
+          <div class="fastener-tool-group">
+            <button id="btn-toggle-dual-lock-tool" class="btn btn-sm btn-fastener" title="Dual Lock Tool: Click any object on field to toggle 3M mat anchor">
+              <span class="fastener-icon">🔒</span>
+              <span class="fastener-title">Dual Lock</span>
+              <span class="badge badge-xs" id="dual-lock-badge">OFF</span>
+            </button>
+            <button id="btn-toggle-selected-lock" class="btn btn-sm btn-outline" title="Toggle Dual Lock for currently selected element" disabled>
+              <span id="btn-sel-lock-icon">📌</span>
+              <span id="btn-sel-lock-text">Lock Selected</span>
+            </button>
+          </div>
+          <div class="fastener-layout-group">
+            <button id="btn-save-layout" class="btn btn-sm btn-outline" title="Save current field layout & Dual Lock anchors (Local Storage)">
+              💾 Save
+            </button>
+            <button id="btn-load-layout" class="btn btn-sm btn-outline" title="Load saved layout from Local Storage">
+              📂 Load
+            </button>
+            <div class="dropdown-wrapper" style="position: relative;">
+              <button id="btn-layout-menu" class="btn btn-sm btn-outline" style="padding: 4px 8px;" title="Layout Options">
+                ⚙️
+              </button>
+              <div class="layout-dropdown-menu" id="layout-dropdown-menu" style="display: none;">
+                <button class="dropdown-item" id="menu-export-layout">📥 Export Layout JSON</button>
+                <label class="dropdown-item file-label">
+                  📤 Import Layout JSON
+                  <input type="file" id="menu-import-layout-file" accept=".json" style="display: none;">
+                </label>
+                <div class="dropdown-divider"></div>
+                <button class="dropdown-item" id="menu-lock-all-bases">🔒 Dual Lock All Bases</button>
+                <button class="dropdown-item" id="menu-unlock-all">🔓 Unlock All (Make Dynamic)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="fastener-tip-bar" id="fastener-tip-bar" style="display: none;">
+          <span class="tip-icon">🎯</span>
+          <span class="tip-text" id="fastener-tip-text">Dual Lock Tool Active: Click an object on the field to anchor it.</span>
+        </div>
+      </div>
+
       <!-- Bottom-Right Telemetry Card -->
       <div class="hud-telemetry-panel" id="hud-telemetry-panel">
         <div class="telem-header">
@@ -599,6 +664,16 @@ export class SimulatorHud {
     this.telemColorD = this.rootElement.querySelector('#telem-color-d')!;
     this.telemDist = this.rootElement.querySelector('#telem-dist')!;
     this.telemFps = this.rootElement.querySelector('#telem-fps')!;
+
+    // Fastener & Dual Lock Toolbar
+    this.fastenerToolbar = this.rootElement.querySelector('#hud-field-fastener-toolbar')!;
+    this.dualLockBadge = this.rootElement.querySelector('#dual-lock-badge')!;
+    this.btnToggleDualLock = this.rootElement.querySelector('#btn-toggle-dual-lock-tool')!;
+    this.btnToggleSelectedLock = this.rootElement.querySelector('#btn-toggle-selected-lock')!;
+    this.btnSelLockIcon = this.rootElement.querySelector('#btn-sel-lock-icon')!;
+    this.btnSelLockText = this.rootElement.querySelector('#btn-sel-lock-text')!;
+    this.fastenerTipBar = this.rootElement.querySelector('#fastener-tip-bar')!;
+    this.fastenerTipText = this.rootElement.querySelector('#fastener-tip-text')!;
 
     this.spawnInputX = this.rootElement.querySelector('#spawn-x')!;
     this.spawnInputZ = this.rootElement.querySelector('#spawn-z')!;
@@ -942,6 +1017,68 @@ export class SimulatorHud {
       this.toggleTelemetryPanel();
     });
 
+    // Fastener & Dual Lock Toolbar
+    this.btnToggleDualLock.addEventListener('click', () => {
+      this.isDualLockToolActive = !this.isDualLockToolActive;
+      this.setDualLockToolActive(this.isDualLockToolActive);
+      this.callbacks.onToggleDualLockTool?.(this.isDualLockToolActive);
+      this.logConsole(`Dual Lock Tool: ${this.isDualLockToolActive ? 'ENABLED (Click object on mat to anchor/unanchor)' : 'DISABLED'}`);
+    });
+
+    this.btnToggleSelectedLock.addEventListener('click', () => {
+      this.callbacks.onToggleDualLockSelected?.();
+    });
+
+    const btnSaveLayout = this.rootElement.querySelector('#btn-save-layout');
+    btnSaveLayout?.addEventListener('click', () => {
+      this.callbacks.onSaveFieldLayout?.();
+    });
+
+    const btnLoadLayout = this.rootElement.querySelector('#btn-load-layout');
+    btnLoadLayout?.addEventListener('click', () => {
+      this.callbacks.onLoadFieldLayout?.();
+    });
+
+    const btnLayoutMenu = this.rootElement.querySelector('#btn-layout-menu');
+    const layoutDropdown = this.rootElement.querySelector('#layout-dropdown-menu') as HTMLElement;
+    btnLayoutMenu?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = layoutDropdown.style.display !== 'none';
+      layoutDropdown.style.display = isOpen ? 'none' : 'block';
+    });
+
+    window.addEventListener('click', () => {
+      if (layoutDropdown) layoutDropdown.style.display = 'none';
+    });
+
+    const menuExport = this.rootElement.querySelector('#menu-export-layout');
+    menuExport?.addEventListener('click', () => {
+      this.callbacks.onExportFieldLayout?.();
+      layoutDropdown.style.display = 'none';
+    });
+
+    const menuImportFile = this.rootElement.querySelector('#menu-import-layout-file') as HTMLInputElement;
+    menuImportFile?.addEventListener('change', (e: any) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        this.callbacks.onImportFieldLayout?.(file);
+      }
+      menuImportFile.value = '';
+      layoutDropdown.style.display = 'none';
+    });
+
+    const menuLockAll = this.rootElement.querySelector('#menu-lock-all-bases');
+    menuLockAll?.addEventListener('click', () => {
+      this.callbacks.onDualLockAllBases?.();
+      layoutDropdown.style.display = 'none';
+    });
+
+    const menuUnlockAll = this.rootElement.querySelector('#menu-unlock-all');
+    menuUnlockAll?.addEventListener('click', () => {
+      this.callbacks.onUnlockAllElements?.();
+      layoutDropdown.style.display = 'none';
+    });
+
     // Mode dropdown change
     this.modeSelect.addEventListener('change', () => {
       const mode = this.modeSelect.value as SimulatorAppMode;
@@ -1184,6 +1321,41 @@ export class SimulatorHud {
     this.telemetryPanel.style.display = this.isTelemetryOpen ? 'block' : 'none';
     const btn = this.rootElement.querySelector('#btn-toggle-telemetry');
     btn?.classList.toggle('active', this.isTelemetryOpen);
+    this.fastenerToolbar?.classList.toggle('telemetry-collapsed', !this.isTelemetryOpen);
+  }
+
+  public setSelectedElement(id: string | null, isDualLocked = false, name = ''): void {
+    if (id) {
+      this.btnToggleSelectedLock.disabled = false;
+      this.btnSelLockIcon.textContent = isDualLocked ? '🔓' : '🔒';
+      this.btnSelLockText.textContent = isDualLocked ? 'Unfasten' : 'Lock Selected';
+      this.btnToggleSelectedLock.title = `${isDualLocked ? 'Unfasten from mat (make dynamic)' : 'Dual Lock to mat (anchor)'}: ${name || id}`;
+    } else {
+      this.btnToggleSelectedLock.disabled = true;
+      this.btnSelLockIcon.textContent = '📌';
+      this.btnSelLockText.textContent = 'Lock Selected';
+      this.btnToggleSelectedLock.title = 'No element currently selected';
+    }
+  }
+
+  public setDualLockToolActive(active: boolean): void {
+    this.isDualLockToolActive = active;
+    this.btnToggleDualLock.classList.toggle('active', active);
+    this.dualLockBadge.textContent = active ? 'ACTIVE' : 'OFF';
+    this.dualLockBadge.className = `badge badge-xs ${active ? 'badge-success' : ''}`;
+    this.fastenerTipBar.style.display = active ? 'flex' : 'none';
+  }
+
+  public showFastenerStatus(text: string, durationMs = 3000): void {
+    this.fastenerTipText.textContent = text;
+    this.fastenerTipBar.style.display = 'flex';
+    if (!this.isDualLockToolActive) {
+      setTimeout(() => {
+        if (!this.isDualLockToolActive) {
+          this.fastenerTipBar.style.display = 'none';
+        }
+      }, durationMs);
+    }
   }
 
   public toggleAssetDrawer(open?: boolean): void {
@@ -1206,6 +1378,7 @@ export class SimulatorHud {
       position: { x: number; y: number; z: number };
       yawDegrees: number;
       isCustom?: boolean;
+      isDualLocked?: boolean;
     }>,
     seasonStatus?: Array<{
       spec: SeasonMissionSpec;
@@ -1240,6 +1413,9 @@ export class SimulatorHud {
             <div class="card-actions-row">
               <button class="btn btn-xs ${elem.isPlacedOnField !== false ? 'btn-danger' : 'btn-success'}" data-action="toggle-placed" data-id="${elem.id}">
                 ${elem.isPlacedOnField !== false ? '➖ Stow in Drawer' : '➕ Place on Field'}
+              </button>
+              <button class="btn btn-xs ${elem.isDualLocked ? 'btn-fixed' : 'btn-dynamic'}" data-action="toggle-lock" data-id="${elem.id}" title="Toggle 3M Dual Lock anchor to field mat">
+                ${elem.isDualLocked ? '🔒 Dual-Locked' : '🔄 Dynamic'}
               </button>
               <button class="btn btn-xs btn-outline" data-action="focus" data-id="${elem.id}">
                 🔍 Focus
@@ -1342,6 +1518,13 @@ export class SimulatorHud {
           this.callbacks.onElementTogglePlaced?.(id, placed);
           this.setMissionElements(this.missionElementsData);
         }
+      });
+    });
+
+    this.drawerElementsList.querySelectorAll('[data-action="toggle-lock"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id')!;
+        this.callbacks.onToggleDualLockElement?.(id);
       });
     });
 
