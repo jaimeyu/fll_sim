@@ -54,7 +54,16 @@ body, html {
   flex-direction: column;
 }
 
-.hud-topbar, .hud-activity-bar, .hud-drawer-panel, .hud-floating-terminal, .hud-telemetry-panel, .hud-telemetry-dock, .hud-sandbox-toolbar {
+.hud-topbar,
+.hud-activity-bar,
+.hud-drawer-panel,
+.hud-floating-terminal,
+.hud-telemetry-panel,
+.hud-telemetry-dock,
+.hud-sandbox-toolbar,
+.hud-profiler-modal,
+.hud-robot-design-modal,
+.hud-popout-code-modal {
   pointer-events: auto;
 }
 
@@ -3647,8 +3656,7 @@ body, html {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  min-height: 420px;
-  max-height: 520px;
+  min-height: 200px;
   background: #090d16;
   border: 1px solid var(--border-color);
   border-top: none;
@@ -3704,7 +3712,7 @@ body, html {
   flex: 1;
   width: 100%;
   height: 100%;
-  min-height: 380px;
+  min-height: 160px;
   overflow: hidden;
   position: relative;
   cursor: grab;
@@ -3738,6 +3746,11 @@ body, html {
   justify-content: center;
   z-index: 520;
   user-select: none;
+  pointer-events: auto;
+}
+
+.hud-robot-design-modal * {
+  pointer-events: auto;
 }
 
 .modal-robot-design-backdrop {
@@ -3745,11 +3758,13 @@ body, html {
   inset: 0;
   background: rgba(3, 7, 18, 0.75);
   backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
 .robot-design-modal-card {
   position: relative;
   z-index: 1;
+  pointer-events: auto;
   width: 92%;
   max-width: 860px;
   max-height: 88vh;
@@ -4083,6 +4098,11 @@ body, html {
   justify-content: center;
   z-index: 550;
   user-select: none;
+  pointer-events: auto;
+}
+
+.hud-popout-code-modal * {
+  pointer-events: auto;
 }
 
 .popout-code-backdrop {
@@ -4090,11 +4110,13 @@ body, html {
   inset: 0;
   background: rgba(3, 7, 18, 0.82);
   backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
 .popout-code-card {
   position: relative;
   z-index: 1;
+  pointer-events: auto;
   width: 92vw;
   max-width: 1400px;
   height: 86vh;
@@ -4189,12 +4211,14 @@ body, html {
   outline: none;
   resize: none;
   box-sizing: border-box;
+  user-select: text;
 }
 
 .popout-editor-container .scratch-blocks-container {
   flex: 1;
   height: 100%;
   min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
 }

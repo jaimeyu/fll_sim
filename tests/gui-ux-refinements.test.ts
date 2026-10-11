@@ -162,6 +162,24 @@ describe('GUI & UX Refinements: Startup View, Pop-out Code Editor, and Telemetry
       expect(cssCode).toMatch(/\.popout-code-card\s*\{[^}]*height:\s*86vh/);
       expect(cssCode).toMatch(/\.popout-code-card\s*\{[^}]*max-height:\s*900px/);
     });
+
+    it('enables pointer-events: auto on .hud-popout-code-modal and .hud-robot-design-modal so all clicks register', () => {
+      const cssCode = fs.readFileSync(hudCssPath, 'utf-8');
+
+      // Top-level root override includes modal classes
+      expect(cssCode).toMatch(/\.hud-robot-design-modal,\s*\.hud-popout-code-modal\s*\{\s*pointer-events:\s*auto;/);
+      // Dedicated modal class definitions have pointer-events: auto
+      expect(cssCode).toMatch(/\.hud-popout-code-modal\s*\{[^}]*pointer-events:\s*auto;/);
+      expect(cssCode).toMatch(/\.hud-robot-design-modal\s*\{[^}]*pointer-events:\s*auto;/);
+    });
+
+    it('provides top bar code editor modal button #btn-topbar-code for direct access', () => {
+      const hudCode = fs.readFileSync(hudTsPath, 'utf-8');
+
+      expect(hudCode).toContain('id="btn-topbar-code"');
+      expect(hudCode).toContain('💻 Code Editor');
+      expect(hudCode).toContain("btnTopbarCode?.addEventListener('click'");
+    });
   });
 
   // =========================================================================

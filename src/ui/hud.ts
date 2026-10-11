@@ -650,6 +650,7 @@ export class SimulatorHud {
           <button id="btn-topbar-reset" class="btn btn-sm btn-warning" title="Reset Robot to Start Pose">↺ RESET</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-floating-terminal" title="Toggle Floating Debug Terminal Window">📟 Terminal</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-telemetry" title="Toggle Live Telemetry Card">📡 Telemetry</button>
+          <button class="btn btn-sm btn-outline" id="btn-topbar-code" title="Open Code &amp; Word Blocks Editor (Modal)">💻 Code Editor</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-robot-design" title="Robot Design & Hardware Port Inspector">🤖 Robot Design</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
         </div>
@@ -2340,13 +2341,19 @@ export class SimulatorHud {
     const actBtns = this.rootElement.querySelectorAll('.activity-btn[data-view]');
     actBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
-        const view = btn.getAttribute('data-view') as 'code' | 'assets' | 'fastener' | 'field' | 'terminal';
+        const view = btn.getAttribute('data-view') as 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal';
         if (view === this.activeView && this.isDrawerOpen) {
           this.toggleDrawer(false);
         } else {
           this.setActiveDrawerJob(view);
         }
       });
+    });
+
+    // Top Bar Code Editor Pop-out Modal Button
+    const btnTopbarCode = this.rootElement.querySelector('#btn-topbar-code');
+    btnTopbarCode?.addEventListener('click', () => {
+      this.openPopoutCodeEditor();
     });
 
     // Top Bar CAD Inspector Button
@@ -4441,6 +4448,14 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     this.drawerPanelIcon.textContent = t.icon;
     this.drawerPanelTitle.textContent = t.title;
 
+    if (view === 'code') {
+      this.setEditorViewMode(this.editorViewMode);
+      if (this.editorViewMode === 'blocks') {
+        this.renderVisualBlocks();
+        this.updateScratchTransform();
+      }
+    }
+
     if (view === 'fastener') {
       this.renderFastenerRoster();
     }
@@ -4460,6 +4475,13 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
         btn.classList.toggle('active', btn.getAttribute('data-view') === this.activeView);
       }
     });
+    if (this.isDrawerOpen && this.activeView === 'code') {
+      this.setEditorViewMode(this.editorViewMode);
+      if (this.editorViewMode === 'blocks') {
+        this.renderVisualBlocks();
+        this.updateScratchTransform();
+      }
+    }
   }
 
   public toggleFloatingTerminal(open?: boolean): void {
@@ -5568,6 +5590,7 @@ print("Finished!")
     const btnDockBack = this.rootElement.querySelector('#btn-popout-dock-back') as HTMLButtonElement | null;
     btnDockBack?.addEventListener('click', () => {
       this.closePopoutCodeEditor();
+      this.setActiveDrawerJob('code');
     });
 
     const btnDone = this.rootElement.querySelector('#btn-popout-done') as HTMLButtonElement | null;

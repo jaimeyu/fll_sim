@@ -256,6 +256,9 @@ describe('GUI & UX Overhaul - Group 4 & Group 5: Top Bar Robot Design & Port Map
       expect(cssCode).toContain('.port-status-badge.status-disabled');
       expect(cssCode).toContain('.port-select');
       expect(cssCode).toContain('.robot-design-modal-footer');
+      expect(cssCode).toMatch(/\.hud-robot-design-modal\s*\{[^}]*pointer-events:\s*auto;/);
+      expect(cssCode).toMatch(/\.modal-robot-design-backdrop\s*\{[^}]*pointer-events:\s*auto;/);
+      expect(cssCode).toMatch(/\.robot-design-modal-card\s*\{[^}]*pointer-events:\s*auto;/);
     });
   });
 });
