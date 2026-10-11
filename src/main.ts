@@ -14,6 +14,7 @@ import { FieldLayoutManager } from './missions/field-layout-manager';
 import { CadModelInspector } from './ui/cad-inspector';
 import './ui/cad-inspector.css';
 import { profiler } from './core/performance-profiler';
+import { getFllAdvanceDrivingBaseSpec, getFllCompactDrivingBaseSpec } from './cad/models/advance-driving-base';
 
 async function bootstrapSimulator() {
   const viewportContainer = document.getElementById('viewport-container');
@@ -84,7 +85,8 @@ async function bootstrapSimulator() {
 
   // 6. Initialize Simulator HUD & Controls
   let cadInspector: CadModelInspector;
-  const hud = new SimulatorHud(document.body, {
+  let hud: SimulatorHud;
+  hud = new SimulatorHud(document.body, {
     onRunScript: async (code: string) => {
       hud.stopAllManualDriving();
       hud.logConsole('Executing SPIKE Python script...');
@@ -277,13 +279,22 @@ async function bootstrapSimulator() {
       }
     },
     onOpenInspector: (missionId?: string) => {
-      const targetId = missionId || 'M01';
-      const elem = missionManager.getElement(targetId);
-      if (elem && (elem as any).spec) {
-        cadInspector.open(targetId);
-        cadInspector.inspectSpec((elem as any).spec, elem.name, elem.id);
+      const activePreset = hud ? hud.getActiveRobotPreset() : 'advanced';
+      const targetId = missionId || (activePreset === 'compact' ? 'ROBOT_COMPACT' : 'ROBOT_DROIDBOT');
+      if (targetId === 'ROBOT_DROIDBOT') {
+        cadInspector.open('ROBOT_DROIDBOT');
+        cadInspector.inspectSpec(getFllAdvanceDrivingBaseSpec(), 'DroidBot-E Advance Driving Base', 'ROBOT_DROIDBOT');
+      } else if (targetId === 'ROBOT_COMPACT') {
+        cadInspector.open('ROBOT_COMPACT');
+        cadInspector.inspectSpec(getFllCompactDrivingBaseSpec(), 'Compact SPIKE Prime Base', 'ROBOT_COMPACT');
       } else {
-        cadInspector.open(targetId);
+        const elem = missionManager.getElement(targetId);
+        if (elem && (elem as any).spec) {
+          cadInspector.open(targetId);
+          cadInspector.inspectSpec((elem as any).spec, elem.name, elem.id);
+        } else {
+          cadInspector.open(targetId);
+        }
       }
     },
     onModeChange: (mode) => {
@@ -477,7 +488,7 @@ async function bootstrapSimulator() {
     },
     onRobotPresetChange: (preset) => {
       robotRenderer.setRobotPreset(preset);
-      hud.logConsole(
+      hud?.logConsole?.(
         `🤖 Field robot visual model updated to: ${
           preset === 'advanced'
             ? 'DroidBot-E (Dual Color Sensors + Ultrasonic + Articulated Motor Arms)'

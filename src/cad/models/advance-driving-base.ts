@@ -182,3 +182,21 @@ export function getFllAdvanceDrivingBaseSpec(): RobotAssemblySpec {
   const input = createFllAdvanceDrivingBaseAssembly();
   return CadClusteringPreSolver.solve(input);
 }
+
+export function createFllCompactDrivingBaseAssembly(): PreSolverInput {
+  const adv = createFllAdvanceDrivingBaseAssembly();
+  const parts = adv.parts.filter((p) => p.id !== 'sensor_color_d');
+  const links = adv.links.filter(
+    (l) => l.toPartId !== 'sensor_color_d' && l.fromPartId !== 'sensor_color_d'
+  );
+  return {
+    name: 'Compact SPIKE Prime Base',
+    parts,
+    links,
+  };
+}
+
+export function getFllCompactDrivingBaseSpec(): RobotAssemblySpec {
+  const input = createFllCompactDrivingBaseAssembly();
+  return CadClusteringPreSolver.solve(input);
+}

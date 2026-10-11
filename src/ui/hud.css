@@ -3679,6 +3679,57 @@ body, html {
   margin-left: 2px;
 }
 
+#btn-editor-fps-profiler {
+  display: none !important;
+}
+
+.btn-telem-fps-profiler {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  color: #f8fafc;
+}
+
+.btn-telem-fps-profiler:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-telem-fps-profiler .fps-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulseDot 1.5s infinite;
+}
+
+.btn-telem-fps-profiler .fps-badge {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.btn-telem-fps-profiler .fps-btn-tag {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 2px;
+}
+
 /* Scratch Block Viewer Container & Pan/Zoom Viewport */
 .scratch-blocks-container {
   display: flex;
@@ -4249,7 +4300,19 @@ body, html {
   min-height: 0;
   max-height: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+}
+
+.popout-editor-container .spike-blocks-workspace {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  position: relative !important;
 }
 
 .popout-code-footer {
@@ -4375,6 +4438,10 @@ body, html {
 /* 1. Category Sidebar (far left vertical strip) */
 .spike-category-sidebar {
   width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  height: 100%;
+  min-height: 0;
   background: #0b1120;
   border-right: 1px solid rgba(56, 189, 248, 0.2);
   display: flex;
@@ -4385,6 +4452,7 @@ body, html {
   flex-shrink: 0;
   user-select: none;
   z-index: 5;
+  overflow-y: auto;
 }
 
 .spike-cat-btn {
@@ -4438,6 +4506,10 @@ body, html {
 /* 2. Block Palette Drawer (scrollable list of blocks) */
 .spike-palette-drawer {
   width: 320px;
+  min-width: 320px;
+  max-width: 320px;
+  height: 100%;
+  min-height: 0;
   background: #0f172a;
   border-right: 1px solid rgba(56, 189, 248, 0.2);
   display: flex;

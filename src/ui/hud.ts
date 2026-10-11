@@ -1035,11 +1035,6 @@ export class SimulatorHud {
           <span class="act-icon">📟</span>
           <span class="act-label">Terminal</span>
         </button>
-        <div class="act-spacer"></div>
-        <button class="activity-btn" id="act-btn-cad" title="🔬 LEGO CAD Model Inspector & Step Debugger">
-          <span class="act-icon">🔬</span>
-          <span class="act-label">CAD</span>
-        </button>
       </nav>
 
       <!-- Left Resizable Multi-Job Drawer Panel -->
@@ -1505,7 +1500,11 @@ export class SimulatorHud {
           <div class="telem-header-left">
             <span class="telem-header-icon">📡</span>
             <span class="telem-header-title">ROBOT TELEMETRY &amp; DIAGNOSTICS</span>
-            <span id="telem-fps" class="fps-badge">60 FPS • 60 Hz</span>
+            <button class="btn btn-xs btn-outline btn-telem-fps-profiler" id="btn-telem-fps-profiler" title="Click to open Simulation &amp; Render Performance Profiler">
+              <span class="fps-pulse-dot" id="telem-fps-dot"></span>
+              <span id="telem-fps" class="fps-badge">60 FPS • 60 Hz</span>
+              <span class="fps-btn-tag">🔬 Profiler</span>
+            </button>
           </div>
 
           <!-- Mini Summary Bar (Shown when collapsed) -->
@@ -2545,6 +2544,12 @@ export class SimulatorHud {
       this.openProfilerModal();
     });
 
+    // Telemetry Dock FPS Profiler button
+    const btnTelemFps = this.rootElement.querySelector('#btn-telem-fps-profiler') as HTMLButtonElement | null;
+    btnTelemFps?.addEventListener('click', () => {
+      this.openProfilerModal();
+    });
+
     // Scratch visual block viewer pan & zoom setup
     this.setupScratchPanAndZoom();
 
@@ -2767,16 +2772,7 @@ export class SimulatorHud {
     // Top Bar CAD Inspector Button
     const btnTopbarInspector = this.rootElement.querySelector('#btn-topbar-inspector');
     btnTopbarInspector?.addEventListener('click', () => {
-      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
-      const targetId = activePlaced ? activePlaced.id : 'M01';
-      this.callbacks.onOpenInspector?.(targetId);
-    });
-
-    // Activity Bar CAD Inspector Button
-    const actBtnCad = this.rootElement.querySelector('#act-btn-cad');
-    actBtnCad?.addEventListener('click', () => {
-      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
-      const targetId = activePlaced ? activePlaced.id : 'M01';
+      const targetId = this.activeRobotPreset === 'advanced' ? 'ROBOT_DROIDBOT' : 'ROBOT_COMPACT';
       this.callbacks.onOpenInspector?.(targetId);
     });
 
@@ -3056,8 +3052,7 @@ export class SimulatorHud {
     const btnDesignOpenInspector = this.rootElement.querySelector('#btn-design-open-cad-inspector');
     btnDesignOpenInspector?.addEventListener('click', () => {
       this.closeRobotDesignModal();
-      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
-      const targetId = activePlaced ? activePlaced.id : 'M01';
+      const targetId = this.activeRobotPreset === 'advanced' ? 'ROBOT_DROIDBOT' : 'ROBOT_COMPACT';
       this.callbacks.onOpenInspector?.(targetId);
     });
 

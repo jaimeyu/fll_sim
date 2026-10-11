@@ -218,6 +218,8 @@ export class RobotPhysicsBody {
   public brakeChassisAndWheels(): void {
     this.straightTargetYaw = null;
     for (const wb of this.wheelBodies.values()) {
+      wb.resetForces(true);
+      wb.resetTorques(true);
       wb.setAngularDamping(50.0);
       wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
       const wLin = wb.linvel();
@@ -228,6 +230,8 @@ export class RobotPhysicsBody {
         (joint as any).configureMotorVelocity(0.0, 5.0);
       } catch (_) {}
     }
+    this.chassisBody.resetForces(true);
+    this.chassisBody.resetTorques(true);
     this.chassisBody.setAngularDamping(20.0);
     this.chassisBody.setLinearDamping(20.0);
     const lin = this.chassisBody.linvel();
@@ -363,6 +367,8 @@ export class RobotPhysicsBody {
 
     if (!anyDriveActive) {
       // Both drive motors idle: apply holding brake to chassis and wheels to eliminate residual coasting
+      this.chassisBody.resetForces(true);
+      this.chassisBody.resetTorques(true);
       this.chassisBody.setLinearDamping(20.0);
       this.chassisBody.setAngularDamping(20.0);
       const cv = this.chassisBody.linvel();
@@ -374,6 +380,8 @@ export class RobotPhysicsBody {
         this.chassisBody.setLinvel({ x: cv.x * 0.4, y: cv.y, z: cv.z * 0.4 }, true);
       }
       for (const wb of this.wheelBodies.values()) {
+        wb.resetForces(true);
+        wb.resetTorques(true);
         wb.setLinvel({ x: 0, y: wb.linvel().y, z: 0 }, true);
         wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
         wb.setAngularDamping(50.0);
@@ -426,34 +434,45 @@ export class RobotPhysicsBody {
     // 1. Reset root chassis body
     this.chassisBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.chassisBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.chassisBody.resetForces(true);
+    this.chassisBody.resetTorques(true);
+    this.chassisBody.setLinearDamping(20.0);
+    this.chassisBody.setAngularDamping(20.0);
     this.chassisBody.setTranslation({ x: pose.x, y: pose.y, z: pose.z }, true);
     this.chassisBody.setRotation({ x: 0, y: qy, z: 0, w: qw }, true);
 
     // 2. Reset wheel bodies
-    const nonRootClusters = this.spec.clusters.filter((c) => !c.isRootChassis);
-    for (const cluster of nonRootClusters) {
-      if (cluster.name === 'Drive Wheel') {
-        const wheelBody = this.wheelBodies.get(cluster.clusterId);
-        if (!wheelBody) continue;
-        const jointSpec = this.spec.joints.find((j) => j.childClusterId === cluster.clusterId);
-        const anchor = jointSpec?.anchorParent || [0, 0, 0];
-        const rotatedAnchor = rotateLocal(anchor[0], anchor[1], anchor[2]);
+    for (const [clusterId, wheelBody] of this.wheelBodies.entries()) {
+      const jointSpec = this.spec.joints.find((j) => j.childClusterId === clusterId);
+      const anchor = jointSpec?.anchorParent || [0, 0, 0];
+      const rotatedAnchor = rotateLocal(anchor[0], anchor[1], anchor[2]);
 
-        wheelBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        wheelBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
-        wheelBody.setTranslation({
-          x: pose.x + rotatedAnchor.x,
-          y: pose.y + rotatedAnchor.y,
-          z: pose.z + rotatedAnchor.z,
-        }, true);
-        wheelBody.setRotation({ x: 0, y: qy, z: 0, w: qw }, true);
-      }
+      wheelBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      wheelBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      wheelBody.resetForces(true);
+      wheelBody.resetTorques(true);
+      wheelBody.setAngularDamping(50.0);
+      wheelBody.setLinearDamping(20.0);
+      wheelBody.setTranslation({
+        x: pose.x + rotatedAnchor.x,
+        y: pose.y + rotatedAnchor.y,
+        z: pose.z + rotatedAnchor.z,
+      }, true);
+      wheelBody.setRotation({ x: 0, y: qy, z: 0, w: qw }, true);
     }
 
-    // 3. Reset motors
+    // 3. Reset joint motors & constraint damping
+    for (const joint of this.joints.values()) {
+      try {
+        (joint as any).configureMotorVelocity(0.0, 0.0);
+        (joint as any).setMotorMaxForce(0.0);
+      } catch (_) {}
+    }
+
+    // 4. Reset motors
     for (const motor of this.motors.values()) {
       motor.resetDegrees();
-      motor.stop();
+      motor.stop('BRAKE');
     }
   }
 }

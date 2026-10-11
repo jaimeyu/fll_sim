@@ -13,6 +13,7 @@ import {
   getMissionArenaPosition,
 } from '../missions/season-config';
 import { resolveAssetUrl } from '../utils/asset-path';
+import { getFllAdvanceDrivingBaseSpec, getFllCompactDrivingBaseSpec } from '../cad/models/advance-driving-base';
 
 export interface CadInspectorCallbacks {
   onDeployToField?: (missionId: string, customSpec?: RobotAssemblySpec) => void;
@@ -138,7 +139,13 @@ export class CadModelInspector {
           </div>
           <div class="inspector-header-controls">
             <select id="inspector-mission-select" class="hud-select hud-select-sm">
-              ${SEASON_MISSIONS_CONFIG.map((m) => `<option value="${m.id}">${m.id}: ${m.name}</option>`).join('')}
+              <optgroup label="🤖 Competition Robots">
+                <option value="ROBOT_DROIDBOT">🤖 DroidBot-E (Advance Driving Base)</option>
+                <option value="ROBOT_COMPACT">🤖 Compact SPIKE Prime Base</option>
+              </optgroup>
+              <optgroup label="🏆 Season Mission Models">
+                ${SEASON_MISSIONS_CONFIG.map((m) => `<option value="${m.id}">${m.id}: ${m.name}</option>`).join('')}
+              </optgroup>
               <option value="custom">📁 Custom Model (Upload...)</option>
             </select>
             <label class="btn btn-sm btn-secondary file-upload-btn" title="Inspect custom .io or .ldr file">
@@ -1017,6 +1024,17 @@ export class CadModelInspector {
     if (select) {
       const exists = Array.from(select.options).some((o) => o.value === missionId);
       if (exists) select.value = missionId;
+    }
+
+    if (missionId === 'ROBOT_DROIDBOT') {
+      const spec = getFllAdvanceDrivingBaseSpec();
+      this.inspectSpec(spec, 'DroidBot-E Advance Driving Base', 'ROBOT_DROIDBOT');
+      return;
+    }
+    if (missionId === 'ROBOT_COMPACT') {
+      const spec = getFllCompactDrivingBaseSpec();
+      this.inspectSpec(spec, 'Compact SPIKE Prime Base', 'ROBOT_COMPACT');
+      return;
     }
 
     let specConfig = SEASON_MISSIONS_CONFIG.find((m) => m.id === missionId);
