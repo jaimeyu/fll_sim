@@ -18,6 +18,32 @@ export interface CommandLogEntry {
   message: string;
 }
 
+export interface RobotPortMapping {
+  driveLeft: string;
+  driveRight: string;
+  aux1: string;
+  aux2: string;
+  aux3: string;
+  aux4: string;
+  colorLeft: string;
+  colorRight: string;
+  ultrasonic: string;
+  imu: string;
+}
+
+export const DEFAULT_PORT_MAPPING: RobotPortMapping = {
+  driveLeft: 'A',
+  driveRight: 'B',
+  aux1: 'C',
+  aux2: 'D',
+  aux3: 'E',
+  aux4: 'F',
+  colorLeft: 'C',
+  colorRight: 'D',
+  ultrasonic: 'E',
+  imu: 'HUB_GYRO',
+};
+
 export interface HudCallbacks {
   onRunScript: (script: string) => void;
   onStopScript: () => void;
@@ -59,6 +85,8 @@ export interface HudCallbacks {
   onManualMotorStop?: (port: MotorPort) => void;
   onResetEncoders?: () => void;
   onResetGyro?: () => void;
+  onRobotPresetChange?: (preset: 'advanced' | 'compact') => void;
+  onPortMappingChange?: (mappings: RobotPortMapping) => void;
 }
 
 export const SAMPLE_MISSIONS: Record<string, { title: string; code: string; visualBlocks?: VisualBlock[] }> = {
@@ -420,9 +448,17 @@ export class SimulatorHud {
   private floatingTermLog!: HTMLElement;
   private isFloatingTermOpen: boolean = false;
 
-  // Telemetry Panel toggle state
+  // Telemetry Panel toggle & dock state
   private telemetryPanel!: HTMLElement;
   private isTelemetryOpen: boolean = true;
+  private telemDockMode: 'bottom' | 'right' = 'bottom';
+  private telemDockCollapsed: boolean = false;
+  private telemSubView: 'sensors' | 'motors' | 'both' = 'sensors';
+  // Visual Scratch Block Pan & Zoom state & Imported Missions
+  private scratchZoomScale: number = 1.0;
+  private scratchPanX: number = 0;
+  private scratchPanY: number = 0;
+  private importedMissions: Map<string, { title: string; code: string; visualBlocks?: VisualBlock[] }> = new Map();
 
   // Fastener & Dual Lock Sidebar Utility
   private fastenerCountBadge!: HTMLElement;
@@ -481,6 +517,14 @@ export class SimulatorHud {
   private bottomFpsMs!: HTMLElement;
   private profilerModal!: HTMLElement;
   private isProfilerModalOpen: boolean = false;
+
+  // Robot Design & Hardware Port Inspector Modal
+  private robotDesignModal!: HTMLElement;
+  private isRobotDesignModalOpen: boolean = false;
+  private activeRobotPreset: 'advanced' | 'compact' = 'advanced';
+  private portMappings: RobotPortMapping = { ...DEFAULT_PORT_MAPPING };
+  private readonly PORT_STORAGE_KEY = 'fll_robot_port_mappings';
+  private readonly ROBOT_PRESET_STORAGE_KEY = 'fll_robot_active_preset';
 
   // Spawn pose configuration elements
   private spawnInputX!: HTMLInputElement;
@@ -543,12 +587,15 @@ export class SimulatorHud {
   constructor(container: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
     this.loadScriptTabsFromStorage();
+    this.loadPortMappingsFromStorage();
     this.rootElement = document.createElement('div');
     this.rootElement.className = 'fll-hud-root';
     container.appendChild(this.rootElement);
 
     this.render();
     this.setupEvents();
+    this.syncPortMappingUI();
+    this.selectRobotPreset(this.activeRobotPreset);
     this.startMatchTimer();
   }
 
@@ -572,8 +619,8 @@ export class SimulatorHud {
             <span class="timer-value" id="hud-match-timer">02:30</span>
           </div>
           <div class="hud-camera-buttons">
-            <button class="btn btn-sm btn-outline active" data-cam="ISO">📐 3D Iso</button>
-            <button class="btn btn-sm btn-outline" data-cam="TOP_DOWN">🗺️ Top-Down</button>
+            <button class="btn btn-sm btn-outline" data-cam="ISO">📐 3D Iso</button>
+            <button class="btn btn-sm btn-outline active" data-cam="TOP_DOWN">🗺️ Top-Down</button>
             <button class="btn btn-sm btn-outline" data-cam="FOLLOW">🎥 Follow</button>
           </div>
         </div>
@@ -593,6 +640,7 @@ export class SimulatorHud {
           <button id="btn-topbar-reset" class="btn btn-sm btn-warning" title="Reset Robot to Start Pose">↺ RESET</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-floating-terminal" title="Toggle Floating Debug Terminal Window">📟 Terminal</button>
           <button class="btn btn-sm btn-outline" id="btn-toggle-telemetry" title="Toggle Live Telemetry Card">📡 Telemetry</button>
+          <button class="btn btn-sm btn-outline" id="btn-topbar-robot-design" title="Robot Design & Hardware Port Inspector">🤖 Robot Design</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
         </div>
       </header>
@@ -656,14 +704,19 @@ export class SimulatorHud {
 
         <!-- View 1: Python Code & Word Blocks Editor -->
         <div class="drawer-view-content" id="view-content-code">
-          <div class="mission-select-container">
-            <label for="mission-select">Sample Mission:</label>
-            <select id="mission-select" class="hud-select">
+          <div class="sample-mission-bar mission-select-container" id="sample-mission-bar">
+            <label for="sample-select" class="sample-select-label">📜 Mission:</label>
+            <select id="sample-select" class="hud-select hud-select-sm" title="Select Sample Mission">
               <option value="drive_straight">Mission 1: Drive Straight (30 cm)</option>
               <option value="gyro_turn">Mission 2: Gyro 90° Turn</option>
               <option value="line_follower">Mission 3: Proportional Line Follower</option>
               <option value="line_squaring">Mission 4: Dual-Sensor Line Squaring</option>
             </select>
+            <button class="btn btn-xs btn-secondary" id="btn-import-code" title="Import Code (.py, .llsp, .llsp3, .sb3, .json)">
+              📥 Import Code
+            </button>
+            <input type="file" id="input-import-code" accept=".py,.llsp,.llsp3,.sb3,.json" style="display: none;">
+            <input type="file" id="spike-scratch-file-input" accept=".llsp,.llsp3,.sb3,.json" style="display: none;">
           </div>
 
           <div class="script-tabs-bar">
@@ -671,25 +724,47 @@ export class SimulatorHud {
             <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page">➕ New Script</button>
           </div>
 
-          <div class="code-editor-header-bar">
+          <div class="code-editor-header-bar editor-header-bar">
             <div class="editor-view-mode-toggle">
               <button class="btn btn-xs btn-outline active" id="btn-view-mode-blocks" title="View as Visual SPIKE Word Blocks">🧩 Word Blocks</button>
               <button class="btn btn-xs btn-outline" id="btn-view-mode-python" title="View as SPIKE Python Code">💻 Python</button>
             </div>
-            <div class="editor-import-actions">
-              <label class="btn btn-xs btn-secondary file-upload-btn" title="Import LEGO SPIKE Prime App Word Blocks (.llsp, .llsp3, .sb3, .json)">
-                📥 Import SPIKE (.llsp3)
-                <input type="file" id="spike-scratch-file-input" accept=".llsp,.llsp3,.sb3,.json" style="display: none;">
-              </label>
+            <div class="editor-header-actions">
+              <button id="btn-editor-fps-profiler" class="btn btn-xs btn-outline btn-fps-profiler" title="Simulation &amp; Render Performance Profiler">
+                <span class="fps-pulse-dot" id="editor-fps-dot"></span>
+                <span class="fps-val" id="editor-fps-val">60 FPS</span>
+                <span class="fps-ms" id="editor-fps-ms">(16.6ms)</span>
+                <span class="fps-btn-tag">🔬 Profiler</span>
+              </button>
             </div>
           </div>
 
           <div class="code-editor-container" id="code-editor-container">
-            <div id="word-blocks-container" class="word-blocks-container"></div>
+            <div id="scratch-blocks-container" class="scratch-blocks-container word-blocks-container">
+              <!-- Visual Block Viewer Pan & Zoom Toolbar -->
+              <div class="scratch-zoom-toolbar" id="scratch-zoom-toolbar">
+                <div class="zoom-toolbar-label">
+                  <span>🧩 Word Blocks</span>
+                </div>
+                <div class="zoom-toolbar-actions">
+                  <button class="btn btn-xs btn-outline zoom-btn" id="btn-scratch-zoom-in" title="Zoom In (or Wheel Up)">➕</button>
+                  <button class="btn btn-xs btn-outline zoom-btn" id="btn-scratch-zoom-out" title="Zoom Out (or Wheel Down)">➖</button>
+                  <button class="btn btn-xs btn-outline zoom-btn" id="btn-scratch-zoom-reset" title="Reset Zoom &amp; Pan">↺ 100%</button>
+                  <span class="scratch-zoom-level" id="scratch-zoom-level">100%</span>
+                </div>
+              </div>
+
+              <!-- Interactive Pan/Zoom Viewport -->
+              <div class="scratch-zoom-viewport" id="scratch-zoom-viewport">
+                <div class="scratch-zoom-content" id="scratch-zoom-content">
+                  <div id="word-blocks-container"></div>
+                </div>
+              </div>
+            </div>
             <textarea id="python-code-editor" spellcheck="false" style="display: none;"></textarea>
           </div>
 
-          <div class="hud-action-bar">
+          <div class="hud-action-bar editor-toolbar">
             <button id="btn-run" class="btn btn-primary">▶ RUN</button>
             <button id="btn-stop" class="btn btn-danger" disabled>⏹ STOP</button>
             <button id="btn-reset" class="btn btn-warning">↺ RESET</button>
@@ -1055,28 +1130,46 @@ export class SimulatorHud {
         </div>
       </div>
 
-      <!-- Wide Resizable Telemetry Modal (Bottom-Right) -->
-      <div class="hud-telemetry-panel" id="hud-telemetry-panel">
+      <!-- Dockable & Minimizable Telemetry Pane -->
+      <div class="hud-telemetry-dock dock-bottom" id="hud-telemetry-dock">
         <!-- Edge & Corner Resizer Handles -->
         <div class="telem-resizer telem-resizer-w" id="telem-resizer-w" title="Drag left/right to resize width"></div>
         <div class="telem-resizer telem-resizer-n" id="telem-resizer-n" title="Drag up/down to resize height"></div>
-        <div class="telem-resizer telem-resizer-nw" id="telem-resizer-nw" title="Drag to resize width and height"></div>
+        <div class="telem-resizer telem-resizer-nw" id="telem-resizer-nw" title="Drag to resize"></div>
 
-        <!-- Telemetry Modal Header -->
+        <!-- Telemetry Dock Header -->
         <div class="telem-modal-header" id="telem-modal-header">
           <div class="telem-header-left">
             <span class="telem-header-icon">📡</span>
             <span class="telem-header-title">ROBOT TELEMETRY &amp; DIAGNOSTICS</span>
             <span id="telem-fps" class="fps-badge">60 FPS • 60 Hz</span>
           </div>
+
+          <!-- Mini Summary Bar (Shown when collapsed) -->
+          <div class="telem-mini-summary" id="telem-mini-summary" style="display: none;">
+            <span class="telem-sum-item" id="telem-sum-gyro">🧭 Gyro: 0.0°</span>
+            <span class="telem-sum-sep">•</span>
+            <span class="telem-sum-item" id="telem-sum-dist">📏 Sonar: --cm</span>
+            <span class="telem-sum-sep">•</span>
+            <span class="telem-sum-item" id="telem-sum-color">🎨 C: WHITE</span>
+            <span class="telem-sum-sep">•</span>
+            <span class="telem-sum-item" id="telem-sum-motors">⚙️ Motors: IDLE</span>
+            <button class="btn btn-xs btn-primary telem-expand-btn" id="btn-telem-expand" title="Expand Telemetry Dock">▲ Expand</button>
+          </div>
+
           <div class="telem-header-actions">
-            <button class="btn btn-xs btn-outline" id="btn-telem-reset-size" title="Reset Default Size (640×480)">⤢ Reset</button>
+            <button class="btn btn-xs btn-outline" id="btn-telem-toggle-dock" title="Dock to Right (Switch between Bottom and Right)">
+              <span id="telem-dock-icon">⬎ Right</span>
+            </button>
+            <button class="btn btn-xs btn-outline" id="btn-telem-toggle-minimize" title="Collapse / Minimize Telemetry Dock">
+              <span id="telem-min-icon">▼ Min</span>
+            </button>
             <button class="btn btn-xs btn-outline" id="btn-telem-close" title="Close Telemetry Panel">✖</button>
           </div>
         </div>
 
-        <!-- Telemetry Tabs Navigation -->
-        <div class="telem-tabs-bar">
+        <!-- Telemetry Tabs Navigation (used in dock-right mode) -->
+        <div class="telem-tabs-bar" id="telem-tabs-bar" style="display: none;">
           <button class="telem-tab-btn active" data-telem-tab="sensors" id="btn-telem-tab-sensors">
             <span>📡 Sensors &amp; Pose</span>
           </button>
@@ -1090,10 +1183,19 @@ export class SimulatorHud {
           </button>
         </div>
 
-        <!-- Telemetry Tabs Body -->
-        <div class="telem-body">
-          <!-- TAB 1: Sensors & Pose -->
-          <div class="telem-tab-content telem-content-sensors active" id="telem-content-sensors">
+        <!-- Telemetry Dock Body -->
+        <div class="telem-body" id="telem-dock-body">
+          <!-- Left Column (#telem-dock-left): Live Sensors and Motors -->
+          <div class="telem-dock-left" id="telem-dock-left">
+            <div class="telem-left-tabs-bar" id="telem-left-tabs-bar">
+              <span class="telem-col-title">DIAGNOSTICS:</span>
+              <button class="telem-subtab-btn active" data-subtab="sensors" id="btn-subtab-sensors">📡 Sensors</button>
+              <button class="telem-subtab-btn" data-subtab="motors" id="btn-subtab-motors">⚙️ Motors</button>
+              <button class="telem-subtab-btn" data-subtab="both" id="btn-subtab-both">🔲 Both</button>
+            </div>
+            <div class="telem-left-content" id="telem-left-content">
+              <!-- TAB 1: Sensors & Pose -->
+              <div class="telem-tab-content telem-content-sensors active" id="telem-content-sensors">
             <div class="telem-sensors-grid">
               <!-- Color Sensor C -->
               <div class="telem-sensor-card">
@@ -1217,29 +1319,34 @@ export class SimulatorHud {
               ${this.renderTelemMotorCardsHtml()}
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- TAB 3: Command & Physics Logs -->
-          <div class="telem-tab-content telem-content-logs" id="telem-content-logs" style="display: none;">
-            <div class="telem-logs-toolbar">
-              <div class="telem-logs-filters">
-                <button class="btn btn-xs btn-outline filter-btn active" data-filter="ALL" id="btn-filter-all">All</button>
-                <button class="btn btn-xs btn-outline filter-btn" data-filter="DRIVE" id="btn-filter-drive">Drive</button>
-                <button class="btn btn-xs btn-outline filter-btn" data-filter="BRAKE" id="btn-filter-brake">Brake</button>
-                <button class="btn btn-xs btn-outline filter-btn" data-filter="MOTOR" id="btn-filter-motor">Motors</button>
-              </div>
-              <div class="telem-logs-actions">
-                <label class="telem-autoscroll-label">
-                  <input type="checkbox" id="telem-autoscroll-chk" checked>
-                  <span>Auto-scroll</span>
-                </label>
-                <button class="btn btn-xs btn-outline" id="btn-telem-clear-logs" title="Clear all command logs">🧹 Clear Logs</button>
-              </div>
+      <!-- Right Column (#telem-dock-right): Live Command & Physics Event Logs -->
+      <div class="telem-dock-right" id="telem-dock-right">
+        <!-- TAB 3: Command & Physics Logs -->
+        <div class="telem-tab-content telem-content-logs" id="telem-content-logs">
+          <div class="telem-logs-toolbar">
+            <div class="telem-logs-filters">
+              <button class="btn btn-xs btn-outline filter-btn active" data-filter="ALL" id="btn-filter-all">All</button>
+              <button class="btn btn-xs btn-outline filter-btn" data-filter="DRIVE" id="btn-filter-drive">Drive</button>
+              <button class="btn btn-xs btn-outline filter-btn" data-filter="BRAKE" id="btn-filter-brake">Brake</button>
+              <button class="btn btn-xs btn-outline filter-btn" data-filter="MOTOR" id="btn-filter-motor">Motors</button>
             </div>
-            <div class="telem-log-stream" id="telem-log-stream">
-              <div class="telem-log-empty" id="telem-log-empty">No commands issued yet. Use WASD keys or Word Blocks to drive.</div>
+            <div class="telem-logs-actions">
+              <label class="telem-autoscroll-label">
+                <input type="checkbox" id="telem-autoscroll-chk" checked>
+                <span>Auto-scroll</span>
+              </label>
+              <button class="btn btn-xs btn-outline" id="btn-telem-clear-logs" title="Clear all command logs">🧹 Clear Logs</button>
             </div>
           </div>
+          <div class="telem-log-stream" id="telem-log-stream">
+            <div class="telem-log-empty" id="telem-log-empty">No commands issued yet. Use WASD keys or Word Blocks to drive.</div>
+          </div>
         </div>
+      </div>
+    </div>
 
         <!-- Hidden legacy elements for full backward compatibility -->
         <span id="telem-pos" style="display: none;">0.00m, 0.00m</span>
@@ -1251,8 +1358,8 @@ export class SimulatorHud {
         <span id="telem-dist" style="display: none;">-- cm</span>
       </div>
 
-      <!-- Always-Visible Bottom Center FPS Meter & Profiler Button -->
-      <div id="hud-bottom-fps-meter" class="hud-bottom-fps-meter" title="Click to open Render & Physics Performance Profiler">
+      <!-- Relocated to right sidebar toolbar: hidden fixed bottom-center meter -->
+      <div id="hud-bottom-fps-meter" class="hud-bottom-fps-meter" style="display: none;" title="Click to open Render & Physics Performance Profiler">
         <span class="fps-pulse-dot" id="bottom-fps-dot"></span>
         <span class="fps-val" id="bottom-fps-val">60 FPS</span>
         <span class="fps-ms" id="bottom-fps-ms">(16.6ms)</span>
@@ -1387,6 +1494,309 @@ export class SimulatorHud {
         </div>
       </div>
 
+      <!-- Robot Design & Hardware Port Mapping Inspector Modal -->
+      <div id="modal-robot-design" class="hud-robot-design-modal" style="display: none;">
+        <div class="modal-robot-design-backdrop" id="modal-robot-design-backdrop"></div>
+        <div class="robot-design-modal-card">
+          <div class="robot-design-modal-header">
+            <div class="modal-header-title">
+              <span class="modal-header-icon">🤖</span>
+              <div>
+                <div class="modal-title-main">Robot Design &amp; Hardware Port Inspector</div>
+                <div class="modal-subtitle">Official SPIKE Prime CAD configuration and dynamic port assignment matrix</div>
+              </div>
+            </div>
+            <div class="modal-header-actions">
+              <button class="btn btn-xs btn-outline" id="btn-close-robot-design" title="Close Robot Design Inspector">✖</button>
+            </div>
+          </div>
+
+          <div class="robot-design-modal-body">
+            <!-- SECTION A: Robot Selection & CAD Upload -->
+            <div class="design-section design-section-presets">
+              <div class="section-title-row">
+                <span class="section-badge">SECTION A</span>
+                <span class="section-title">Robot Architecture &amp; CAD Model Selection</span>
+              </div>
+              <div class="robot-preset-grid">
+                <div class="robot-preset-card active" id="preset-card-advanced" data-preset="advanced">
+                  <div class="preset-card-header">
+                    <span class="preset-icon">🏎️</span>
+                    <span class="preset-name">Advanced Driving Base</span>
+                    <span class="preset-tag active-tag">Active</span>
+                  </div>
+                  <div class="preset-desc">
+                    Official SPIKE Prime Competition Driving Base featuring dual drive motors (A+B), dual optical sensors (C+D), ultrasonic sensor (E), caster wheel, and rigid Technic chassis.
+                  </div>
+                  <div class="preset-meta">
+                    <span>Motors: 2 Drive + 2 Aux</span> • <span>Sensors: 3 Off-board</span> • <span>Draco GLB Optimized</span>
+                  </div>
+                </div>
+
+                <div class="robot-preset-card" id="preset-card-compact" data-preset="compact">
+                  <div class="preset-card-header">
+                    <span class="preset-icon">🤖</span>
+                    <span class="preset-name">Compact SPIKE Base</span>
+                    <span class="preset-tag">Select</span>
+                  </div>
+                  <div class="preset-desc">
+                    Lightweight Dual-Wheel Base designed for agile maneuvering, high speed cornering, and rapid mission runs with low center of mass.
+                  </div>
+                  <div class="preset-meta">
+                    <span>Motors: 2 Drive</span> • <span>Sensors: Dual Color</span> • <span>Ultra Responsive</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="design-actions-row">
+                <button class="btn btn-sm btn-primary" id="btn-upload-robot-cad" title="Upload custom robot digital model (.io / .ldr / .mpd / .dat)">
+                  ➕ Upload Robot CAD (.io / .ldr)
+                </button>
+                <input type="file" id="input-robot-cad-file" accept=".io,.ldr,.mpd,.dat" style="display: none;">
+                <button class="btn btn-sm btn-outline" id="btn-design-open-cad-inspector" title="Jump to full LEGO 3D CAD Inspector">
+                  🔬 Open in 3D CAD Inspector
+                </button>
+              </div>
+            </div>
+
+            <!-- SECTION B: Hardware Port Mapping Inspector -->
+            <div class="design-section design-section-ports">
+              <div class="section-title-row">
+                <span class="section-badge">SECTION B</span>
+                <span class="section-title">Hardware Port Mapping &amp; Device Matrix</span>
+                <span class="section-hint">SPIKE Prime Hub: Ports A–F (Motors &amp; I/O) + Internal IMU</span>
+              </div>
+
+              <div class="port-mapping-grid">
+                <!-- Drive Left Wheel -->
+                <div class="port-item-card" data-component="drive-left">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">🏎️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Drive Left Wheel</div>
+                      <div class="port-item-role">Drive Base Left Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-drive-left">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-drive-left" data-role="drive-left">
+                      <option value="A" selected>Port A</option>
+                      <option value="B">Port B</option>
+                      <option value="C">Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="E">Port E</option>
+                      <option value="F">Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Drive Right Wheel -->
+                <div class="port-item-card" data-component="drive-right">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">🏎️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Drive Right Wheel</div>
+                      <div class="port-item-role">Drive Base Right Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-drive-right">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-drive-right" data-role="drive-right">
+                      <option value="A">Port A</option>
+                      <option value="B" selected>Port B</option>
+                      <option value="C">Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="E">Port E</option>
+                      <option value="F">Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Auxiliary Attachment 1 -->
+                <div class="port-item-card" data-component="aux1">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">⚙️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Auxiliary Attachment 1</div>
+                      <div class="port-item-role">Medium/Large Angled Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-aux1">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-aux1" data-role="aux1">
+                      <option value="A">Port A</option>
+                      <option value="B">Port B</option>
+                      <option value="C" selected>Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="E">Port E</option>
+                      <option value="F">Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Auxiliary Attachment 2 -->
+                <div class="port-item-card" data-component="aux2">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">⚙️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Auxiliary Attachment 2</div>
+                      <div class="port-item-role">Medium/Large Angled Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-aux2">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-aux2" data-role="aux2">
+                      <option value="A">Port A</option>
+                      <option value="B">Port B</option>
+                      <option value="C">Port C</option>
+                      <option value="D" selected>Port D</option>
+                      <option value="E">Port E</option>
+                      <option value="F">Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Auxiliary Attachment 3 -->
+                <div class="port-item-card" data-component="aux3">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">⚙️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Auxiliary Attachment 3</div>
+                      <div class="port-item-role">Medium/Large Angled Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-aux3">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-aux3" data-role="aux3">
+                      <option value="A">Port A</option>
+                      <option value="B">Port B</option>
+                      <option value="C">Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="E" selected>Port E</option>
+                      <option value="F">Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Auxiliary Attachment 4 -->
+                <div class="port-item-card" data-component="aux4">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">⚙️</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Auxiliary Attachment 4</div>
+                      <div class="port-item-role">Medium/Large Angled Motor</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-aux4">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-aux4" data-role="aux4">
+                      <option value="A">Port A</option>
+                      <option value="B">Port B</option>
+                      <option value="C">Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="E">Port E</option>
+                      <option value="F" selected>Port F</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Left Color Sensor -->
+                <div class="port-item-card" data-component="color-left">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">🎨</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Left Color Sensor</div>
+                      <div class="port-item-role">Optical Line &amp; RGB Tracker</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-color-left">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-color-left" data-role="color-left">
+                      <option value="C" selected>Port C</option>
+                      <option value="D">Port D</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Right Color Sensor -->
+                <div class="port-item-card" data-component="color-right">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">🎨</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Right Color Sensor</div>
+                      <div class="port-item-role">Optical Line &amp; Squaring Tracker</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-color-right">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-color-right" data-role="color-right">
+                      <option value="C">Port C</option>
+                      <option value="D" selected>Port D</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Ultrasonic Distance Sensor -->
+                <div class="port-item-card" data-component="ultrasonic">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">📏</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Ultrasonic Distance Sensor</div>
+                      <div class="port-item-role">Sonar Proximity Detector</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-ultrasonic">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Assigned Port:</label>
+                    <select class="hud-select hud-select-xs port-select" id="select-port-ultrasonic" data-role="ultrasonic">
+                      <option value="E" selected>Port E</option>
+                      <option value="F">Port F</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Internal 6-Axis IMU -->
+                <div class="port-item-card card-fixed" data-component="imu">
+                  <div class="port-item-header">
+                    <span class="port-item-icon">🧭</span>
+                    <div class="port-item-info">
+                      <div class="port-item-name">Internal 6-Axis IMU</div>
+                      <div class="port-item-role">Hub Gyro &amp; Accelerometer</div>
+                    </div>
+                    <span class="port-status-badge status-mapped" id="badge-port-imu">🟢 Connected &amp; Mapped</span>
+                  </div>
+                  <div class="port-item-select-row">
+                    <label>Fixed Bus:</label>
+                    <span class="port-fixed-label">Hub Gyro (Fixed internal IMU, Status: Connected)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="robot-design-modal-footer">
+            <div class="footer-left">
+              <span class="footer-notice" id="port-save-status-text">Hardware bus ready. Changes persist automatically across sessions.</span>
+            </div>
+            <div class="footer-right">
+              <button class="btn btn-sm btn-primary" id="btn-save-port-mapping">💾 Save Port Mapping</button>
+              <button class="btn btn-sm btn-outline" id="btn-done-robot-design">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Floating Pointer Tool Badge for 3D Viewport Hover Indicators -->
       <div id="hud-pointer-tool-badge" class="hud-pointer-tool-badge" style="display: none;">
         <span id="pointer-badge-icon">🔒</span>
@@ -1434,7 +1844,7 @@ export class SimulatorHud {
     // Floating Terminal elements
     this.floatingTerminal = this.rootElement.querySelector('#hud-floating-terminal')!;
     this.floatingTermLog = this.rootElement.querySelector('#floating-terminal-log')!;
-    this.telemetryPanel = this.rootElement.querySelector('#hud-telemetry-panel')!;
+    this.telemetryPanel = (this.rootElement.querySelector('#hud-telemetry-dock') || this.rootElement.querySelector('#hud-telemetry-panel'))!;
 
     this.telemPosX = this.rootElement.querySelector('#telem-pos')!;
     this.telemYaw = this.rootElement.querySelector('#telem-yaw')!;
@@ -1451,6 +1861,7 @@ export class SimulatorHud {
     this.bottomFpsVal = this.rootElement.querySelector('#bottom-fps-val')!;
     this.bottomFpsMs = this.rootElement.querySelector('#bottom-fps-ms')!;
     this.profilerModal = this.rootElement.querySelector('#hud-profiler-modal')!;
+    this.robotDesignModal = this.rootElement.querySelector('#modal-robot-design')!;
 
     // Fastener & Dual Lock Sidebar Utility
     this.fastenerCountBadge = this.rootElement.querySelector('#fastener-count-badge')!;
@@ -1536,10 +1947,10 @@ export class SimulatorHud {
         const dt = e.dataTransfer;
         if (dt && dt.files && dt.files.length > 0) {
           const file = dt.files[0];
-          if (/\.(llsp3?|sb3|json)$/i.test(file.name)) {
-            this.handleSpikeScratchFile(file);
+          if (/\.(llsp3?|sb3|json|py)$/i.test(file.name)) {
+            this.handleUnifiedImportFile(file);
           } else {
-            this.logConsole(`⚠️ Dropped file "${file.name}" is not a recognized SPIKE App archive (.llsp, .llsp3, .sb3).`);
+            this.logConsole(`⚠️ Dropped file "${file.name}" is not a recognized code file (.py, .llsp, .llsp3, .sb3, .json).`);
           }
         }
       });
@@ -1583,25 +1994,76 @@ export class SimulatorHud {
       this.btnFocusCenter?.classList.toggle('active', val === 'center');
     });
 
-    // Mission dropdown change
-    const missionSelect = this.rootElement.querySelector('#mission-select') as HTMLSelectElement;
-    missionSelect.addEventListener('change', () => {
-      const selected = SAMPLE_MISSIONS[missionSelect.value];
-      if (selected) {
-        this.codeTextarea.value = selected.code;
+    // Sample Mission dropdown change (supports both #sample-select and legacy #mission-select)
+    const sampleSelect = (this.rootElement.querySelector('#sample-select') || this.rootElement.querySelector('#mission-select')) as HTMLSelectElement | null;
+    sampleSelect?.addEventListener('change', () => {
+      const val = sampleSelect.value;
+      if (this.importedMissions.has(val)) {
+        const imp = this.importedMissions.get(val)!;
+        this.codeTextarea.value = imp.code;
         if (this.scriptTabs[this.activeTabIndex]) {
-          this.scriptTabs[this.activeTabIndex].code = selected.code;
-          this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
-          this.scriptTabs[this.activeTabIndex].visualBlocks = selected.visualBlocks;
+          this.scriptTabs[this.activeTabIndex].code = imp.code;
+          this.scriptTabs[this.activeTabIndex].title = imp.title.split('.')[0].trim();
+          this.scriptTabs[this.activeTabIndex].visualBlocks = imp.visualBlocks;
         }
         this.renderScriptTabs();
         this.saveScriptTabsToStorage();
         if (this.editorViewMode === 'blocks') {
           this.renderVisualBlocks();
         }
-        this.logConsole(`Loaded ${selected.title}`);
+        this.updateTopbarProgramSelect();
+        this.logConsole(`Loaded ${imp.title}`);
+      } else {
+        const selected = SAMPLE_MISSIONS[val];
+        if (selected) {
+          this.codeTextarea.value = selected.code;
+          if (this.scriptTabs[this.activeTabIndex]) {
+            this.scriptTabs[this.activeTabIndex].code = selected.code;
+            this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
+            this.scriptTabs[this.activeTabIndex].visualBlocks = selected.visualBlocks;
+          }
+          this.renderScriptTabs();
+          this.saveScriptTabsToStorage();
+          if (this.editorViewMode === 'blocks') {
+            this.renderVisualBlocks();
+          }
+          this.updateTopbarProgramSelect();
+          this.logConsole(`Loaded ${selected.title}`);
+        }
       }
     });
+
+    // Unified Import Code button and hidden inputs
+    const btnImportCode = this.rootElement.querySelector('#btn-import-code') as HTMLButtonElement | null;
+    const inputImportCode = this.rootElement.querySelector('#input-import-code') as HTMLInputElement | null;
+    btnImportCode?.addEventListener('click', () => {
+      inputImportCode?.click();
+    });
+
+    inputImportCode?.addEventListener('change', async () => {
+      if (inputImportCode.files && inputImportCode.files[0]) {
+        await this.handleUnifiedImportFile(inputImportCode.files[0]);
+        inputImportCode.value = '';
+      }
+    });
+
+    // Also wire legacy spike-scratch-file-input if present
+    const legacySpikeInput = this.rootElement.querySelector('#spike-scratch-file-input') as HTMLInputElement | null;
+    legacySpikeInput?.addEventListener('change', async () => {
+      if (legacySpikeInput.files && legacySpikeInput.files[0]) {
+        await this.handleUnifiedImportFile(legacySpikeInput.files[0]);
+        legacySpikeInput.value = '';
+      }
+    });
+
+    // Editor FPS Profiler button in toolbar
+    const btnEditorFps = this.rootElement.querySelector('#btn-editor-fps-profiler') as HTMLButtonElement | null;
+    btnEditorFps?.addEventListener('click', () => {
+      this.openProfilerModal();
+    });
+
+    // Scratch visual block viewer pan & zoom setup
+    this.setupScratchPanAndZoom();
 
     // Competition Mat dropdown change
     const mapSelect = this.rootElement.querySelector('#map-select') as HTMLSelectElement | null;
@@ -2059,9 +2521,82 @@ export class SimulatorHud {
       this.copyPerformanceReport();
     });
 
+    // 5. Robot Design & Hardware Port Inspector events
+    const btnTopbarRobotDesign = this.rootElement.querySelector('#btn-topbar-robot-design');
+    btnTopbarRobotDesign?.addEventListener('click', () => {
+      this.toggleRobotDesignModal();
+    });
+
+    const btnCloseDesign = this.rootElement.querySelector('#btn-close-robot-design');
+    btnCloseDesign?.addEventListener('click', () => this.closeRobotDesignModal());
+
+    const btnDoneDesign = this.rootElement.querySelector('#btn-done-robot-design');
+    btnDoneDesign?.addEventListener('click', () => this.closeRobotDesignModal());
+
+    const designBackdrop = this.rootElement.querySelector('#modal-robot-design-backdrop');
+    designBackdrop?.addEventListener('click', () => this.closeRobotDesignModal());
+
+    // Robot Presets
+    const cardAdv = this.rootElement.querySelector('#preset-card-advanced');
+    cardAdv?.addEventListener('click', () => this.selectRobotPreset('advanced'));
+
+    const cardComp = this.rootElement.querySelector('#preset-card-compact');
+    cardComp?.addEventListener('click', () => this.selectRobotPreset('compact'));
+
+    // Upload Robot CAD button
+    const btnUploadRobotCad = this.rootElement.querySelector('#btn-upload-robot-cad') as HTMLButtonElement | null;
+    const inputRobotCadFile = this.rootElement.querySelector('#input-robot-cad-file') as HTMLInputElement | null;
+    btnUploadRobotCad?.addEventListener('click', () => {
+      inputRobotCadFile?.click();
+    });
+
+    inputRobotCadFile?.addEventListener('change', () => {
+      if (inputRobotCadFile.files && inputRobotCadFile.files[0]) {
+        const file = inputRobotCadFile.files[0];
+        this.callbacks.onImportFile(file);
+        this.logConsole(`Uploaded robot CAD model: "${file.name}"`);
+        inputRobotCadFile.value = '';
+      }
+    });
+
+    // Jump to full CAD Inspector button
+    const btnDesignOpenInspector = this.rootElement.querySelector('#btn-design-open-cad-inspector');
+    btnDesignOpenInspector?.addEventListener('click', () => {
+      this.closeRobotDesignModal();
+      const activePlaced = this.missionElementsData.find((e) => e.isPlacedOnField !== false);
+      const targetId = activePlaced ? activePlaced.id : 'M01';
+      this.callbacks.onOpenInspector?.(targetId);
+    });
+
+    // Port Select change listeners
+    const portSelects = this.rootElement.querySelectorAll('.port-select');
+    portSelects.forEach((sel) => {
+      sel.addEventListener('change', (e) => {
+        const selectEl = e.target as HTMLSelectElement;
+        const roleAttr = selectEl.getAttribute('data-role');
+        if (!roleAttr) return;
+        const roleCamel = roleAttr.replace(/-([a-z])/g, (_, g) => g.toUpperCase()) as keyof RobotPortMapping;
+        if (roleCamel in this.portMappings) {
+          (this.portMappings as any)[roleCamel] = selectEl.value;
+          this.updatePortStatusBadges();
+        }
+      });
+    });
+
+    // Save Port Mapping button
+    const btnSavePortMapping = this.rootElement.querySelector('#btn-save-port-mapping');
+    btnSavePortMapping?.addEventListener('click', () => {
+      this.savePortMappings();
+    });
+
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isProfilerModalOpen) {
-        this.closeProfilerModal();
+      if (e.key === 'Escape') {
+        if (this.isRobotDesignModalOpen) {
+          this.closeRobotDesignModal();
+        }
+        if (this.isProfilerModalOpen) {
+          this.closeProfilerModal();
+        }
       }
     });
 
@@ -2203,13 +2738,67 @@ export class SimulatorHud {
   }
 
   private setupTelemetryPanelEvents(): void {
-    // 1. Resizing & Window actions
+    // 1. Restore saved docking mode & collapsed state
+    try {
+      const savedMode = localStorage.getItem('fll_telem_dock_mode');
+      if (savedMode === 'right' || savedMode === 'bottom') {
+        this.telemDockMode = savedMode;
+      }
+      const savedCollapsed = localStorage.getItem('fll_telem_dock_collapsed');
+      this.telemDockCollapsed = savedCollapsed === 'true';
+    } catch (_) {}
+
+    this.applyDockMode();
+    this.applyDockCollapsed();
+
+    // 2. Dock header buttons
+    const btnToggleDock = this.rootElement.querySelector('#btn-telem-toggle-dock');
+    btnToggleDock?.addEventListener('click', () => {
+      this.telemDockMode = this.telemDockMode === 'bottom' ? 'right' : 'bottom';
+      this.applyDockMode();
+      try {
+        localStorage.setItem('fll_telem_dock_mode', this.telemDockMode);
+      } catch (_) {}
+    });
+
+    const toggleCollapse = () => {
+      this.telemDockCollapsed = !this.telemDockCollapsed;
+      this.applyDockCollapsed();
+      try {
+        localStorage.setItem('fll_telem_dock_collapsed', this.telemDockCollapsed ? 'true' : 'false');
+      } catch (_) {}
+    };
+
+    const btnToggleMin = this.rootElement.querySelector('#btn-telem-toggle-minimize');
+    btnToggleMin?.addEventListener('click', toggleCollapse);
+
+    const btnExpand = this.rootElement.querySelector('#btn-telem-expand');
+    btnExpand?.addEventListener('click', toggleCollapse);
+
+    const btnClose = this.rootElement.querySelector('#btn-telem-close');
+    btnClose?.addEventListener('click', () => {
+      this.toggleTelemetryPanel(false);
+    });
+
+    // 3. Left column sub-tabs (Sensors vs Motors vs Both)
+    const subtabBtns = this.rootElement.querySelectorAll('.telem-subtab-btn[data-subtab]');
+    subtabBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sub = btn.getAttribute('data-subtab') as 'sensors' | 'motors' | 'both';
+        if (!sub) return;
+        this.telemSubView = sub;
+        subtabBtns.forEach((b) => b.classList.toggle('active', b === btn));
+        this.updateDockViewLayout();
+      });
+    });
+
+    // 4. Resizing & Window actions
     this.setupTelemetryResizing();
 
-    // 2. Tabs
+    // 5. Tabs
     this.setupTelemetryTabs();
 
-    // 3. Tab 1 Sensor Quick Buttons
+    // 6. Tab 1 Sensor Quick Buttons
     const btnZeroGyro = this.rootElement.querySelector('#btn-telem-zero-gyro');
     btnZeroGyro?.addEventListener('click', () => {
       this.callbacks.onResetGyro?.();
@@ -2220,7 +2809,7 @@ export class SimulatorHud {
       this.callbacks.onCaptureCurrentPose?.();
     });
 
-    // 4. Tab 2 Motor Quick Buttons
+    // 7. Tab 2 Motor Quick Buttons
     const btnStopAll = this.rootElement.querySelector('#btn-telem-stop-all-motors');
     btnStopAll?.addEventListener('click', () => {
       this.stopAllManualDriving();
@@ -2232,7 +2821,7 @@ export class SimulatorHud {
       this.callbacks.onResetEncoders?.();
     });
 
-    // 5. Tab 3 Command Log Actions
+    // 8. Tab 3 Command Log Actions
     const btnClearLogs = this.rootElement.querySelector('#btn-telem-clear-logs');
     btnClearLogs?.addEventListener('click', () => {
       this.clearCommandLogs();
@@ -2251,39 +2840,152 @@ export class SimulatorHud {
       });
     });
 
-    // 6. Driver Drawer Link to Telemetry
+    // 9. Driver Drawer Link to Telemetry
     const btnDriverOpenTelem = this.rootElement.querySelector('#btn-driver-open-telem');
     btnDriverOpenTelem?.addEventListener('click', () => {
       this.toggleTelemetryPanel(true);
     });
   }
 
+  public setDockMode(mode: 'bottom' | 'right'): void {
+    this.telemDockMode = mode;
+    this.applyDockMode();
+    try {
+      localStorage.setItem('fll_telem_dock_mode', mode);
+    } catch (_) {}
+  }
+
+  public setDockCollapsed(collapsed: boolean): void {
+    this.telemDockCollapsed = collapsed;
+    this.applyDockCollapsed();
+    try {
+      localStorage.setItem('fll_telem_dock_collapsed', collapsed ? 'true' : 'false');
+    } catch (_) {}
+  }
+
+  private applyDockMode(): void {
+    const dock = this.telemetryPanel;
+    if (!dock) return;
+    dock.classList.remove('dock-bottom', 'dock-right');
+    dock.classList.add(`dock-${this.telemDockMode}`);
+
+    const btnToggle = this.rootElement.querySelector('#btn-telem-toggle-dock');
+    const iconSpan = this.rootElement.querySelector('#telem-dock-icon');
+    if (this.telemDockMode === 'bottom') {
+      if (btnToggle) btnToggle.setAttribute('title', 'Dock to Right Side (Switch between Bottom and Right)');
+      if (iconSpan) iconSpan.textContent = '⬎ Right';
+      dock.style.width = '';
+      if (!this.telemDockCollapsed) {
+        try {
+          const savedH = localStorage.getItem('fll_telem_dock_bottom_height');
+          dock.style.height = savedH ? `${savedH}px` : '270px';
+        } catch (_) {
+          dock.style.height = '270px';
+        }
+      }
+    } else {
+      if (btnToggle) btnToggle.setAttribute('title', 'Dock to Bottom (Switch between Bottom and Right)');
+      if (iconSpan) iconSpan.textContent = '⬋ Bottom';
+      dock.style.height = '';
+      if (!this.telemDockCollapsed) {
+        try {
+          const savedW = localStorage.getItem('fll_telem_dock_right_width');
+          dock.style.width = savedW ? `${savedW}px` : '420px';
+        } catch (_) {
+          dock.style.width = '420px';
+        }
+      }
+    }
+
+    this.updateDockViewLayout();
+  }
+
+  private applyDockCollapsed(): void {
+    const dock = this.telemetryPanel;
+    if (!dock) return;
+    dock.classList.toggle('dock-collapsed', this.telemDockCollapsed);
+    const minIcon = this.rootElement.querySelector('#telem-min-icon');
+    const btnMin = this.rootElement.querySelector('#btn-telem-toggle-minimize');
+    const miniSummary = this.rootElement.querySelector('#telem-mini-summary') as HTMLElement | null;
+
+    if (this.telemDockCollapsed) {
+      if (minIcon) minIcon.textContent = '▲ Expand';
+      if (btnMin) btnMin.setAttribute('title', 'Expand Telemetry Dock');
+      if (miniSummary) miniSummary.style.display = 'flex';
+      dock.style.height = '32px';
+    } else {
+      if (minIcon) minIcon.textContent = '▼ Min';
+      if (btnMin) btnMin.setAttribute('title', 'Collapse / Minimize Telemetry Dock');
+      if (miniSummary) miniSummary.style.display = 'none';
+      if (this.telemDockMode === 'bottom') {
+        try {
+          const savedH = localStorage.getItem('fll_telem_dock_bottom_height');
+          dock.style.height = savedH ? `${savedH}px` : '270px';
+        } catch (_) {
+          dock.style.height = '270px';
+        }
+      } else {
+        dock.style.height = '';
+      }
+    }
+  }
+
+  private updateDockViewLayout(): void {
+    const tabSensors = this.rootElement.querySelector('#telem-content-sensors') as HTMLElement | null;
+    const tabMotors = this.rootElement.querySelector('#telem-content-motors') as HTMLElement | null;
+    const tabLogs = this.rootElement.querySelector('#telem-content-logs') as HTMLElement | null;
+    const dockLeft = this.rootElement.querySelector('#telem-dock-left') as HTMLElement | null;
+    const dockRight = this.rootElement.querySelector('#telem-dock-right') as HTMLElement | null;
+    const tabsBar = this.rootElement.querySelector('#telem-tabs-bar') as HTMLElement | null;
+    const leftTabsBar = this.rootElement.querySelector('#telem-left-tabs-bar') as HTMLElement | null;
+
+    if (this.telemDockMode === 'bottom') {
+      if (tabsBar) tabsBar.style.display = 'none';
+      if (leftTabsBar) leftTabsBar.style.display = 'flex';
+      if (dockLeft) {
+        dockLeft.style.display = 'flex';
+        dockLeft.classList.toggle('subview-both', this.telemSubView === 'both');
+      }
+      if (dockRight) dockRight.style.display = 'flex';
+      if (tabLogs) tabLogs.style.display = 'flex';
+
+      if (this.telemSubView === 'sensors') {
+        if (tabSensors) tabSensors.style.display = 'flex';
+        if (tabMotors) tabMotors.style.display = 'none';
+      } else if (this.telemSubView === 'motors') {
+        if (tabSensors) tabSensors.style.display = 'none';
+        if (tabMotors) tabMotors.style.display = 'flex';
+      } else { // 'both'
+        if (tabSensors) tabSensors.style.display = 'flex';
+        if (tabMotors) tabMotors.style.display = 'flex';
+      }
+    } else {
+      // .dock-right mode
+      if (tabsBar) tabsBar.style.display = 'flex';
+      if (leftTabsBar) leftTabsBar.style.display = 'none';
+      if (dockLeft) dockLeft.classList.remove('subview-both');
+
+      if (this.activeTelemTab === 'sensors') {
+        if (dockLeft) dockLeft.style.display = 'flex';
+        if (dockRight) dockRight.style.display = 'none';
+        if (tabSensors) tabSensors.style.display = 'flex';
+        if (tabMotors) tabMotors.style.display = 'none';
+      } else if (this.activeTelemTab === 'motors') {
+        if (dockLeft) dockLeft.style.display = 'flex';
+        if (dockRight) dockRight.style.display = 'none';
+        if (tabSensors) tabSensors.style.display = 'none';
+        if (tabMotors) tabMotors.style.display = 'flex';
+      } else if (this.activeTelemTab === 'logs') {
+        if (dockLeft) dockLeft.style.display = 'none';
+        if (dockRight) dockRight.style.display = 'flex';
+        if (tabLogs) tabLogs.style.display = 'flex';
+      }
+    }
+  }
+
   private setupTelemetryResizing(): void {
     const panel = this.telemetryPanel;
     if (!panel) return;
-
-    // Load saved dimensions from localStorage if available
-    try {
-      const savedW = localStorage.getItem('fll_telem_width');
-      const savedH = localStorage.getItem('fll_telem_height');
-      if (savedW) panel.style.width = `${Math.max(440, parseInt(savedW, 10))}px`;
-      if (savedH) panel.style.height = `${Math.max(280, parseInt(savedH, 10))}px`;
-    } catch (_) {}
-
-    const btnReset = this.rootElement.querySelector('#btn-telem-reset-size');
-    btnReset?.addEventListener('click', () => {
-      panel.style.width = '640px';
-      panel.style.height = '480px';
-      try {
-        localStorage.setItem('fll_telem_width', '640');
-        localStorage.setItem('fll_telem_height', '480');
-      } catch (_) {}
-    });
-
-    const btnClose = this.rootElement.querySelector('#btn-telem-close');
-    btnClose?.addEventListener('click', () => {
-      this.toggleTelemetryPanel(false);
-    });
 
     const initDrag = (handleId: string, dir: 'w' | 'n' | 'nw') => {
       const handle = this.rootElement.querySelector(handleId) as HTMLElement | null;
@@ -2302,17 +3004,21 @@ export class SimulatorHud {
         const startH = rect.height;
 
         const onMove = (ev: PointerEvent) => {
-          if (dir === 'w' || dir === 'nw') {
-            const deltaX = startX - ev.clientX; // moving left expands width
-            const newW = Math.min(Math.max(440, startW + deltaX), window.innerWidth - 40);
-            panel.style.width = `${newW}px`;
-            try { localStorage.setItem('fll_telem_width', `${newW}`); } catch (_) {}
-          }
-          if (dir === 'n' || dir === 'nw') {
-            const deltaY = startY - ev.clientY; // moving up expands height
-            const newH = Math.min(Math.max(280, startH + deltaY), window.innerHeight - 80);
-            panel.style.height = `${newH}px`;
-            try { localStorage.setItem('fll_telem_height', `${newH}`); } catch (_) {}
+          if (this.telemDockMode === 'bottom') {
+            if (dir === 'n' || dir === 'nw') {
+              const deltaY = startY - ev.clientY; // moving up expands height
+              const newH = Math.min(Math.max(180, startH + deltaY), window.innerHeight - 80);
+              panel.style.height = `${newH}px`;
+              try { localStorage.setItem('fll_telem_dock_bottom_height', `${newH}`); } catch (_) {}
+            }
+          } else {
+            // dock-right mode
+            if (dir === 'w' || dir === 'nw') {
+              const deltaX = startX - ev.clientX; // moving left expands width
+              const newW = Math.min(Math.max(340, startW + deltaX), window.innerWidth - 60);
+              panel.style.width = `${newW}px`;
+              try { localStorage.setItem('fll_telem_dock_right_width', `${newW}`); } catch (_) {}
+            }
           }
         };
 
@@ -2338,20 +3044,13 @@ export class SimulatorHud {
 
   private setupTelemetryTabs(): void {
     const tabBtns = this.rootElement.querySelectorAll('.telem-tab-btn[data-telem-tab]');
-    const tabSensors = this.rootElement.querySelector('#telem-content-sensors') as HTMLElement | null;
-    const tabMotors = this.rootElement.querySelector('#telem-content-motors') as HTMLElement | null;
-    const tabLogs = this.rootElement.querySelector('#telem-content-logs') as HTMLElement | null;
-
     tabBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
         const target = btn.getAttribute('data-telem-tab') as 'sensors' | 'motors' | 'logs';
         if (!target) return;
         this.activeTelemTab = target;
-
         tabBtns.forEach((b) => b.classList.toggle('active', b === btn));
-        if (tabSensors) tabSensors.style.display = target === 'sensors' ? 'flex' : 'none';
-        if (tabMotors) tabMotors.style.display = target === 'motors' ? 'flex' : 'none';
-        if (tabLogs) tabLogs.style.display = target === 'logs' ? 'flex' : 'none';
+        this.updateDockViewLayout();
       });
     });
   }
@@ -2361,8 +3060,15 @@ export class SimulatorHud {
   }
 
   public setTelemetryTab(tab: 'sensors' | 'motors' | 'logs'): void {
-    const tabBtn = this.rootElement.querySelector(`.telem-tab-btn[data-telem-tab="${tab}"]`) as HTMLButtonElement | null;
-    tabBtn?.click();
+    this.activeTelemTab = tab;
+    const tabBtns = this.rootElement.querySelectorAll('.telem-tab-btn[data-telem-tab]');
+    tabBtns.forEach((b) => b.classList.toggle('active', b.getAttribute('data-telem-tab') === tab));
+    if (tab === 'sensors' || tab === 'motors') {
+      this.telemSubView = tab;
+      const subtabBtns = this.rootElement.querySelectorAll('.telem-subtab-btn[data-subtab]');
+      subtabBtns.forEach((b) => b.classList.toggle('active', b.getAttribute('data-subtab') === tab));
+    }
+    this.updateDockViewLayout();
   }
 
   private renderMotorCardsHtml(): string {
@@ -3070,6 +3776,156 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     }
   }
 
+  // =========================================================================
+  // Robot Design & Hardware Port Inspector Methods
+  // =========================================================================
+  public openRobotDesignModal(): void {
+    this.isRobotDesignModalOpen = true;
+    if (this.robotDesignModal) {
+      this.robotDesignModal.style.display = 'flex';
+    }
+    this.syncPortMappingUI();
+  }
+
+  public closeRobotDesignModal(): void {
+    this.isRobotDesignModalOpen = false;
+    if (this.robotDesignModal) {
+      this.robotDesignModal.style.display = 'none';
+    }
+  }
+
+  public toggleRobotDesignModal(): void {
+    if (this.isRobotDesignModalOpen) {
+      this.closeRobotDesignModal();
+    } else {
+      this.openRobotDesignModal();
+    }
+  }
+
+  public selectRobotPreset(preset: 'advanced' | 'compact'): void {
+    this.activeRobotPreset = preset;
+    try {
+      localStorage.setItem(this.ROBOT_PRESET_STORAGE_KEY, preset);
+    } catch (e) {
+      console.warn('Could not save robot preset to localStorage:', e);
+    }
+
+    const cardAdv = this.rootElement.querySelector('#preset-card-advanced');
+    const cardComp = this.rootElement.querySelector('#preset-card-compact');
+    if (cardAdv) {
+      cardAdv.classList.toggle('active', preset === 'advanced');
+      const tag = cardAdv.querySelector('.preset-tag');
+      if (tag) {
+        tag.textContent = preset === 'advanced' ? 'Active' : 'Select';
+        tag.className = `preset-tag ${preset === 'advanced' ? 'active-tag' : ''}`;
+      }
+    }
+    if (cardComp) {
+      cardComp.classList.toggle('active', preset === 'compact');
+      const tag = cardComp.querySelector('.preset-tag');
+      if (tag) {
+        tag.textContent = preset === 'compact' ? 'Active' : 'Select';
+        tag.className = `preset-tag ${preset === 'compact' ? 'active-tag' : ''}`;
+      }
+    }
+
+    const presetName = preset === 'advanced' ? 'Advanced Driving Base' : 'Compact SPIKE Base';
+    this.logConsole(`🤖 Selected robot design preset: "${presetName}".`);
+    this.callbacks.onRobotPresetChange?.(preset);
+  }
+
+  public getPortMappings(): RobotPortMapping {
+    return { ...this.portMappings };
+  }
+
+  public getActiveRobotPreset(): 'advanced' | 'compact' {
+    return this.activeRobotPreset;
+  }
+
+  public savePortMappings(): void {
+    try {
+      localStorage.setItem(this.PORT_STORAGE_KEY, JSON.stringify(this.portMappings));
+    } catch (e) {
+      console.warn('Could not save port mappings to localStorage:', e);
+    }
+    this.updatePortStatusBadges();
+    const statusText = this.rootElement.querySelector('#port-save-status-text');
+    if (statusText) {
+      statusText.textContent = `✅ Port mappings saved! (${new Date().toLocaleTimeString()})`;
+      setTimeout(() => {
+        if (statusText) {
+          statusText.textContent = 'Hardware bus ready. Changes persist automatically across sessions.';
+        }
+      }, 3000);
+    }
+    this.logConsole('💾 Robot port mappings successfully saved to storage.');
+    this.callbacks.onPortMappingChange?.(this.portMappings);
+  }
+
+  public loadPortMappingsFromStorage(): void {
+    try {
+      const savedPreset = localStorage.getItem(this.ROBOT_PRESET_STORAGE_KEY);
+      if (savedPreset === 'advanced' || savedPreset === 'compact') {
+        this.activeRobotPreset = savedPreset;
+      }
+      const raw = localStorage.getItem(this.PORT_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          this.portMappings = { ...DEFAULT_PORT_MAPPING, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load port mappings from storage:', e);
+    }
+  }
+
+  public syncPortMappingUI(): void {
+    const roles: Array<keyof RobotPortMapping> = [
+      'driveLeft', 'driveRight', 'aux1', 'aux2', 'aux3', 'aux4', 'colorLeft', 'colorRight', 'ultrasonic'
+    ];
+    for (const role of roles) {
+      const kebabRole = role.replace(/([A-Z])/g, '-$1').toLowerCase();
+      const select = this.rootElement.querySelector(`#select-port-${kebabRole}`) as HTMLSelectElement | null;
+      if (select) {
+        select.value = this.portMappings[role];
+      }
+    }
+    this.updatePortStatusBadges();
+  }
+
+  public updatePortStatusBadges(): void {
+    const defaultMap = DEFAULT_PORT_MAPPING;
+    const mappingKeys: Array<{ role: keyof RobotPortMapping; id: string }> = [
+      { role: 'driveLeft', id: 'badge-port-drive-left' },
+      { role: 'driveRight', id: 'badge-port-drive-right' },
+      { role: 'aux1', id: 'badge-port-aux1' },
+      { role: 'aux2', id: 'badge-port-aux2' },
+      { role: 'aux3', id: 'badge-port-aux3' },
+      { role: 'aux4', id: 'badge-port-aux4' },
+      { role: 'colorLeft', id: 'badge-port-color-left' },
+      { role: 'colorRight', id: 'badge-port-color-right' },
+      { role: 'ultrasonic', id: 'badge-port-ultrasonic' },
+    ];
+
+    for (const { role, id } of mappingKeys) {
+      const badge = this.rootElement.querySelector(`#${id}`);
+      if (!badge) continue;
+      const currentVal = this.portMappings[role];
+      const defaultVal = defaultMap[role];
+      if (currentVal === 'None') {
+        badge.textContent = '⚪ Disabled';
+        badge.className = 'port-status-badge status-disabled';
+      } else if (currentVal !== defaultVal) {
+        badge.textContent = '🟡 Remapped';
+        badge.className = 'port-status-badge status-remapped';
+      } else {
+        badge.textContent = '🟢 Connected & Mapped';
+        badge.className = 'port-status-badge status-mapped';
+      }
+    }
+  }
+
   private startMatchTimer(): void {
     setInterval(() => {
       if (this.matchTimerRunning && this.matchSeconds > 0) {
@@ -3098,7 +3954,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
     this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz)} Hz`;
 
-    // 2. Update always-visible bottom FPS meter
+    // 2. Update always-visible bottom FPS meter and editor toolbar FPS profiler
     const fpsRound = Math.round(state.fps);
     this.bottomFpsVal.textContent = `${fpsRound} FPS`;
     const frameMs = state.fps > 0 ? (1000 / state.fps).toFixed(1) : '16.7';
@@ -3111,11 +3967,48 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       this.bottomFpsDot.classList.add('fps-dot-yellow');
     }
 
+    const editorFpsVal = this.rootElement.querySelector('#editor-fps-val');
+    if (editorFpsVal) editorFpsVal.textContent = `${fpsRound} FPS`;
+    const editorFpsMs = this.rootElement.querySelector('#editor-fps-ms');
+    if (editorFpsMs) editorFpsMs.textContent = `(${frameMs}ms)`;
+    const editorFpsDot = this.rootElement.querySelector('#editor-fps-dot');
+    if (editorFpsDot) {
+      editorFpsDot.classList.remove('fps-dot-yellow', 'fps-dot-red');
+      if (fpsRound < 35) {
+        editorFpsDot.classList.add('fps-dot-red');
+      } else if (fpsRound < 55) {
+        editorFpsDot.classList.add('fps-dot-yellow');
+      }
+    }
+
     if (this.isProfilerModalOpen) {
       this.updateProfilerModal();
     }
 
     const gyroYaw = state.sensors.gyroYaw !== undefined ? state.sensors.gyroYaw : state.robot.yawDegrees;
+
+    // Mini summary in header (visible when collapsed to a compact bar)
+    const sumGyro = this.rootElement.querySelector('#telem-sum-gyro');
+    if (sumGyro) sumGyro.textContent = `🧭 Gyro: ${gyroYaw.toFixed(1)}°`;
+
+    const sumDist = this.rootElement.querySelector('#telem-sum-dist');
+    if (sumDist) sumDist.textContent = `📏 Sonar: ${state.sensors.distanceCm}cm`;
+
+    const sumCol = this.rootElement.querySelector('#telem-sum-color');
+    if (sumCol) sumCol.textContent = `🎨 C: ${state.sensors.colorC.color.toUpperCase()}`;
+
+    const sumMotors = this.rootElement.querySelector('#telem-sum-motors');
+    if (sumMotors) {
+      let mStatus = 'IDLE';
+      const spdL = Math.abs(state.motors.left.speed);
+      const spdR = Math.abs(state.motors.right.speed);
+      if (spdL > 1 || spdR > 1) {
+        mStatus = 'RUNNING';
+      } else if (state.motors.left.status === 'BRAKING' || state.motors.right.status === 'BRAKING') {
+        mStatus = 'BRAKE';
+      }
+      sumMotors.textContent = `⚙️ Motors: ${mStatus}`;
+    }
 
     // 3. Update TAB 1: Sensors & Pose in Telemetry Modal
     const tBadgeC = this.rootElement.querySelector('#telem-badge-color-c');
@@ -3480,7 +4373,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
 
   public toggleTelemetryPanel(open?: boolean): void {
     this.isTelemetryOpen = open !== undefined ? open : !this.isTelemetryOpen;
-    this.telemetryPanel.style.display = this.isTelemetryOpen ? 'block' : 'none';
+    this.telemetryPanel.style.display = this.isTelemetryOpen ? 'flex' : 'none';
     const btn = this.rootElement.querySelector('#btn-toggle-telemetry');
     btn?.classList.toggle('active', this.isTelemetryOpen);
   }
@@ -4082,11 +4975,16 @@ print("Finished!")
       this.btnViewModePython.classList.toggle('active', mode === 'python');
     }
 
+    const scratchContainer = this.rootElement.querySelector('#scratch-blocks-container') as HTMLElement | null;
+
     if (mode === 'blocks') {
+      if (scratchContainer) scratchContainer.style.display = 'flex';
       if (this.wordBlocksContainer) this.wordBlocksContainer.style.display = 'block';
       if (this.codeTextarea) this.codeTextarea.style.display = 'none';
       this.renderVisualBlocks();
+      this.updateScratchTransform();
     } else {
+      if (scratchContainer) scratchContainer.style.display = 'none';
       if (this.wordBlocksContainer) this.wordBlocksContainer.style.display = 'none';
       if (this.codeTextarea) this.codeTextarea.style.display = 'block';
     }
@@ -4113,8 +5011,10 @@ print("Finished!")
       `;
       const btn = this.wordBlocksContainer.querySelector('#btn-empty-import-spike');
       btn?.addEventListener('click', () => {
-        this.spikeScratchFileInput?.click();
+        const input = (this.rootElement.querySelector('#input-import-code') || this.spikeScratchFileInput) as HTMLInputElement | null;
+        input?.click();
       });
+      this.updateScratchTransform();
       return;
     }
 
@@ -4131,6 +5031,7 @@ print("Finished!")
         ${blocksHtml}
       </div>
     `;
+    this.updateScratchTransform();
   }
 
   private renderVisualBlockHtml(b: VisualBlock): string {
@@ -4188,21 +5089,162 @@ print("Finished!")
   }
 
   public async handleSpikeScratchFile(file: File): Promise<void> {
-    this.logConsole(`Unpacking and transpiling SPIKE App project "${file.name}"...`);
+    return this.handleUnifiedImportFile(file);
+  }
+
+  public async handleUnifiedImportFile(file: File): Promise<void> {
+    const extMatch = file.name.match(/\.([a-z0-9]+)$/i);
+    const ext = extMatch ? extMatch[1].toLowerCase() : '';
+    const importId = `imported_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+
     try {
-      const buffer = await file.arrayBuffer();
-      const result = await SpikeScratchImporter.importProject(buffer, file.name);
+      if (ext === 'py') {
+        const text = await file.text();
+        this.importedMissions.set(importId, {
+          title: file.name,
+          code: text,
+        });
 
-      this.addNewScriptTab(result.projectName, result.pythonCode, result.visualBlocks);
-      this.setEditorViewMode('blocks');
-      this.logConsole(`✅ Successfully imported SPIKE project "${result.projectName}" (${result.totalBlocks} Word Blocks converted to Python)!`);
+        this.addNewScriptTab(baseName, text);
+        this.setEditorViewMode('python');
+        this.registerImportedMissionInSelect(importId, file.name);
+        this.logConsole(`✅ Successfully imported Python script "${file.name}"!`);
+      } else if (['llsp', 'llsp3', 'sb3', 'json'].includes(ext)) {
+        this.logConsole(`Unpacking and importing SPIKE Scratch file "${file.name}"...`);
+        const buffer = await file.arrayBuffer();
+        const result = await SpikeScratchImporter.importProject(buffer, file.name);
 
-      if (this.callbacks.onImportSpikeScratch) {
-        await this.callbacks.onImportSpikeScratch(file);
+        this.importedMissions.set(importId, {
+          title: result.projectName,
+          code: result.pythonCode,
+          visualBlocks: result.visualBlocks,
+        });
+
+        this.addNewScriptTab(result.projectName, result.pythonCode, result.visualBlocks);
+        this.setEditorViewMode('blocks');
+        this.registerImportedMissionInSelect(importId, file.name);
+        this.logConsole(`✅ Successfully imported SPIKE project "${result.projectName}" (${result.totalBlocks} Word Blocks converted to Python)!`);
+
+        if (this.callbacks.onImportSpikeScratch) {
+          await this.callbacks.onImportSpikeScratch(file);
+        }
+      } else {
+        this.logConsole(`⚠️ Unsupported file format: "${file.name}". Please import .py, .llsp, .llsp3, .sb3, or .json files.`);
       }
     } catch (err: any) {
-      this.logConsole(`❌ Failed to import SPIKE project: ${err.message || err}`);
+      this.logConsole(`❌ Failed to import "${file.name}": ${err.message || err}`);
     }
+  }
+
+  private registerImportedMissionInSelect(importId: string, displayName: string): void {
+    const sampleSelect = (this.rootElement.querySelector('#sample-select') || this.rootElement.querySelector('#mission-select')) as HTMLSelectElement | null;
+    if (sampleSelect) {
+      const opt = document.createElement('option');
+      opt.value = importId;
+      opt.textContent = `📥 ${displayName}`;
+      opt.selected = true;
+      sampleSelect.appendChild(opt);
+      sampleSelect.value = importId;
+    }
+    this.updateTopbarProgramSelect();
+  }
+
+  public setScratchZoom(scale: number, panX?: number, panY?: number): void {
+    this.scratchZoomScale = Math.min(2.5, Math.max(0.4, scale));
+    if (panX !== undefined) this.scratchPanX = panX;
+    if (panY !== undefined) this.scratchPanY = panY;
+    this.updateScratchTransform();
+  }
+
+  public resetScratchZoomAndPan(): void {
+    this.scratchZoomScale = 1.0;
+    this.scratchPanX = 0;
+    this.scratchPanY = 0;
+    this.updateScratchTransform();
+  }
+
+  public getScratchZoomState(): { scale: number; panX: number; panY: number } {
+    return {
+      scale: this.scratchZoomScale,
+      panX: this.scratchPanX,
+      panY: this.scratchPanY,
+    };
+  }
+
+  public updateScratchTransform(): void {
+    const content = this.rootElement.querySelector('#scratch-zoom-content') as HTMLElement | null;
+    const label = this.rootElement.querySelector('#scratch-zoom-level') as HTMLElement | null;
+    if (content) {
+      content.style.transform = `translate(${this.scratchPanX}px, ${this.scratchPanY}px) scale(${this.scratchZoomScale})`;
+    }
+    if (label) {
+      label.textContent = `${Math.round(this.scratchZoomScale * 100)}%`;
+    }
+  }
+
+  private setupScratchPanAndZoom(): void {
+    const viewport = this.rootElement.querySelector('#scratch-zoom-viewport') as HTMLElement | null;
+    const btnZoomIn = this.rootElement.querySelector('#btn-scratch-zoom-in') as HTMLButtonElement | null;
+    const btnZoomOut = this.rootElement.querySelector('#btn-scratch-zoom-out') as HTMLButtonElement | null;
+    const btnZoomReset = this.rootElement.querySelector('#btn-scratch-zoom-reset') as HTMLButtonElement | null;
+
+    btnZoomIn?.addEventListener('click', () => {
+      this.setScratchZoom(this.scratchZoomScale + 0.15);
+    });
+
+    btnZoomOut?.addEventListener('click', () => {
+      this.setScratchZoom(this.scratchZoomScale - 0.15);
+    });
+
+    btnZoomReset?.addEventListener('click', () => {
+      this.resetScratchZoomAndPan();
+    });
+
+    if (viewport) {
+      viewport.addEventListener('wheel', (e: WheelEvent) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        this.setScratchZoom(this.scratchZoomScale + delta);
+      }, { passive: false });
+
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+      let initialPanX = 0;
+      let initialPanY = 0;
+
+      viewport.addEventListener('mousedown', (e: MouseEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (target && target.closest('button, input, select, textarea, a')) {
+          return;
+        }
+        isDragging = true;
+        viewport.classList.add('is-dragging');
+        startX = e.clientX;
+        startY = e.clientY;
+        initialPanX = this.scratchPanX;
+        initialPanY = this.scratchPanY;
+      });
+
+      window.addEventListener('mousemove', (e: MouseEvent) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        this.scratchPanX = initialPanX + dx;
+        this.scratchPanY = initialPanY + dy;
+        this.updateScratchTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          viewport.classList.remove('is-dragging');
+        }
+      });
+    }
+
+    this.updateScratchTransform();
   }
 
   private loadScriptTabsFromStorage(): void {

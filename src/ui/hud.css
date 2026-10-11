@@ -54,7 +54,7 @@ body, html {
   flex-direction: column;
 }
 
-.hud-topbar, .hud-activity-bar, .hud-drawer-panel, .hud-floating-terminal, .hud-telemetry-panel, .hud-sandbox-toolbar {
+.hud-topbar, .hud-activity-bar, .hud-drawer-panel, .hud-floating-terminal, .hud-telemetry-panel, .hud-telemetry-dock, .hud-sandbox-toolbar {
   pointer-events: auto;
 }
 
@@ -1087,30 +1087,298 @@ body, html {
   background: rgba(56, 189, 248, 0.35);
 }
 
-/* Wide Resizable Telemetry Modal (Bottom-Right) */
+/* =========================================================================
+   Dockable & Minimizable Telemetry Pane (.hud-telemetry-dock)
+   ========================================================================= */
+
+.hud-telemetry-dock,
 .hud-telemetry-panel {
   position: absolute;
-  right: 20px;
-  bottom: 20px;
-  width: 640px;
-  min-width: 440px;
-  max-width: calc(100vw - 40px);
-  height: 480px;
-  min-height: 280px;
-  max-height: calc(100vh - 80px);
-  background: var(--bg-card);
+  background: rgba(15, 23, 42, 0.94);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 35px -5px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
-  z-index: 25;
+  z-index: 30;
   overflow: hidden;
+  user-select: none;
+  transition: height 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- DOCKING MODE A: Bottom Dock (.dock-bottom) --- */
+.hud-telemetry-dock.dock-bottom {
+  bottom: 0;
+  left: 48px; /* Offset right of the 48px activity bar */
+  right: 0;
+  height: 270px;
+  min-height: 180px;
+  max-height: calc(100vh - 80px);
+  border-bottom: none;
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+  border-radius: 10px 0 0 0;
+}
+
+.hud-telemetry-dock.dock-bottom .telem-tabs-bar {
+  display: none !important;
+}
+
+.hud-telemetry-dock.dock-bottom .telem-body {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px;
+  overflow: hidden;
+}
+
+/* Left column in bottom dock */
+.hud-telemetry-dock.dock-bottom .telem-dock-left {
+  flex: 1.2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid rgba(51, 65, 85, 0.45);
+  padding-right: 12px;
+  overflow: hidden;
+}
+
+/* Right column in bottom dock */
+.hud-telemetry-dock.dock-bottom .telem-dock-right {
+  flex: 0.8;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.hud-telemetry-dock.dock-bottom .telem-dock-right .telem-content-logs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.hud-telemetry-dock.dock-bottom .telem-log-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Resizing top handle for bottom dock */
+.hud-telemetry-dock.dock-bottom .telem-resizer-n {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 35;
+}
+
+.hud-telemetry-dock.dock-bottom .telem-resizer-w,
+.hud-telemetry-dock.dock-bottom .telem-resizer-nw {
+  display: none;
+}
+
+/* --- DOCKING MODE B: Right Dock (.dock-right) --- */
+.hud-telemetry-dock.dock-right {
+  top: 56px; /* Offset below 56px topbar */
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  min-width: 320px;
+  max-width: calc(100vw - 60px);
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid var(--border-color);
+  border-radius: 0;
+}
+
+.hud-telemetry-dock.dock-right .telem-left-tabs-bar {
+  display: none !important;
+}
+
+.hud-telemetry-dock.dock-right .telem-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.hud-telemetry-dock.dock-right .telem-dock-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.hud-telemetry-dock.dock-right .telem-dock-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Resizing left handle for right dock */
+.hud-telemetry-dock.dock-right .telem-resizer-w {
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 35;
+}
+
+.hud-telemetry-dock.dock-right .telem-resizer-n,
+.hud-telemetry-dock.dock-right .telem-resizer-nw {
+  display: none;
+}
+
+/* --- COLLAPSED STATE (.dock-collapsed) --- */
+.hud-telemetry-dock.dock-collapsed {
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  overflow: hidden !important;
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.hud-telemetry-dock.dock-bottom.dock-collapsed {
+  bottom: 0;
+  left: 48px;
+  right: 0;
+}
+
+.hud-telemetry-dock.dock-right.dock-collapsed {
+  top: auto;
+  bottom: 0;
+  right: 0;
+  width: 560px;
+  max-width: calc(100vw - 60px);
+  border-radius: 8px 0 0 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.hud-telemetry-dock.dock-collapsed .telem-body,
+.hud-telemetry-dock.dock-collapsed .telem-tabs-bar,
+.hud-telemetry-dock.dock-collapsed .telem-resizer {
+  display: none !important;
+}
+
+.hud-telemetry-dock.dock-collapsed .telem-modal-header {
+  height: 32px;
+  padding: 4px 12px;
+  background: rgba(15, 23, 42, 0.98);
+  border-bottom: none;
+}
+
+/* --- Mini Summary Bar in Header --- */
+.telem-mini-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  white-space: nowrap;
   user-select: none;
 }
 
-/* Resize Handles on top and left */
+.telem-sum-item {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.telem-sum-sep {
+  color: #475569;
+}
+
+.telem-expand-btn {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 8px;
+  height: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* --- Left Column Sub-Tabs (.telem-left-tabs-bar) --- */
+.telem-left-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.telem-col-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.telem-subtab-btn {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  background: rgba(30, 41, 59, 0.5);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.telem-subtab-btn:hover {
+  background: rgba(51, 65, 85, 0.4);
+  color: var(--text-main);
+}
+
+.telem-subtab-btn.active {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-blue);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.telem-left-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Side-by-side mode (.subview-both) in bottom dock left column */
+.telem-dock-left.subview-both .telem-left-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.telem-dock-left.subview-both .telem-tab-content {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Resize Handles */
 .telem-resizer {
   position: absolute;
   z-index: 30;
@@ -1165,8 +1433,8 @@ body, html {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
-  background: rgba(15, 23, 42, 0.85);
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.9);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -2160,8 +2428,9 @@ body, html {
   white-space: pre-wrap;
 }
 
-/* Always-Visible Bottom Center FPS Meter & Profiler Button */
+/* Bottom Center FPS Meter (Relocated to Editor Header Profiler Button) */
 .hud-bottom-fps-meter {
+  display: none !important;
   position: fixed;
   bottom: 12px;
   left: 50%;
@@ -3142,4 +3411,542 @@ body, html {
   font-family: monospace;
   font-weight: 700;
 }
+
+/* ==========================================================================
+   Groups 2 & 3: Mission Bar, Editor Profiler Button & Block Pan-Zoom Viewport
+   ========================================================================== */
+
+/* Compact Sample Mission Bar & Unified Import */
+.sample-mission-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.sample-select-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  white-space: nowrap;
+}
+
+.sample-mission-bar .hud-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* Editor Header Actions & Profiler Button */
+.code-editor-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-fps-profiler {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.btn-fps-profiler:hover {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.btn-fps-profiler .fps-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.btn-fps-profiler .fps-pulse-dot.fps-dot-yellow {
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+.btn-fps-profiler .fps-pulse-dot.fps-dot-red {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+}
+
+.btn-fps-profiler .fps-val {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.btn-fps-profiler .fps-ms {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.btn-fps-profiler .fps-btn-tag {
+  font-size: 10px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  padding: 0 5px;
+  border-radius: 4px;
+  margin-left: 2px;
+}
+
+/* Scratch Block Viewer Container & Pan/Zoom Viewport */
+.scratch-blocks-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  max-height: 520px;
+  background: #090d16;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.scratch-zoom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  z-index: 10;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.zoom-toolbar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.zoom-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zoom-btn {
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.scratch-zoom-level {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #38bdf8;
+  font-weight: 600;
+  min-width: 42px;
+  text-align: right;
+  display: inline-block;
+}
+
+.scratch-zoom-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  overflow: hidden;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+  background: radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.25) 0%, rgba(9, 13, 22, 0.95) 100%);
+}
+
+.scratch-zoom-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.scratch-zoom-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  width: 100%;
+  box-sizing: border-box;
+  will-change: transform;
+}
+
+/* ==========================================================================
+   Group 4: Robot Design & Hardware Port Mapping Inspector Modal
+   ========================================================================== */
+
+.hud-robot-design-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 520;
+  user-select: none;
+}
+
+.modal-robot-design-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.75);
+  backdrop-filter: blur(8px);
+}
+
+.robot-design-modal-card {
+  position: relative;
+  z-index: 1;
+  width: 92%;
+  max-width: 860px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #0b1120;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.15);
+  overflow: hidden;
+  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.robot-design-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.robot-design-modal-header .modal-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.robot-design-modal-header .modal-header-icon {
+  font-size: 26px;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.5));
+}
+
+.robot-design-modal-header .modal-title-main {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.3px;
+}
+
+.robot-design-modal-header .modal-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.robot-design-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.design-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.section-badge {
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.section-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: auto;
+}
+
+/* Preset Cards */
+.robot-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.robot-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.robot-preset-card:hover {
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(56, 189, 248, 0.4);
+  transform: translateY(-1px);
+}
+
+.robot-preset-card.active {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
+.preset-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-icon {
+  font-size: 18px;
+}
+
+.preset-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  flex: 1;
+}
+
+.preset-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.preset-tag.active-tag {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.preset-desc {
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.preset-meta {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.design-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Port Mapping Table & Grid */
+.port-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.port-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.port-item-card:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.port-item-card.card-fixed {
+  background: rgba(15, 23, 42, 0.4);
+  border-style: dashed;
+}
+
+.port-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.port-item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.port-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.port-item-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.port-item-role {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.port-status-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.port-status-badge.status-mapped {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.port-status-badge.status-remapped {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.port-status-badge.status-disabled {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.port-item-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 6px;
+}
+
+.port-item-select-row label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.port-fixed-label {
+  font-size: 10.5px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #38bdf8;
+}
+
+.port-select {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 6px;
+  background: rgba(2, 6, 23, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  color: #38bdf8;
+  cursor: pointer;
+}
+
+.port-select:focus {
+  border-color: #38bdf8;
+  outline: none;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+}
+
+.robot-design-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.footer-notice {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
 

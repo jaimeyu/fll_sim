@@ -69,7 +69,7 @@ export class Viewport3D {
     // 2. Camera: Optimized near and far planes for maximum depth buffer precision
     const aspect = container.clientWidth / container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 25);
-    this.setCameraPreset('ISO');
+    this.setCameraPreset('TOP_DOWN');
 
     // 3. Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
