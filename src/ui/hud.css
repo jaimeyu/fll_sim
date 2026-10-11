@@ -654,6 +654,35 @@ body, html {
   font-weight: 600;
   line-height: 1.4;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+.btn-delete-block {
+  margin-left: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 10px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+  user-select: none;
+  line-height: 1;
+}
+
+.word-block:hover .btn-delete-block {
+  opacity: 0.75;
+}
+
+.btn-delete-block:hover {
+  opacity: 1 !important;
+  background: rgba(239, 68, 68, 0.85);
 }
 
 .word-block-icon {
@@ -4239,15 +4268,384 @@ body, html {
   gap: 8px;
 }
 
-.popout-footer-right {
+.popout-pin-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 3px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
 }
 
-.popout-status-text {
+.popout-pin-actions .btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+/* Modal Pinning & Window Layout Modes */
+.hud-popout-code-modal.pin-left {
+  align-items: stretch;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+.hud-popout-code-modal.pin-left .popout-code-backdrop {
+  display: none;
+}
+.hud-popout-code-modal.pin-left .popout-code-card {
+  width: 50vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  border-radius: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom: none;
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
+}
+
+.hud-popout-code-modal.pin-right {
+  align-items: stretch;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.hud-popout-code-modal.pin-right .popout-code-backdrop {
+  display: none;
+}
+.hud-popout-code-modal.pin-right .popout-code-card {
+  width: 50vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  border-radius: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
+}
+
+.hud-popout-code-modal.pin-float {
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.hud-popout-code-modal.pin-float .popout-code-backdrop {
+  pointer-events: none;
+  background: rgba(3, 7, 18, 0.3);
+  backdrop-filter: blur(2px);
+}
+.hud-popout-code-modal.pin-float .popout-code-card {
+  width: 860px;
+  max-width: 92vw;
+  height: 640px;
+  max-height: 88vh;
+  resize: both;
+  overflow: hidden;
+  border-radius: 12px;
+  pointer-events: auto;
+}
+
+.hud-popout-code-modal.pin-full {
+  align-items: center;
+  justify-content: center;
+}
+.hud-popout-code-modal.pin-full .popout-code-card {
+  width: 92vw;
+  max-width: 1400px;
+  height: 86vh;
+  max-height: 900px;
+}
+
+/* ==========================================================================
+   LEGO SPIKE Prime Blocks Workspace, Palette Drawer & Canvas
+   ========================================================================== */
+.spike-blocks-workspace {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #090d16;
+}
+
+/* 1. Category Sidebar (far left vertical strip) */
+.spike-category-sidebar {
+  width: 68px;
+  background: #0b1120;
+  border-right: 1px solid rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 8px;
+  flex-shrink: 0;
+  user-select: none;
+  z-index: 5;
+}
+
+.spike-cat-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 58px;
+  padding: 6px 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.spike-cat-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+}
+
+.spike-cat-btn.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.cat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+.cat-dot.dot-motors { background: #0090f5; }
+.cat-dot.dot-movement { background: #d83b9c; }
+.cat-dot.dot-events { background: #eab308; }
+.cat-dot.dot-control { background: #f97316; }
+.cat-dot.dot-sensors { background: #00a2e8; }
+.cat-dot.dot-operators { background: #22c55e; }
+
+.cat-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* 2. Block Palette Drawer (scrollable list of blocks) */
+.spike-palette-drawer {
+  width: 320px;
+  background: #0f172a;
+  border-right: 1px solid rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 12px 14px;
+  gap: 16px;
+  flex-shrink: 0;
+  user-select: none;
+  z-index: 4;
+}
+
+.palette-category-header {
+  font-size: 13px;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: capitalize;
+}
+
+.palette-blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Authentic LEGO SPIKE Prime Block in Palette */
+.spike-palette-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  position: relative;
+  line-height: 1.3;
+}
+
+.spike-palette-block:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  filter: brightness(1.08);
+}
+
+.spike-palette-block:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.spike-palette-block .block-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 2px 8px;
   font-size: 11px;
-  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.spike-palette-block .block-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* 3. Canvas Viewport with Dotted Grid Background */
+.spike-canvas-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background-color: #080d1a;
+  background-image: radial-gradient(rgba(56, 189, 248, 0.22) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+
+.spike-canvas-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.spike-canvas-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  padding: 24px;
+  box-sizing: border-box;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* Floating Zoom Controls at bottom-right of canvas */
+.spike-floating-zoom-controls {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 999px;
+  padding: 4px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  user-select: none;
+}
+
+.zoom-icon-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.zoom-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #38bdf8;
+}
+
+.zoom-level-badge {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #38bdf8;
+  font-weight: 700;
+  min-width: 38px;
+  text-align: center;
+}
+
+/* --- Editor Autosave Indicator & Project Zip / Script Export --- */
+.editor-autosave-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #38bdf8;
+  user-select: none;
+  transition: all 0.25s ease;
+}
+
+.editor-autosave-indicator.saving {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.editor-autosave-indicator.saved {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.editor-autosave-indicator .autosave-icon {
+  font-size: 11px;
+  display: inline-block;
+}
+
+.editor-autosave-indicator.saving .autosave-icon {
+  animation: pulse-autosave 0.9s infinite alternate;
+}
+
+@keyframes pulse-autosave {
+  from { opacity: 0.55; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1.1); }
+}
+
+.btn-export-zip,
+.btn-export-code {
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.btn-export-zip:hover,
+.btn-export-code:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #e0f2fe;
 }
 
 

@@ -475,7 +475,20 @@ async function bootstrapSimulator() {
       hud.logConsole('🧭 Zeroed Gyro heading to 0.0°.');
       hud.logCommand('CMD', 'UI Button', 'Calibrated and zeroed Gyro IMU heading to 0.0°');
     },
+    onRobotPresetChange: (preset) => {
+      robotRenderer.setRobotPreset(preset);
+      hud.logConsole(
+        `🤖 Field robot visual model updated to: ${
+          preset === 'advanced'
+            ? 'DroidBot-E (Dual Color Sensors + Ultrasonic + Articulated Motor Arms)'
+            : 'Compact SPIKE Base (Single Color Sensor)'
+        }`
+      );
+    },
   });
+
+  // Sync initial robot visual preset with HUD saved state
+  robotRenderer.setRobotPreset(hud.getActiveRobotPreset());
 
   engine.robot.onBrakeEngaged = () => {
     hud.logCommand('BRAKE', 'Physics Engine', 'Active electromagnetic brake: Chassis & wheels clamped (0.00 Nm torque)');

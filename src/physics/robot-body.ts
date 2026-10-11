@@ -286,12 +286,18 @@ export class RobotPhysicsBody {
     }
 
     for (const [port, motor] of this.motors.entries()) {
-      const targetDegPerSec = motor.step(dt);
+      if (port !== 'A' && port !== 'B') {
+        motor.step(dt);
+        continue;
+      }
+
+      // Drive wheels A & B
+      const targetDegPerSec = motor.targetSpeedDegPerSec;
       const isIdle = Math.abs(targetDegPerSec) < 0.1;
       let targetRadPerSec = (targetDegPerSec * Math.PI) / 180;
 
       // Differential wheel speed trim to keep wheels in lockstep
-      if (isDrivingStraight && !isIdle && (port === 'A' || port === 'B')) {
+      if (isDrivingStraight && !isIdle) {
         const trimGain = 0.05;
         const trim = Math.max(-1.5, Math.min(1.5, yawError * trimGain));
         const sign = targetDegPerSec > 0 ? 1 : -1;
@@ -327,6 +333,7 @@ export class RobotPhysicsBody {
                 (joint as any).configureMotorVelocity(0.0, 5.0);
               } catch (_) {}
             }
+            motor.step(dt, 0);
           } else {
             anyDriveActive = true;
             if (joint) {

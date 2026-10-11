@@ -19,6 +19,16 @@ export class Robot3DRenderer {
   public leftWheelMesh: THREE.Group;
   public rightWheelMesh: THREE.Group;
 
+  // DroidBot-E Articulated Attachments & Preset System
+  public attachmentRoot: THREE.Group;
+  public leftAttachmentArm?: THREE.Group;
+  public rightAttachmentArm?: THREE.Group;
+  public leftAuxMotor?: THREE.Group;
+  public rightAuxMotor?: THREE.Group;
+  public ultrasonicSensorGroup?: THREE.Group;
+  public colorSensorRightGroup?: THREE.Group;
+  public activePreset: 'advanced' | 'compact' = 'advanced';
+
   // Sensor ground spots
   public sensorSpotC: THREE.Mesh;
   public sensorSpotD: THREE.Mesh;
@@ -30,6 +40,7 @@ export class Robot3DRenderer {
     this.chassisMesh = new THREE.Group();
     this.leftWheelMesh = new THREE.Group();
     this.rightWheelMesh = new THREE.Group();
+    this.attachmentRoot = new THREE.Group();
 
     this.buildLegoChassisVisuals();
     this.buildLegoWheelVisuals(this.leftWheelMesh, 'left');
@@ -40,9 +51,13 @@ export class Robot3DRenderer {
     consolidateGroupMeshes(this.leftWheelMesh);
     consolidateGroupMeshes(this.rightWheelMesh);
 
+    // Build authentic DroidBot-E attachments and articulated motor arms
+    this.buildDroidBotEAttachments();
+
     this.rootGroup.add(this.chassisMesh);
     this.rootGroup.add(this.leftWheelMesh);
     this.rootGroup.add(this.rightWheelMesh);
+    this.rootGroup.add(this.attachmentRoot);
 
     // Ground projection spots for color sensors
     const spotGeom = new THREE.CircleGeometry(0.008, 16);
@@ -55,6 +70,13 @@ export class Robot3DRenderer {
 
     this.rootGroup.add(this.sensorSpotC);
     this.rootGroup.add(this.sensorSpotD);
+  }
+
+  public setRobotPreset(preset: 'advanced' | 'compact'): void {
+    this.activePreset = preset;
+    const isAdv = preset === 'advanced';
+    this.attachmentRoot.visible = isAdv;
+    this.sensorSpotD.visible = isAdv;
   }
 
   public setSensorManager(sm: VirtualSensorManager): void {
@@ -214,9 +236,9 @@ export class Robot3DRenderer {
     }
 
     // -------------------------------------------------------------------------
-    // 5. Dual Color Sensors (Ports C & D) facing downward at the mat
+    // 5. Left Color Sensor (Port C) facing downward at the mat
     // -------------------------------------------------------------------------
-    for (const xPos of [-0.024, 0.024]) {
+    {
       const sensorGroup = new THREE.Group();
 
       // Sensor Body (Black casing)
@@ -231,14 +253,14 @@ export class Robot3DRenderer {
       clipMesh.position.set(0, 0.010, 0);
       sensorGroup.add(clipMesh);
 
-      // Dual Optical Lenses with White LED emitter rings
+      // Optical Lens with White LED emitter ring
       const lensGeom = new THREE.CircleGeometry(0.004, 12);
       lensGeom.rotateX(Math.PI / 2); // Facing mat
       const lensMesh = new THREE.Mesh(lensGeom, new THREE.MeshBasicMaterial({ color: 0xffffff }));
       lensMesh.position.set(0, -0.0095, 0.004);
       sensorGroup.add(lensMesh);
 
-      sensorGroup.position.set(xPos, -0.008, 0.068);
+      sensorGroup.position.set(-0.024, -0.008, 0.068);
       this.chassisMesh.add(sensorGroup);
     }
 
@@ -321,6 +343,166 @@ export class Robot3DRenderer {
   }
 
   /**
+   * Build authentic DroidBot-E attachments:
+   * - Left & Right Aux Medium Angular Motors (Ports E & F)
+   * - Articulated Left & Right Technic Attachment Liftarms / Pusher Forks
+   * - Front Ultrasonic Distance Sensor (Port E)
+   * - Right Color Sensor (Port D)
+   */
+  private buildDroidBotEAttachments(): void {
+    const motorMat = getLegoMaterial(LEGO_COLORS.AZURE, 0.3);
+    const whiteMat = getLegoMaterial(LEGO_COLORS.WHITE, 0.25, 0.0);
+    const blackMat = getLegoMaterial(LEGO_COLORS.BLACK, 0.5, 0.0);
+
+    // 1. Left Aux Attachment Motor (Port E) & Left Articulated Liftarm
+    this.leftAuxMotor = new THREE.Group();
+    const motorBodyL = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.034, 0.046), motorMat);
+    motorBodyL.castShadow = true;
+    this.leftAuxMotor.add(motorBodyL);
+
+    const hubFaceL = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.003, 16), whiteMat);
+    hubFaceL.rotation.z = Math.PI / 2;
+    hubFaceL.position.set(-0.012, 0, 0);
+    this.leftAuxMotor.add(hubFaceL);
+
+    this.leftAuxMotor.position.set(-0.052, 0.032, 0.005);
+    this.attachmentRoot.add(this.leftAuxMotor);
+
+    // Left Articulated Attachment Liftarm (pivots around motor axle X axis)
+    this.leftAttachmentArm = new THREE.Group();
+    this.leftAttachmentArm.position.set(-0.066, 0.032, 0.005);
+
+    const collarL = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, 0.006, 12),
+      getLegoMaterial(LEGO_COLORS.LIGHT_GRAY)
+    );
+    collarL.rotation.z = Math.PI / 2;
+    this.leftAttachmentArm.add(collarL);
+
+    // 9L Technic Liftarm (Red) extending forward
+    const armBeamL = createTechnicBeamGroup(9, LEGO_COLORS.RED, {
+      width: 0.008,
+      thickness: 0.008,
+      withPinsAt: [0, 4, 8],
+    });
+    armBeamL.position.set(0, 0, 0.036);
+    this.leftAttachmentArm.add(armBeamL);
+
+    // Front pusher prong (Azure)
+    const prongL = createTechnicBeamGroup(5, LEGO_COLORS.AZURE, {
+      width: 0.008,
+      thickness: 0.008,
+    });
+    prongL.rotation.y = Math.PI / 2;
+    prongL.position.set(0.016, 0, 0.072);
+    this.leftAttachmentArm.add(prongL);
+
+    this.attachmentRoot.add(this.leftAttachmentArm);
+
+    // 2. Right Aux Attachment Motor (Port F) & Right Articulated Liftarm
+    this.rightAuxMotor = new THREE.Group();
+    const motorBodyR = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.034, 0.046), motorMat);
+    motorBodyR.castShadow = true;
+    this.rightAuxMotor.add(motorBodyR);
+
+    const hubFaceR = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.003, 16), whiteMat);
+    hubFaceR.rotation.z = Math.PI / 2;
+    hubFaceR.position.set(0.012, 0, 0);
+    this.rightAuxMotor.add(hubFaceR);
+
+    this.rightAuxMotor.position.set(0.052, 0.032, 0.005);
+    this.attachmentRoot.add(this.rightAuxMotor);
+
+    // Right Articulated Attachment Liftarm (pivots around motor axle X axis)
+    this.rightAttachmentArm = new THREE.Group();
+    this.rightAttachmentArm.position.set(0.066, 0.032, 0.005);
+
+    const collarR = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, 0.006, 12),
+      getLegoMaterial(LEGO_COLORS.LIGHT_GRAY)
+    );
+    collarR.rotation.z = Math.PI / 2;
+    this.rightAttachmentArm.add(collarR);
+
+    // 9L Technic Liftarm (Red) extending forward
+    const armBeamR = createTechnicBeamGroup(9, LEGO_COLORS.RED, {
+      width: 0.008,
+      thickness: 0.008,
+      withPinsAt: [0, 4, 8],
+    });
+    armBeamR.position.set(0, 0, 0.036);
+    this.rightAttachmentArm.add(armBeamR);
+
+    // Front pusher prong (Azure)
+    const prongR = createTechnicBeamGroup(5, LEGO_COLORS.AZURE, {
+      width: 0.008,
+      thickness: 0.008,
+    });
+    prongR.rotation.y = -Math.PI / 2;
+    prongR.position.set(-0.016, 0, 0.072);
+    this.rightAttachmentArm.add(prongR);
+
+    this.attachmentRoot.add(this.rightAttachmentArm);
+
+    // 3. Front Ultrasonic Distance Sensor (Port E)
+    this.ultrasonicSensorGroup = new THREE.Group();
+    const ultraBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.034, 0.016, 0.014),
+      blackMat
+    );
+    ultraBody.castShadow = true;
+    this.ultrasonicSensorGroup.add(ultraBody);
+
+    for (const eyeX of [-0.009, 0.009]) {
+      const eyeRing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0055, 0.0055, 0.002, 16),
+        getLegoMaterial(LEGO_COLORS.LIGHT_GRAY, 0.2, 0.5)
+      );
+      eyeRing.rotation.x = Math.PI / 2;
+      eyeRing.position.set(eyeX, 0, 0.008);
+      this.ultrasonicSensorGroup.add(eyeRing);
+
+      const eyePupil = new THREE.Mesh(
+        new THREE.CircleGeometry(0.0035, 12),
+        new THREE.MeshBasicMaterial({ color: 0x050505 })
+      );
+      eyePupil.position.set(eyeX, 0, 0.0091);
+      this.ultrasonicSensorGroup.add(eyePupil);
+    }
+
+    const ultraClip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.036, 0.004, 0.010),
+      getLegoMaterial(LEGO_COLORS.AZURE)
+    );
+    ultraClip.position.set(0, -0.009, 0);
+    this.ultrasonicSensorGroup.add(ultraClip);
+
+    this.ultrasonicSensorGroup.position.set(0, 0.024, 0.076);
+    this.attachmentRoot.add(this.ultrasonicSensorGroup);
+
+    // 4. Right Color Sensor (Port D) facing downward at the mat
+    this.colorSensorRightGroup = new THREE.Group();
+    const sensorGeomD = new THREE.BoxGeometry(0.016, 0.018, 0.024);
+    const sensorMeshD = new THREE.Mesh(sensorGeomD, blackMat);
+    sensorMeshD.castShadow = true;
+    this.colorSensorRightGroup.add(sensorMeshD);
+
+    const clipGeomD = new THREE.BoxGeometry(0.018, 0.004, 0.014);
+    const clipMeshD = new THREE.Mesh(clipGeomD, getLegoMaterial(LEGO_COLORS.AZURE));
+    clipMeshD.position.set(0, 0.010, 0);
+    this.colorSensorRightGroup.add(clipMeshD);
+
+    const lensGeomD = new THREE.CircleGeometry(0.004, 12);
+    lensGeomD.rotateX(Math.PI / 2);
+    const lensMeshD = new THREE.Mesh(lensGeomD, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    lensMeshD.position.set(0, -0.0095, 0.004);
+    this.colorSensorRightGroup.add(lensMeshD);
+
+    this.colorSensorRightGroup.position.set(0.024, -0.008, 0.068);
+    this.attachmentRoot.add(this.colorSensorRightGroup);
+  }
+
+  /**
    * Synchronize visual Three.js transforms with Rapier3D physics state
    */
   public syncWithPhysics(robotPhysics: RobotPhysicsBody): void {
@@ -330,7 +512,23 @@ export class Robot3DRenderer {
     this.chassisMesh.position.set(chassisPos.x, chassisPos.y, chassisPos.z);
     this.chassisMesh.quaternion.set(chassisRot.x, chassisRot.y, chassisRot.z, chassisRot.w);
 
-    // 2. Wheels Poses
+    // Sync DroidBot-E attachments group transform with chassis
+    this.attachmentRoot.position.set(chassisPos.x, chassisPos.y, chassisPos.z);
+    this.attachmentRoot.quaternion.set(chassisRot.x, chassisRot.y, chassisRot.z, chassisRot.w);
+
+    // 2. Articulate Motorized Attachment Arms based on physics motor encoder degrees
+    if (this.activePreset === 'advanced') {
+      const motorE = robotPhysics.motors.get('E');
+      const motorF = robotPhysics.motors.get('F');
+      if (this.leftAttachmentArm && motorE) {
+        this.leftAttachmentArm.rotation.x = (motorE.degrees * Math.PI) / 180;
+      }
+      if (this.rightAttachmentArm && motorF) {
+        this.rightAttachmentArm.rotation.x = (motorF.degrees * Math.PI) / 180;
+      }
+    }
+
+    // 3. Wheels Poses
     let wheelIndex = 0;
     for (const body of robotPhysics.wheelBodies.values()) {
       const pos = body.translation();
@@ -341,26 +539,28 @@ export class Robot3DRenderer {
       wheelIndex++;
     }
 
-    // 3. Sensor Ground Projection Spots
+    // 4. Sensor Ground Projection Spots
     if (this.sensorManager) {
       const readingC = this.sensorManager.sampleColorSensor('C');
-      const readingD = this.sensorManager.sampleColorSensor('D');
-
-      // Place spots just above mat surface (Y = 0.003m)
       this.sensorSpotC.position.set(readingC.worldPosition[0], 0.003, readingC.worldPosition[2]);
-      this.sensorSpotD.position.set(readingD.worldPosition[0], 0.003, readingD.worldPosition[2]);
-
-      // Color swatch for spot materials
       (this.sensorSpotC.material as THREE.MeshBasicMaterial).color.setRGB(
         readingC.rgb[0] / 255,
         readingC.rgb[1] / 255,
         readingC.rgb[2] / 255
       );
-      (this.sensorSpotD.material as THREE.MeshBasicMaterial).color.setRGB(
-        readingD.rgb[0] / 255,
-        readingD.rgb[1] / 255,
-        readingD.rgb[2] / 255
-      );
+
+      if (this.activePreset === 'advanced') {
+        this.sensorSpotD.visible = true;
+        const readingD = this.sensorManager.sampleColorSensor('D');
+        this.sensorSpotD.position.set(readingD.worldPosition[0], 0.003, readingD.worldPosition[2]);
+        (this.sensorSpotD.material as THREE.MeshBasicMaterial).color.setRGB(
+          readingD.rgb[0] / 255,
+          readingD.rgb[1] / 255,
+          readingD.rgb[2] / 255
+        );
+      } else {
+        this.sensorSpotD.visible = false;
+      }
     }
   }
 }

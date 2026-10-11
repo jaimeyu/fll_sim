@@ -8,6 +8,7 @@ import { SeasonMissionSpec } from '../missions/season-config';
 import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
 import { profiler } from '../core/performance-profiler';
 import { SpikeScratchImporter, VisualBlock } from '../runtime/spike-scratch-importer';
+import JSZip from 'jszip';
 
 export interface CommandLogEntry {
   id: number;
@@ -397,6 +398,351 @@ print("Robot perfectly squared to line!")
   },
 };
 
+export interface SpikePaletteItem {
+  id: string;
+  category: 'motor' | 'movement' | 'event' | 'control' | 'sensor' | 'operator';
+  colorHex: string;
+  icon: string;
+  htmlDisplay: string;
+  label: string;
+  opcode: string;
+  pythonSnippet: string;
+  params: Record<string, string>;
+}
+
+export const SPIKE_PALETTE_ITEMS: SpikePaletteItem[] = [
+  // --- MOTORS (Blue #0090f5) ---
+  {
+    id: 'motor_run_rotations',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: '[A ▾] run [↻ ▾] for (1) rotations',
+    htmlDisplay: '<span class="block-select">A ▾</span> run <span class="block-select">↻ ▾</span> for <span class="block-pill">1</span> rotations',
+    opcode: 'motor.run_for_rotations',
+    pythonSnippet: "motor_a.run_for_rotations(1, 'clockwise')",
+    params: { port: 'A', dir: 'clockwise', amount: '1', unit: 'rotations' },
+  },
+  {
+    id: 'motor_run_degrees',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: '[A ▾] run [↻ ▾] for (360) degrees',
+    htmlDisplay: '<span class="block-select">A ▾</span> run <span class="block-select">↻ ▾</span> for <span class="block-pill">360</span> degrees',
+    opcode: 'motor.run_for_degrees',
+    pythonSnippet: "motor_a.run_for_degrees(360, 'clockwise')",
+    params: { port: 'A', dir: 'clockwise', amount: '360', unit: 'degrees' },
+  },
+  {
+    id: 'motor_run_seconds',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: '[A ▾] run [↻ ▾] for (1) seconds',
+    htmlDisplay: '<span class="block-select">A ▾</span> run <span class="block-select">↻ ▾</span> for <span class="block-pill">1</span> seconds',
+    opcode: 'motor.run_for_seconds',
+    pythonSnippet: "motor_a.run_for_seconds(1, 'clockwise')",
+    params: { port: 'A', dir: 'clockwise', amount: '1', unit: 'seconds' },
+  },
+  {
+    id: 'motor_start',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: '[A ▾] start [↻ ▾]',
+    htmlDisplay: '<span class="block-select">A ▾</span> start <span class="block-select">↻ ▾</span>',
+    opcode: 'motor.start',
+    pythonSnippet: "motor_a.start('clockwise')",
+    params: { port: 'A', dir: 'clockwise' },
+  },
+  {
+    id: 'motor_stop',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: '[A ▾] stop',
+    htmlDisplay: '<span class="block-select">A ▾</span> stop',
+    opcode: 'motor.stop',
+    pythonSnippet: "motor_a.stop()",
+    params: { port: 'A' },
+  },
+  {
+    id: 'motor_set_speed',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '⚙️',
+    label: 'set [A ▾] speed to (75)%',
+    htmlDisplay: 'set <span class="block-select">A ▾</span> speed to <span class="block-pill">75</span>%',
+    opcode: 'motor.set_default_speed',
+    pythonSnippet: "motor_a.set_default_speed(75)",
+    params: { port: 'A', speed: '75' },
+  },
+  {
+    id: 'motor_aux_e_run',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '🦾',
+    label: '[E ▾] (Left Aux Arm) run [↻ ▾] for (90) deg',
+    htmlDisplay: '<span class="block-select">E (Left Arm) ▾</span> run <span class="block-select">↻ ▾</span> for <span class="block-pill">90</span>°',
+    opcode: 'motor_e.run_degrees',
+    pythonSnippet: "motor_e.run_for_degrees(90, 'clockwise')",
+    params: { port: 'E', degrees: '90' },
+  },
+  {
+    id: 'motor_aux_f_run',
+    category: 'motor',
+    colorHex: '#0090f5',
+    icon: '🦾',
+    label: '[F ▾] (Right Aux Arm) run [↻ ▾] for (90) deg',
+    htmlDisplay: '<span class="block-select">F (Right Arm) ▾</span> run <span class="block-select">↻ ▾</span> for <span class="block-pill">90</span>°',
+    opcode: 'motor_f.run_degrees',
+    pythonSnippet: "motor_f.run_for_degrees(90, 'clockwise')",
+    params: { port: 'F', degrees: '90' },
+  },
+
+  // --- MOVEMENT (Pink #d83b9c) ---
+  {
+    id: 'move_cm',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🚀',
+    label: 'move [⬆ ▾] for (10) cm',
+    htmlDisplay: 'move <span class="block-select">⬆ ▾</span> for <span class="block-pill">10</span> cm',
+    opcode: 'motors.move_cm',
+    pythonSnippet: "motors.move(10, 'cm', 0)",
+    params: { dir: 'straight', amount: '10', unit: 'cm' },
+  },
+  {
+    id: 'move_rotations',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🚀',
+    label: 'move [⬆ ▾] for (1) rotations',
+    htmlDisplay: 'move <span class="block-select">⬆ ▾</span> for <span class="block-pill">1</span> rotations',
+    opcode: 'motors.move_rotations',
+    pythonSnippet: "motors.move(1, 'rotations', 0)",
+    params: { dir: 'straight', amount: '1', unit: 'rotations' },
+  },
+  {
+    id: 'move_seconds',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🚀',
+    label: 'move [⬆ ▾] for (2) seconds',
+    htmlDisplay: 'move <span class="block-select">⬆ ▾</span> for <span class="block-pill">2</span> seconds',
+    opcode: 'motors.move_seconds',
+    pythonSnippet: "motors.move(2, 'seconds', 0)",
+    params: { dir: 'straight', amount: '2', unit: 'seconds' },
+  },
+  {
+    id: 'move_start',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🚀',
+    label: 'start moving [⬆ ▾]',
+    htmlDisplay: 'start moving <span class="block-select">⬆ ▾</span>',
+    opcode: 'motors.start',
+    pythonSnippet: "motors.start(0)",
+    params: { steering: '0' },
+  },
+  {
+    id: 'move_steering',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🔄',
+    label: 'start moving with steering (50)',
+    htmlDisplay: 'start moving with steering <span class="block-pill">50</span>',
+    opcode: 'motors.start_tank',
+    pythonSnippet: "motors.start_tank(50, -50)",
+    params: { left: '50', right: '-50' },
+  },
+  {
+    id: 'move_stop',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🛑',
+    label: 'stop moving',
+    htmlDisplay: 'stop moving',
+    opcode: 'motors.stop',
+    pythonSnippet: "motors.stop()",
+    params: {},
+  },
+  {
+    id: 'move_set_pair',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '🏎️',
+    label: 'set movement motors to [A+B ▾]',
+    htmlDisplay: 'set movement motors to <span class="block-select">A + B ▾</span>',
+    opcode: 'motors.set_pair',
+    pythonSnippet: "motors = MotorPair('A', 'B')",
+    params: { pair: 'A+B' },
+  },
+  {
+    id: 'move_set_speed',
+    category: 'movement',
+    colorHex: '#d83b9c',
+    icon: '⚡',
+    label: 'set movement speed to (50)%',
+    htmlDisplay: 'set movement speed to <span class="block-pill">50</span>%',
+    opcode: 'motors.set_default_speed',
+    pythonSnippet: "motors.set_default_speed(50)",
+    params: { speed: '50' },
+  },
+
+  // --- EVENTS (Yellow #eab308) ---
+  {
+    id: 'event_start',
+    category: 'event',
+    colorHex: '#eab308',
+    icon: '🚩',
+    label: 'when program starts',
+    htmlDisplay: 'when program starts',
+    opcode: 'event.start',
+    pythonSnippet: "# When program starts:",
+    params: {},
+  },
+
+  // --- CONTROL (Orange #f97316) ---
+  {
+    id: 'ctrl_wait',
+    category: 'control',
+    colorHex: '#f97316',
+    icon: '⏱️',
+    label: 'wait (1) seconds',
+    htmlDisplay: 'wait <span class="block-pill">1</span> seconds',
+    opcode: 'control.wait',
+    pythonSnippet: "time.sleep(1)",
+    params: { seconds: '1' },
+  },
+  {
+    id: 'ctrl_wait_until_dist',
+    category: 'control',
+    colorHex: '#f97316',
+    icon: '⏳',
+    label: 'wait until <distance < (15) cm>',
+    htmlDisplay: 'wait until &lt;distance &lt; <span class="block-pill">15</span> cm&gt;',
+    opcode: 'control.wait_until',
+    pythonSnippet: "while not (distance_sensor.get_distance_cm() < 15):\n    time.sleep(0.01)",
+    params: { dist: '15' },
+  },
+  {
+    id: 'ctrl_repeat',
+    category: 'control',
+    colorHex: '#f97316',
+    icon: '🔁',
+    label: 'repeat (10)',
+    htmlDisplay: 'repeat <span class="block-pill">10</span>',
+    opcode: 'control.repeat',
+    pythonSnippet: "for _ in range(10):",
+    params: { times: '10' },
+  },
+  {
+    id: 'ctrl_forever',
+    category: 'control',
+    colorHex: '#f97316',
+    icon: '♾️',
+    label: 'forever',
+    htmlDisplay: 'forever',
+    opcode: 'control.forever',
+    pythonSnippet: "while True:",
+    params: {},
+  },
+
+  // --- SENSORS (Cyan #00a2e8) ---
+  {
+    id: 'sensor_reset_gyro',
+    category: 'sensor',
+    colorHex: '#00a2e8',
+    icon: '🧭',
+    label: 'reset yaw angle',
+    htmlDisplay: 'reset yaw angle',
+    opcode: 'motion.reset_yaw',
+    pythonSnippet: "hub.motion_sensor.reset_yaw_angle()",
+    params: {},
+  },
+  {
+    id: 'sensor_wait_color_c',
+    category: 'sensor',
+    colorHex: '#00a2e8',
+    icon: '🎨',
+    label: 'wait until color [C ▾] is [black ▾]',
+    htmlDisplay: 'wait until color <span class="block-select">C ▾</span> is <span class="block-select">black ▾</span>',
+    opcode: 'color.wait_until',
+    pythonSnippet: "while color_sensor_c.get_color() != 'black':\n    time.sleep(0.01)",
+    params: { port: 'C', color: 'black' },
+  },
+  {
+    id: 'sensor_wait_color_d',
+    category: 'sensor',
+    colorHex: '#00a2e8',
+    icon: '🎨',
+    label: 'wait until color [D ▾] is [white ▾]',
+    htmlDisplay: 'wait until color <span class="block-select">D ▾</span> is <span class="block-select">white ▾</span>',
+    opcode: 'color.wait_until',
+    pythonSnippet: "while color_sensor_d.get_color() != 'white':\n    time.sleep(0.01)",
+    params: { port: 'D', color: 'white' },
+  },
+  {
+    id: 'sensor_check_color',
+    category: 'sensor',
+    colorHex: '#00a2e8',
+    icon: '🎨',
+    label: 'is color [C ▾] [red ▾] ?',
+    htmlDisplay: 'is color <span class="block-select">C ▾</span> <span class="block-select">red ▾</span> ?',
+    opcode: 'color.is_color',
+    pythonSnippet: "color_sensor_c.get_color() == 'red'",
+    params: { port: 'C', color: 'red' },
+  },
+  {
+    id: 'sensor_check_dist',
+    category: 'sensor',
+    colorHex: '#00a2e8',
+    icon: '📏',
+    label: 'distance < (15) cm ?',
+    htmlDisplay: 'distance &lt; <span class="block-pill">15</span> cm ?',
+    opcode: 'distance.is_less_than',
+    pythonSnippet: "distance_sensor.get_distance_cm() < 15",
+    params: { dist: '15' },
+  },
+
+  // --- OPERATORS (Green #22c55e) ---
+  {
+    id: 'op_add',
+    category: 'operator',
+    colorHex: '#22c55e',
+    icon: '➕',
+    label: '( ) + ( )',
+    htmlDisplay: '<span class="block-pill"> </span> + <span class="block-pill"> </span>',
+    opcode: 'operator.add',
+    pythonSnippet: "0 + 0",
+    params: {},
+  },
+  {
+    id: 'op_less',
+    category: 'operator',
+    colorHex: '#22c55e',
+    icon: '📐',
+    label: '( ) < (50)',
+    htmlDisplay: '<span class="block-pill"> </span> &lt; <span class="block-pill">50</span>',
+    opcode: 'operator.less_than',
+    pythonSnippet: "< 50",
+    params: { threshold: '50' },
+  },
+  {
+    id: 'op_random',
+    category: 'operator',
+    colorHex: '#22c55e',
+    icon: '🎲',
+    label: 'pick random (1) to (10)',
+    htmlDisplay: 'pick random <span class="block-pill">1</span> to <span class="block-pill">10</span>',
+    opcode: 'operator.random',
+    pythonSnippet: "random.randint(1, 10)",
+    params: { min: '1', max: '10' },
+  },
+];
+
 export class SimulatorHud {
   public rootElement: HTMLElement;
   private callbacks: HudCallbacks;
@@ -408,6 +754,11 @@ export class SimulatorHud {
   private stopBtn!: HTMLButtonElement;
   private topbarRunBtn!: HTMLButtonElement;
   private topbarStopBtn!: HTMLButtonElement;
+  public executionState: ExecutionState = 'IDLE';
+
+  // Popout modal pinning & LEGO SPIKE blocks palette state
+  private popoutPinMode: 'full' | 'left' | 'right' | 'float' = 'full';
+  private activeSpikePaletteCategory: string = 'all';
 
   // Activity Bar & Drawer state
   private activeView: 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal' = 'code';
@@ -713,8 +1064,14 @@ export class SimulatorHud {
               <option value="line_follower">Mission 3: Proportional Line Follower</option>
               <option value="line_squaring">Mission 4: Dual-Sensor Line Squaring</option>
             </select>
-            <button class="btn btn-xs btn-secondary" id="btn-import-code" title="Import Code (.py, .llsp, .llsp3, .sb3, .json)">
+            <button class="btn btn-xs btn-secondary" id="btn-import-code" title="Import Code or ZIP (.py, .llsp, .llsp3, .sb3, .json, .zip)">
               📥 Import Code
+            </button>
+            <button class="btn btn-xs btn-outline btn-export-zip" id="btn-export-zip" title="Export all active scripts into a ZIP archive">
+              📦 Export Zip
+            </button>
+            <button class="btn btn-xs btn-outline btn-export-code" id="btn-export-code" title="Export current active script (.py)">
+              💾 Export
             </button>
             <input type="file" id="input-import-code" accept=".py,.llsp,.llsp3,.sb3,.json" style="display: none;">
             <input type="file" id="spike-scratch-file-input" accept=".llsp,.llsp3,.sb3,.json" style="display: none;">
@@ -731,6 +1088,10 @@ export class SimulatorHud {
               <button class="btn btn-xs btn-outline" id="btn-view-mode-python" title="View as SPIKE Python Code">💻 Python</button>
             </div>
             <div class="editor-header-actions">
+              <div class="editor-autosave-indicator saved" id="sidebar-autosave-indicator" title="All active scripts are saved automatically">
+                <span class="autosave-icon">💾</span>
+                <span class="autosave-status">Saved</span>
+              </div>
               <button id="btn-popout-code-editor" class="btn btn-xs btn-outline" title="Pop out code editor to large modal window">⤢ Pop Out</button>
               <button id="btn-editor-fps-profiler" class="btn btn-xs btn-outline btn-fps-profiler" title="Simulation &amp; Render Performance Profiler">
                 <span class="fps-pulse-dot" id="editor-fps-dot"></span>
@@ -1813,6 +2174,18 @@ export class SimulatorHud {
               </div>
             </div>
             <div class="popout-header-actions">
+              <div class="editor-autosave-indicator saved" id="popout-autosave-indicator" title="All active scripts are saved automatically">
+                <span class="autosave-icon">💾</span>
+                <span class="autosave-status">Saved</span>
+              </div>
+              <button class="btn btn-xs btn-outline btn-export-zip" id="btn-popout-export-zip" title="Export all active scripts into a ZIP archive">📦 Export Zip</button>
+              <button class="btn btn-xs btn-outline btn-export-code" id="btn-popout-export-code" title="Export current active script (.py)">💾 Export</button>
+              <div class="popout-pin-actions">
+                <button class="btn btn-xs btn-outline" id="btn-popout-pin-left" title="Pin to Left Half (◧)">◧</button>
+                <button class="btn btn-xs btn-outline" id="btn-popout-pin-right" title="Pin to Right Half (◨)">◨</button>
+                <button class="btn btn-xs btn-outline" id="btn-popout-pin-float" title="Float Window (🗗)">🗗</button>
+                <button class="btn btn-xs btn-outline active" id="btn-popout-pin-full" title="Maximize Window (⛶)">⛶</button>
+              </div>
               <div class="popout-view-mode-toggle">
                 <button class="btn btn-xs btn-outline active" id="btn-popout-mode-blocks" title="View as Visual SPIKE Word Blocks">🧩 Word Blocks</button>
                 <button class="btn btn-xs btn-outline" id="btn-popout-mode-python" title="View as SPIKE Python Code">💻 Python</button>
@@ -1824,22 +2197,56 @@ export class SimulatorHud {
 
           <div class="popout-code-body">
             <div class="popout-editor-container" id="popout-editor-container">
-              <!-- Visual Word Blocks Pan/Zoom View -->
-              <div id="popout-scratch-blocks-container" class="scratch-blocks-container word-blocks-container">
-                <div class="scratch-zoom-toolbar" id="popout-zoom-toolbar">
-                  <div class="zoom-toolbar-label">
-                    <span>🧩 Word Blocks (Full View)</span>
-                  </div>
-                  <div class="zoom-toolbar-actions">
-                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-in" title="Zoom In (or Wheel Up)">➕</button>
-                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-out" title="Zoom Out (or Wheel Down)">➖</button>
-                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-reset" title="Reset Zoom &amp; Pan">↺ 100%</button>
-                    <span class="scratch-zoom-level" id="popout-zoom-level">100%</span>
-                  </div>
+              <!-- Visual Word Blocks Workspace with authentic SPIKE Prime Category Sidebar, Palette Drawer & Canvas -->
+              <div id="popout-scratch-blocks-container" class="scratch-blocks-container spike-blocks-workspace">
+                <!-- 1. Category Sidebar -->
+                <div class="spike-category-sidebar" id="spike-category-sidebar">
+                  <button class="spike-cat-btn active" data-cat="all" title="All Blocks">
+                    <span class="cat-dot" style="background: linear-gradient(135deg, #0090f5, #d83b9c);"></span>
+                    <span class="cat-label">All</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="motor" title="Motors (Blue)">
+                    <span class="cat-dot dot-motors"></span>
+                    <span class="cat-label">Motors</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="movement" title="Movement (Pink)">
+                    <span class="cat-dot dot-movement"></span>
+                    <span class="cat-label">Movement</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="event" title="Events (Yellow)">
+                    <span class="cat-dot dot-events"></span>
+                    <span class="cat-label">Events</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="control" title="Control (Orange)">
+                    <span class="cat-dot dot-control"></span>
+                    <span class="cat-label">Control</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="sensor" title="Sensors (Cyan)">
+                    <span class="cat-dot dot-sensors"></span>
+                    <span class="cat-label">Sensors</span>
+                  </button>
+                  <button class="spike-cat-btn" data-cat="operator" title="Operators (Green)">
+                    <span class="cat-dot dot-operators"></span>
+                    <span class="cat-label">Operators</span>
+                  </button>
                 </div>
-                <div class="scratch-zoom-viewport" id="popout-zoom-viewport">
-                  <div class="scratch-zoom-content" id="popout-zoom-content">
+
+                <!-- 2. Block Palette Drawer -->
+                <div class="spike-palette-drawer" id="spike-palette-drawer">
+                  <!-- Dynamically rendered authentic LEGO SPIKE Prime blocks -->
+                </div>
+
+                <!-- 3. Canvas Viewport with Dotted Grid Background -->
+                <div class="spike-canvas-viewport" id="popout-zoom-viewport">
+                  <div class="spike-canvas-content" id="popout-zoom-content">
                     <div id="popout-word-blocks-container"></div>
+                  </div>
+                  <!-- Floating Zoom Controls at bottom-right of canvas -->
+                  <div class="spike-floating-zoom-controls">
+                    <button class="zoom-icon-btn" id="btn-popout-zoom-out" title="Zoom Out (or Wheel Down)">➖</button>
+                    <span class="zoom-level-badge" id="popout-zoom-level">100%</span>
+                    <button class="zoom-icon-btn" id="btn-popout-zoom-in" title="Zoom In (or Wheel Up)">➕</button>
+                    <button class="zoom-icon-btn" id="btn-popout-zoom-reset" title="Reset Zoom &amp; Pan">↺</button>
                   </div>
                 </div>
               </div>
@@ -2041,7 +2448,7 @@ export class SimulatorHud {
       if (this.popoutTextarea && this.popoutTextarea.value !== this.codeTextarea.value) {
         this.popoutTextarea.value = this.codeTextarea.value;
       }
-      this.saveScriptTabsToStorage();
+      this.triggerAutosave();
     });
 
     // 2. Sidebar Camera Focus Quick Bar (safely optional)
@@ -2156,28 +2563,29 @@ export class SimulatorHud {
 
     // Run button
     this.runBtn.addEventListener('click', () => {
-      this.setExecutionState('RUNNING');
-      if (this.scriptTabs[this.activeTabIndex]) {
-        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
-      }
-      this.callbacks.onRunScript(this.codeTextarea.value);
+      this.triggerRunScript();
     });
 
     // Stop button
     this.stopBtn.addEventListener('click', () => {
-      this.setExecutionState('IDLE');
-      this.callbacks.onStopScript();
-      this.logConsole('Execution stopped by user.');
+      this.triggerStopScript();
     });
 
     // Reset button
     const resetBtn = this.rootElement.querySelector('#btn-reset')!;
     resetBtn.addEventListener('click', () => {
-      this.setExecutionState('IDLE');
-      this.callbacks.onStopScript();
-      this.callbacks.onResetRobot();
-      this.resetMatchTimer();
-      this.logConsole('Robot reset to Launch Area.');
+      this.triggerReset();
+    });
+
+    // Script & Project ZIP Export buttons
+    const btnExportZip = this.rootElement.querySelector('#btn-export-zip') as HTMLButtonElement | null;
+    btnExportZip?.addEventListener('click', () => {
+      this.exportAllScriptsZip();
+    });
+
+    const btnExportCode = this.rootElement.querySelector('#btn-export-code') as HTMLButtonElement | null;
+    btnExportCode?.addEventListener('click', () => {
+      this.exportCurrentScript();
     });
 
     // Camera preset buttons
@@ -2686,6 +3094,26 @@ export class SimulatorHud {
           this.closeProfilerModal();
         }
       }
+
+      // Ctrl+Space / Cmd+Space: Reset robot position and field elements
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        this.triggerReset();
+        return;
+      }
+
+      // Space: Toggle Start / Stop program (when not typing in a text field)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.code === 'Space' || e.key === ' ')) {
+        if (!this.isTextInputFocused()) {
+          e.preventDefault();
+          if (this.executionState === 'RUNNING') {
+            this.triggerStopScript();
+          } else {
+            this.triggerRunScript();
+          }
+          return;
+        }
+      }
     });
 
     this.setupDriverModeEvents();
@@ -2704,7 +3132,7 @@ export class SimulatorHud {
     return motorDefs
       .map(
         (m) => `
-      <div class="telem-motor-card" data-port="${m.port}">
+      <div class="telem-motor-card" id="telem-card-motor-${m.port.toLowerCase()}" data-port="${m.port}">
         <div class="telem-motor-card-header">
           <div class="telem-motor-port-tag">PORT ${m.port}</div>
           <div class="telem-motor-role-title">${m.name}</div>
@@ -3911,8 +4339,39 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       console.warn('Could not save robot preset to localStorage:', e);
     }
 
-    const cardAdv = this.rootElement.querySelector('#preset-card-advanced');
-    const cardComp = this.rootElement.querySelector('#preset-card-compact');
+    // Configure authentic hardware port mappings for each robot preset
+    if (preset === 'advanced') {
+      this.portMappings = {
+        driveLeft: 'A',
+        driveRight: 'B',
+        colorLeft: 'C',
+        colorRight: 'D',
+        ultrasonic: 'E',
+        aux1: 'E',
+        aux2: 'F',
+        aux3: 'C',
+        aux4: 'D',
+        imu: 'HUB_GYRO',
+      };
+    } else {
+      this.portMappings = {
+        driveLeft: 'A',
+        driveRight: 'B',
+        colorLeft: 'C',
+        colorRight: 'OFF' as any,
+        ultrasonic: 'D',
+        aux1: 'OFF' as any,
+        aux2: 'OFF' as any,
+        aux3: 'OFF' as any,
+        aux4: 'OFF' as any,
+        imu: 'HUB_GYRO',
+      };
+    }
+    this.syncPortMappingUI?.();
+    this.savePortMappings?.();
+
+    const cardAdv = this.rootElement?.querySelector('#preset-card-advanced');
+    const cardComp = this.rootElement?.querySelector('#preset-card-compact');
     if (cardAdv) {
       cardAdv.classList.toggle('active', preset === 'advanced');
       const tag = cardAdv.querySelector('.preset-tag');
@@ -3930,7 +4389,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       }
     }
 
-    const presetName = preset === 'advanced' ? 'Advanced Driving Base' : 'Compact SPIKE Base';
+    const presetName = preset === 'advanced' ? 'Advanced Driving Base (DroidBot-E)' : 'Compact SPIKE Base';
     this.logConsole(`🤖 Selected robot design preset: "${presetName}".`);
     this.callbacks.onRobotPresetChange?.(preset);
   }
@@ -4127,18 +4586,28 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     if (tRgbC) tRgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
 
     const tBadgeD = this.rootElement.querySelector('#telem-badge-color-d');
-    if (tBadgeD) {
-      tBadgeD.textContent = state.sensors.colorD.color.toUpperCase();
-      tBadgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
+    const tCardD = this.rootElement.querySelector('#telem-card-color-d') as HTMLElement | null;
+    if (this.activeRobotPreset === 'compact') {
+      if (tCardD) tCardD.style.opacity = '0.35';
+      if (tBadgeD) {
+        tBadgeD.textContent = 'UNATTACHED';
+        tBadgeD.className = 'sensor-badge';
+      }
+    } else {
+      if (tCardD) tCardD.style.opacity = '1';
+      if (tBadgeD) {
+        tBadgeD.textContent = state.sensors.colorD.color.toUpperCase();
+        tBadgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
+      }
     }
     const tValLightD = this.rootElement.querySelector('#telem-val-light-d');
-    if (tValLightD) tValLightD.textContent = `${state.sensors.colorD.reflectedLight}%`;
+    if (tValLightD) tValLightD.textContent = this.activeRobotPreset === 'compact' ? '--' : `${state.sensors.colorD.reflectedLight}%`;
     const tMeterD = this.rootElement.querySelector('#telem-meter-light-d') as HTMLElement | null;
-    if (tMeterD) tMeterD.style.width = `${state.sensors.colorD.reflectedLight}%`;
+    if (tMeterD) tMeterD.style.width = this.activeRobotPreset === 'compact' ? '0%' : `${state.sensors.colorD.reflectedLight}%`;
     const tSwatchD = this.rootElement.querySelector('#telem-swatch-d') as HTMLElement | null;
-    if (tSwatchD) tSwatchD.style.backgroundColor = `rgb(${state.sensors.colorD.rgb.join(',')})`;
+    if (tSwatchD) tSwatchD.style.backgroundColor = this.activeRobotPreset === 'compact' ? 'transparent' : `rgb(${state.sensors.colorD.rgb.join(',')})`;
     const tRgbD = this.rootElement.querySelector('#telem-rgb-d');
-    if (tRgbD) tRgbD.textContent = `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
+    if (tRgbD) tRgbD.textContent = this.activeRobotPreset === 'compact' ? 'Unattached' : `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
 
     // Ultrasonic Distance
     const tValDist = this.rootElement.querySelector('#telem-val-dist');
@@ -4175,22 +4644,32 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     // 4. Update TAB 2: Motors & Speeds in Telemetry Modal
     const sumSpdA = this.rootElement.querySelector('#telem-live-spd-a');
     const sumSpdB = this.rootElement.querySelector('#telem-live-spd-b');
-    const spdL = state.motors.left.targetPercent ?? 0;
-    const spdR = state.motors.right.targetPercent ?? 0;
+    const spdL = (state.motors.all?.['A']?.targetPercent ?? state.motors.left.targetPercent) ?? 0;
+    const spdR = (state.motors.all?.['B']?.targetPercent ?? state.motors.right.targetPercent) ?? 0;
     if (sumSpdA) sumSpdA.textContent = `${spdL > 0 ? '+' : ''}${spdL}%`;
     if (sumSpdB) sumSpdB.textContent = `${spdR > 0 ? '+' : ''}${spdR}%`;
 
     const allPorts: MotorPort[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let runningMotorsCount = 0;
+
     for (const p of allPorts) {
       let mState: { port: MotorPort; degrees: number; speed: number; targetPercent?: number; status?: 'IDLE' | 'RUNNING' | 'BRAKING' } | undefined;
-      if (p === 'A') mState = state.motors.left;
-      else if (p === 'B') mState = state.motors.right;
-      else if (state.motors.all) mState = state.motors.all[p];
+      if (state.motors.all && state.motors.all[p]) {
+        mState = state.motors.all[p];
+      } else if (p === 'A') {
+        mState = state.motors.left;
+      } else if (p === 'B') {
+        mState = state.motors.right;
+      }
 
       if (!mState) continue;
 
-      const stateBadge = this.rootElement.querySelector(`#telem-motor-state-${p}`);
       const st = mState.status || (Math.abs(mState.speed) > 1 ? 'RUNNING' : 'IDLE');
+      if (st === 'RUNNING' || Math.abs(mState.speed) > 1) {
+        runningMotorsCount++;
+      }
+
+      const stateBadge = this.rootElement.querySelector(`#telem-motor-state-${p}`);
       if (stateBadge) {
         stateBadge.textContent = st;
         stateBadge.className = `telem-motor-state-badge state-${st.toLowerCase()}`;
@@ -4212,6 +4691,30 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
         const pct = Math.min(100, Math.max(0, 50 + (mState.speed / 1000) * 50));
         meterEl.style.width = `${pct}%`;
       }
+
+      const cardEl = this.rootElement.querySelector(`#telem-card-motor-${p.toLowerCase()}`) as HTMLElement | null;
+      if (cardEl) {
+        const isAux = p === 'C' || p === 'D' || p === 'E' || p === 'F';
+        cardEl.style.opacity = (this.activeRobotPreset === 'compact' && isAux) ? '0.35' : '1.0';
+      }
+
+      // Also update Driver Drawer motor cards if present
+      if (this.viewDriver) {
+        const dBadge = this.viewDriver.querySelector(`#motor-state-${p}`);
+        if (dBadge) {
+          dBadge.textContent = st;
+          dBadge.className = `motor-state-badge state-${st.toLowerCase()}`;
+        }
+        const dVal = this.viewDriver.querySelector(`#val-motor-speed-${p}`);
+        if (dVal && tp !== undefined && tp !== 0) {
+          dVal.textContent = `${tp}%`;
+        }
+      }
+    }
+
+    const motorsBadge = this.rootElement.querySelector('#telem-motors-badge');
+    if (motorsBadge) {
+      motorsBadge.textContent = runningMotorsCount > 0 ? `${runningMotorsCount} Running` : '6 Idle';
     }
 
     // 5. Update Driver Drawer live indicators if present
@@ -4386,6 +4889,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
   }
 
   public setExecutionState(state: ExecutionState): void {
+    this.executionState = state;
     const dot = this.rootElement.querySelector('#exec-status-dot')!;
     this.statusBadge.textContent = state;
 
@@ -5151,6 +5655,25 @@ print("Finished!")
         ${blocksHtml}
       </div>
     `;
+
+    // Wire block delete buttons in canvas
+    const delBtns = this.wordBlocksContainer.querySelectorAll('.btn-delete-block');
+    delBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-delete-block-id');
+        if (id && currentTab.visualBlocks) {
+          const idx = currentTab.visualBlocks.findIndex((b) => b.id === id);
+          if (idx !== -1) {
+            currentTab.visualBlocks.splice(idx, 1);
+            this.renderVisualBlocks();
+            this.renderPopoutVisualBlocks();
+            this.triggerAutosave();
+          }
+        }
+      });
+    });
+
     this.updateScratchTransform();
     if (this.isPopoutCodeEditorOpen) {
       this.renderPopoutVisualBlocks();
@@ -5196,10 +5719,11 @@ print("Finished!")
     }
 
     return `
-      <div class="word-block ${isHat ? 'word-block-hat' : ''}" style="--block-color: ${b.colorHex};">
+      <div class="word-block ${isHat ? 'word-block-hat' : ''}" style="--block-color: ${b.colorHex};" data-block-id="${b.id}">
         <div class="word-block-body">
           <span class="word-block-icon">${b.icon}</span>
           <span class="word-block-label">${formattedLabel}</span>
+          ${isHat ? '' : `<button class="btn-delete-block" data-delete-block-id="${b.id}" title="Delete Block">✕</button>`}
         </div>
       </div>
     `;
@@ -5224,7 +5748,83 @@ print("Finished!")
     const baseName = file.name.replace(/\.[^/.]+$/, '');
 
     try {
-      if (ext === 'py') {
+      if (ext === 'zip') {
+        this.logConsole(`📦 Unpacking and importing scripts from ZIP archive "${file.name}"...`);
+        const buffer = await file.arrayBuffer();
+        const zip = new JSZip();
+        const zipContent = await zip.loadAsync(buffer);
+
+        let manifest: any = null;
+        const projectFile = zipContent.file('project.json');
+        if (projectFile) {
+          try {
+            const manifestText = await projectFile.async('text');
+            manifest = JSON.parse(manifestText);
+          } catch (_) {}
+        }
+
+        const importedScripts: { title: string; code: string }[] = [];
+        const fileNames = Object.keys(zipContent.files);
+
+        // 1. Follow manifest tabs order if present
+        if (manifest && Array.isArray(manifest.tabs)) {
+          for (const item of manifest.tabs) {
+            const entry = zipContent.file(item.filename) || zipContent.file(item.filename?.replace(/^.*[\\\/]/, '')) || (item.title ? zipContent.file(`${item.title}.py`) : null);
+            if (entry && !entry.dir) {
+              const code = await entry.async('text');
+              importedScripts.push({ title: item.title || entry.name.replace(/\.py$/i, ''), code });
+            }
+          }
+        }
+
+        // 2. Fallback: Scan all .py files in zip
+        if (importedScripts.length === 0) {
+          for (const fname of fileNames) {
+            const entry = zipContent.files[fname];
+            if (entry.dir || fname.startsWith('__MACOSX') || fname.startsWith('.')) continue;
+            if (fname.toLowerCase().endsWith('.py')) {
+              const code = await entry.async('text');
+              const title = fname.replace(/\.py$/i, '').replace(/^.*[\\\/]/, '');
+              importedScripts.push({ title, code });
+            }
+          }
+        }
+
+        // 3. Fallback: If no .py files, check for .llsp3, .llsp, .sb3, or .json
+        if (importedScripts.length === 0) {
+          for (const fname of fileNames) {
+            const entry = zipContent.files[fname];
+            if (entry.dir || fname.startsWith('__MACOSX') || fname.startsWith('.')) continue;
+            if (/\.(llsp3?|sb3|json)$/i.test(fname)) {
+              try {
+                const subBuf = await entry.async('arraybuffer');
+                const res = await SpikeScratchImporter.importProject(subBuf, fname);
+                importedScripts.push({ title: res.projectName, code: res.pythonCode });
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (importedScripts.length > 0) {
+          this.scriptTabs = importedScripts.map((s, idx) => ({
+            id: `tab_imported_${Date.now()}_${idx}`,
+            title: s.title,
+            code: s.code,
+          }));
+          this.activeTabIndex = 0;
+          this.codeTextarea.value = this.scriptTabs[0].code;
+          if (this.popoutTextarea) this.popoutTextarea.value = this.scriptTabs[0].code;
+          this.renderScriptTabs();
+          this.renderVisualBlocks();
+          this.renderPopoutVisualBlocks?.();
+          this.saveScriptTabsToStorage();
+          this.registerImportedMissionInSelect(importId, file.name);
+          this.logConsole(`✅ Successfully unpacked & loaded ${importedScripts.length} scripts from ZIP archive "${file.name}"!`);
+          this.logCommand('CMD', 'Import Zip', `Loaded ${importedScripts.length} scripts from ${file.name}`);
+        } else {
+          this.logConsole(`⚠️ No valid robot scripts found inside "${file.name}".`);
+        }
+      } else if (ext === 'py') {
         const text = await file.text();
         this.importedMissions.set(importId, {
           title: file.name,
@@ -5260,6 +5860,127 @@ print("Finished!")
     } catch (err: any) {
       this.logConsole(`❌ Failed to import "${file.name}": ${err.message || err}`);
     }
+  }
+
+  public async exportAllScriptsZip(): Promise<void> {
+    try {
+      const zip = new JSZip();
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+      }
+      this.saveScriptTabsToStorage();
+
+      const manifest = {
+        name: 'FLL Autonomous Robotics Project',
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        activeTabIndex: this.activeTabIndex,
+        tabs: this.scriptTabs.map((t, idx) => ({
+          id: t.id,
+          title: t.title,
+          filename: `${(t.title || `mission_${idx + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_')}.py`,
+        })),
+      };
+      zip.file('project.json', JSON.stringify(manifest, null, 2));
+
+      this.scriptTabs.forEach((tab, index) => {
+        const safeTitle = (tab.title || `mission_${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `${safeTitle}.py`;
+        zip.file(filename, tab.code || '# Blank SPIKE Python script\n');
+      });
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const now = new Date();
+      const dateTag = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      a.download = `fll_spike_scripts_${dateTag}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      this.logConsole(`📦 Successfully exported all ${this.scriptTabs.length} scripts to "${a.download}"!`);
+      this.logCommand('CMD', 'Export Zip', `Exported all ${this.scriptTabs.length} scripts to ZIP archive`);
+    } catch (err: any) {
+      this.logConsole(`❌ Failed to export scripts ZIP: ${err.message || err}`);
+    }
+  }
+
+  public exportCurrentScript(): void {
+    try {
+      const activeTab = this.scriptTabs[this.activeTabIndex];
+      const title = activeTab?.title || 'spike_mission';
+      const code = this.codeTextarea.value || activeTab?.code || '';
+      const safeTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const blob = new Blob([code], { type: 'text/x-python;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeTitle}.py`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.logConsole(`💾 Exported active script "${safeTitle}.py".`);
+      this.logCommand('CMD', 'Export Script', `Exported script "${safeTitle}.py"`);
+    } catch (err: any) {
+      this.logConsole(`❌ Failed to export script: ${err.message || err}`);
+    }
+  }
+
+  public triggerRunScript(): void {
+    this.setExecutionState('RUNNING');
+    if (this.isPopoutCodeEditorOpen && this.popoutTextarea) {
+      this.codeTextarea.value = this.popoutTextarea.value;
+    }
+    if (this.scriptTabs[this.activeTabIndex]) {
+      this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+    }
+    this.callbacks.onRunScript(this.codeTextarea.value);
+    this.logConsole('▶ [Space] Program started.');
+    this.logCommand('DRIVE', 'Shortcut Space', 'Started program execution');
+  }
+
+  public triggerStopScript(): void {
+    this.setExecutionState('IDLE');
+    this.callbacks.onStopScript();
+    this.logConsole('⏹ [Space] Execution stopped by user.');
+    this.logCommand('STOP', 'Shortcut Space', 'Stopped program execution');
+  }
+
+  public triggerReset(): void {
+    this.setExecutionState('IDLE');
+    this.callbacks.onStopScript();
+    this.callbacks.onResetRobot();
+    this.callbacks.onResetMission?.();
+    this.resetMatchTimer();
+    this.logConsole('↺ [Ctrl+Space] Robot position and field elements reset to starting state.');
+    this.logCommand('CMD', 'Shortcut Ctrl+Space', 'Reset robot and field elements to starting state');
+  }
+
+  private autosaveTimer: any = null;
+
+  public triggerAutosave(): void {
+    this.setAutosaveIndicator('saving');
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+    this.autosaveTimer = setTimeout(() => {
+      this.saveScriptTabsToStorage();
+      this.setAutosaveIndicator('saved');
+    }, 400);
+  }
+
+  public setAutosaveIndicator(status: 'saved' | 'saving'): void {
+    const indicators = this.rootElement.querySelectorAll('.editor-autosave-indicator');
+    indicators.forEach((el) => {
+      el.classList.toggle('saving', status === 'saving');
+      el.classList.toggle('saved', status === 'saved');
+      const text = el.querySelector('.autosave-status');
+      if (text) {
+        text.textContent = status === 'saving' ? 'Saving...' : 'Saved';
+      }
+    });
   }
 
   private registerImportedMissionInSelect(importId: string, displayName: string): void {
@@ -5383,9 +6104,11 @@ print("Finished!")
     if (this.popoutTextarea) {
       this.popoutTextarea.value = this.codeTextarea.value;
     }
-    this.setPopoutEditorViewMode(this.editorViewMode);
-    this.renderPopoutVisualBlocks();
-    this.updatePopoutScratchTransform();
+    this.setPopoutPinMode?.(this.popoutPinMode);
+    this.setPopoutEditorViewMode?.(this.editorViewMode);
+    this.renderPopoutVisualBlocks?.();
+    this.renderSpikePalette?.();
+    this.updatePopoutScratchTransform?.();
   }
 
   public closePopoutCodeEditor(): void {
@@ -5397,9 +6120,9 @@ print("Finished!")
       if (this.scriptTabs[this.activeTabIndex]) {
         this.scriptTabs[this.activeTabIndex].code = this.popoutTextarea.value;
       }
-      this.saveScriptTabsToStorage();
+      this.saveScriptTabsToStorage?.();
     }
-    this.setEditorViewMode(this.editorViewMode);
+    this.setEditorViewMode?.(this.editorViewMode);
   }
 
   public togglePopoutCodeEditor(): void {
@@ -5412,6 +6135,30 @@ print("Finished!")
 
   public getIsPopoutCodeEditorOpen(): boolean {
     return this.isPopoutCodeEditorOpen;
+  }
+
+  public setPopoutPinMode(mode: 'full' | 'left' | 'right' | 'float'): void {
+    this.popoutPinMode = mode;
+    try {
+      localStorage.setItem('fll_popout_pin_mode', mode);
+    } catch (e) {
+      console.warn('Could not save popout pin mode:', e);
+    }
+
+    if (this.popoutModal) {
+      this.popoutModal.classList.remove('pin-full', 'pin-left', 'pin-right', 'pin-float');
+      this.popoutModal.classList.add(`pin-${mode}`);
+    }
+
+    const pinBtns = this.rootElement.querySelectorAll('.popout-pin-actions button');
+    pinBtns.forEach((btn) => {
+      const isTarget = btn.id === `btn-popout-pin-${mode}`;
+      btn.classList.toggle('active', isTarget);
+    });
+  }
+
+  public getPopoutPinMode(): 'full' | 'left' | 'right' | 'float' {
+    return this.popoutPinMode;
   }
 
   public setPopoutEditorViewMode(mode: 'blocks' | 'python'): void {
@@ -5428,6 +6175,7 @@ print("Finished!")
       if (this.popoutScratchContainer) this.popoutScratchContainer.style.display = 'flex';
       if (this.popoutTextarea) this.popoutTextarea.style.display = 'none';
       this.renderPopoutVisualBlocks();
+      this.renderSpikePalette();
       this.updatePopoutScratchTransform();
     } else {
       if (this.popoutScratchContainer) this.popoutScratchContainer.style.display = 'none';
@@ -5436,6 +6184,106 @@ print("Finished!")
         this.popoutTextarea.value = this.codeTextarea.value;
       }
     }
+  }
+
+  public renderSpikePalette(): void {
+    const paletteDrawer = this.rootElement.querySelector('#spike-palette-drawer');
+    if (!paletteDrawer) return;
+
+    const filtered =
+      this.activeSpikePaletteCategory === 'all'
+        ? SPIKE_PALETTE_ITEMS
+        : SPIKE_PALETTE_ITEMS.filter((item) => item.category === this.activeSpikePaletteCategory);
+
+    const categoriesMap: Record<string, { title: string; color: string; items: SpikePaletteItem[] }> = {
+      motor: { title: 'Motors', color: '#0090f5', items: [] },
+      movement: { title: 'Movement', color: '#d83b9c', items: [] },
+      event: { title: 'Events', color: '#eab308', items: [] },
+      control: { title: 'Control', color: '#f97316', items: [] },
+      sensor: { title: 'Sensors', color: '#00a2e8', items: [] },
+      operator: { title: 'Operators', color: '#22c55e', items: [] },
+    };
+
+    filtered.forEach((item) => {
+      if (categoriesMap[item.category]) {
+        categoriesMap[item.category].items.push(item);
+      }
+    });
+
+    let html = '';
+    for (const [catKey, group] of Object.entries(categoriesMap)) {
+      if (group.items.length === 0) continue;
+      html += `
+        <div class="palette-category-section" data-cat="${catKey}">
+          <div class="palette-category-header" style="color: ${group.color};">
+            <span class="cat-dot dot-${catKey}s" style="background: ${group.color};"></span>
+            ${group.title}
+          </div>
+          <div class="palette-blocks-list">
+            ${group.items
+              .map(
+                (item) => `
+              <div class="spike-palette-block" data-palette-id="${item.id}" style="background: ${item.colorHex};" title="Click to add to robot script">
+                <span class="block-icon">${item.icon}</span>
+                <span class="block-label">${item.htmlDisplay}</span>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    paletteDrawer.innerHTML = html;
+
+    const blockEls = paletteDrawer.querySelectorAll('.spike-palette-block');
+    blockEls.forEach((el) => {
+      el.addEventListener('click', () => {
+        const pId = el.getAttribute('data-palette-id');
+        const item = SPIKE_PALETTE_ITEMS.find((it) => it.id === pId);
+        if (item) {
+          this.addBlockFromPalette(item);
+        }
+      });
+    });
+  }
+
+  public addBlockFromPalette(item: SpikePaletteItem): void {
+    const currentTab = this.scriptTabs[this.activeTabIndex];
+    if (!currentTab) return;
+    if (!currentTab.visualBlocks) {
+      currentTab.visualBlocks = [];
+    }
+
+    const newBlock: VisualBlock = {
+      id: `blk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      category: item.category,
+      opcode: item.opcode,
+      icon: item.icon,
+      label: item.label,
+      colorHex: item.colorHex,
+      params: { ...item.params },
+    };
+
+    currentTab.visualBlocks.push(newBlock);
+
+    if (item.pythonSnippet) {
+      const code = currentTab.code || '';
+      const trimmed = code.trimEnd();
+      currentTab.code = (trimmed ? trimmed + '\n' : '') + item.pythonSnippet;
+      if (this.codeTextarea) {
+        this.codeTextarea.value = currentTab.code;
+      }
+      if (this.popoutTextarea) {
+        this.popoutTextarea.value = currentTab.code;
+      }
+    }
+
+    this.renderVisualBlocks();
+    this.renderPopoutVisualBlocks();
+    this.triggerAutosave();
+    this.logConsole(`🧩 Added block "${item.label}" to active script.`);
   }
 
   public renderPopoutVisualBlocks(): void {
@@ -5447,7 +6295,7 @@ print("Finished!")
           <div class="empty-icon">🧩</div>
           <div class="empty-title">SPIKE Word Blocks View</div>
           <div class="empty-desc">
-            No visual blocks in this tab yet. You can import your LEGO SPIKE App program (<b>.llsp3</b> or <b>.llsp</b>) to see your code in Word Blocks format!
+            No visual blocks in this tab yet. Click any block in the palette drawer on the left to add it, or import a LEGO SPIKE App program (<b>.llsp3</b> / <b>.llsp</b>)!
           </div>
           <div class="empty-action-row">
             <button class="btn btn-sm btn-primary" id="btn-popout-empty-import-spike">
@@ -5478,6 +6326,25 @@ print("Finished!")
         ${blocksHtml}
       </div>
     `;
+
+    // Wire block delete buttons in canvas
+    const delBtns = this.popoutBlocksContainer.querySelectorAll('.btn-delete-block');
+    delBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-delete-block-id');
+        if (id && currentTab.visualBlocks) {
+          const idx = currentTab.visualBlocks.findIndex((b) => b.id === id);
+          if (idx !== -1) {
+            currentTab.visualBlocks.splice(idx, 1);
+            this.renderVisualBlocks();
+            this.renderPopoutVisualBlocks();
+            this.triggerAutosave();
+          }
+        }
+      });
+    });
+
     this.updatePopoutScratchTransform();
   }
 
@@ -5545,7 +6412,7 @@ print("Finished!")
 
       viewport.addEventListener('mousedown', (e: MouseEvent) => {
         const target = e.target as HTMLElement | null;
-        if (target && target.closest('button, input, select, textarea, a')) {
+        if (target && target.closest('button, input, select, textarea, a, .spike-palette-block, .word-block')) {
           return;
         }
         isDragging = true;
@@ -5613,6 +6480,31 @@ print("Finished!")
       this.setPopoutEditorViewMode('python');
     });
 
+    // Modal Pinning mode buttons
+    const btnPinLeft = this.rootElement.querySelector('#btn-popout-pin-left') as HTMLButtonElement | null;
+    btnPinLeft?.addEventListener('click', () => this.setPopoutPinMode('left'));
+
+    const btnPinRight = this.rootElement.querySelector('#btn-popout-pin-right') as HTMLButtonElement | null;
+    btnPinRight?.addEventListener('click', () => this.setPopoutPinMode('right'));
+
+    const btnPinFloat = this.rootElement.querySelector('#btn-popout-pin-float') as HTMLButtonElement | null;
+    btnPinFloat?.addEventListener('click', () => this.setPopoutPinMode('float'));
+
+    const btnPinFull = this.rootElement.querySelector('#btn-popout-pin-full') as HTMLButtonElement | null;
+    btnPinFull?.addEventListener('click', () => this.setPopoutPinMode('full'));
+
+    // Category sidebar buttons
+    const catBtns = this.rootElement.querySelectorAll('#spike-category-sidebar .spike-cat-btn');
+    catBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        catBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const cat = btn.getAttribute('data-cat') || 'all';
+        this.activeSpikePaletteCategory = cat;
+        this.renderSpikePalette();
+      });
+    });
+
     // Bidirectional code sync
     this.popoutTextarea?.addEventListener('input', () => {
       if (this.codeTextarea) {
@@ -5621,23 +6513,23 @@ print("Finished!")
       if (this.scriptTabs[this.activeTabIndex]) {
         this.scriptTabs[this.activeTabIndex].code = this.popoutTextarea.value;
       }
-      this.saveScriptTabsToStorage();
+      this.triggerAutosave();
     });
 
-    // Popout Run/Stop/Reset/Import actions
+    // Popout Run/Stop/Reset/Import/Export actions
     const btnPopoutRun = this.rootElement.querySelector('#btn-popout-run') as HTMLButtonElement | null;
     btnPopoutRun?.addEventListener('click', () => {
-      this.runBtn?.click();
+      this.triggerRunScript();
     });
 
     const btnPopoutStop = this.rootElement.querySelector('#btn-popout-stop') as HTMLButtonElement | null;
     btnPopoutStop?.addEventListener('click', () => {
-      this.stopBtn?.click();
+      this.triggerStopScript();
     });
 
     const btnPopoutReset = this.rootElement.querySelector('#btn-popout-reset') as HTMLButtonElement | null;
     btnPopoutReset?.addEventListener('click', () => {
-      this.topbarResetBtn?.click();
+      this.triggerReset();
     });
 
     const btnPopoutImport = this.rootElement.querySelector('#btn-popout-import-code') as HTMLButtonElement | null;
@@ -5646,7 +6538,25 @@ print("Finished!")
       input?.click();
     });
 
+    const btnPopoutExportZip = this.rootElement.querySelector('#btn-popout-export-zip') as HTMLButtonElement | null;
+    btnPopoutExportZip?.addEventListener('click', () => {
+      this.exportAllScriptsZip();
+    });
+
+    const btnPopoutExportCode = this.rootElement.querySelector('#btn-popout-export-code') as HTMLButtonElement | null;
+    btnPopoutExportCode?.addEventListener('click', () => {
+      this.exportCurrentScript();
+    });
+
     this.setupPopoutScratchPanAndZoom();
+
+    // Restore saved pin mode from local storage
+    try {
+      const savedPin = localStorage.getItem('fll_popout_pin_mode') as 'full' | 'left' | 'right' | 'float' | null;
+      if (savedPin) {
+        this.setPopoutPinMode(savedPin);
+      }
+    } catch {}
   }
 
   private loadScriptTabsFromStorage(): void {
