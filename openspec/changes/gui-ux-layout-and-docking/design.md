@@ -47,6 +47,10 @@ See `proposal.md` for motivation. The simulator interface currently uses a left 
   - Port mapping list (Motor A, Motor B, Aux C-F, Color C/D, Ultrasonic, Gyro) allowing users to map detected model parts to virtual SPIKE ports.
 - **Alternatives Considered**: Ingesting CAD only through the mission assets drawer (confused robot chassis with field mission models).
 
+### 6. Default Overhead Top-Down Camera View
+- **Decision**: In `src/main.ts`, set the initial camera position to `(0, 2.4, 0.001)` looking at `(0, 0, 0)` with up vector `(0, 0, -1)`, perfectly framing the entire 4x8 ft competition mat from directly overhead.
+- **Alternatives Considered**: Angled 45° perspective (requires students to pan and rotate just to see line-following paths and mission triggers).
+
 ## Risks / Trade-offs
 
 - **[Risk]** Bottom dock layout on narrow laptop screens (<1024px) might cramp horizontal split → **Mitigation**: Use media queries to automatically switch to stacked or tabbed view on screens below 1100px width.

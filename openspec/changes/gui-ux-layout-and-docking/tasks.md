@@ -5,6 +5,7 @@
 - [ ] 1.1 Implement `.hud-telemetry-dock` container with `.dock-right`, `.dock-bottom`, and `.dock-collapsed` modes in `hud.css` and `hud.ts` and verify rendering
 - [ ] 1.2 Implement bottom-docked 2-column split layout with Sensors & Motors on left and Command/Physics Logs on right and verify layout
 - [ ] 1.3 Add minimize/expand toggle and dock position controls with `localStorage` persistence and verify state restoration
+- [ ] 1.4 Configure default camera initialization to centered overhead top-down view in main.ts and verify camera orientation
 
 ## 2. Right Sidebar Code Panel & Profiler Integration
 

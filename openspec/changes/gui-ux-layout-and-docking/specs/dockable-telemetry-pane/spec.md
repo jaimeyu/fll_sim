@@ -26,3 +26,11 @@ When docked at the bottom, the telemetry pane SHALL display live sensors and mot
 #### Scenario: Viewing bottom-docked telemetry
 - **WHEN** the telemetry pane is expanded in bottom-docked mode
 - **THEN** color sensors, distance, gyro, and motor speeds are visible simultaneously alongside the scrolling command logs window without requiring tab switching
+
+### Requirement: Default Top-Down Camera View
+The 3D scene camera SHALL initialize by default to a centered, overhead top-down perspective view aligned with the competition mat, enabling students to program and view line-following and mission trajectories without camera adjustment.
+
+#### Scenario: First load camera position
+- **WHEN** the simulator initializes in the browser
+- **THEN** the camera is positioned directly above the center of the field looking downward with the mat upright, while preserving orbit controls for 3D navigation when desired
+

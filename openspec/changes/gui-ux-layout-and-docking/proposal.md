@@ -20,6 +20,8 @@ As the simulator's feature set has matured, the floating modal approach for tele
   - Add a **Robot Design** button on the top navigation bar.
   - Modal/sheet allowing users to switch between preset robot models or upload a custom CAD model (`.io`, `.ldr`).
   - Interactive robot inspection view to inspect clustered geometry and verify/remap hardware port assignments (Drive Wheels A/B, Attachments C/D/E/F, Color Sensors, Ultrasonic Sonar, IMU).
+- **Default Top-Down Overhead Camera View**:
+  - Default the 3D camera to a centered, overhead top-down view of the entire competition mat on initialization so students can immediately program, line-follow, and run missions without needing to orbit the 3D camera or reposition panes.
 - **Preserved Left Navigation Bar**: Keep the existing left sidebar drawer (Manual Driver Mode, Mission Elements, Field Mat selector) clean and stable.
 
 ## Capabilities
