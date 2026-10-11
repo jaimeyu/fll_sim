@@ -1,0 +1,3015 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Open-Source 3D WebGL Robotics Simulator for FIRST LEGO League">
+      
+      
+        <meta name="author" content="Jaime Yu">
+      
+      
+      
+        <link rel="prev" href="../../architecture/">
+      
+      
+        <link rel="next" href="../../tutorials/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Overview & Controls - FLL Robot Simulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+  
+
+
+  
+  
+
+<script id="__analytics">function __md_analytics(){function e(){dataLayer.push(arguments)}window.dataLayer=window.dataLayer||[],e("js",new Date),e("config","G-VHHKDXD1EC"),document.addEventListener("DOMContentLoaded",(function(){document.forms.search&&document.forms.search.query.addEventListener("blur",(function(){this.value&&e("event","search",{search_term:this.value})}));document$.subscribe((function(){var t=document.forms.feedback;if(void 0!==t)for(var a of t.querySelectorAll("[type=submit]"))a.addEventListener("click",(function(a){a.preventDefault();var n=document.location.pathname,d=this.getAttribute("data-md-value");e("event","feedback",{page:n,data:d}),t.firstElementChild.disabled=!0;var r=t.querySelector(".md-feedback__note [data-md-value='"+d+"']");r&&(r.hidden=!1)})),t.hidden=!1})),location$.subscribe((function(t){e("config","G-VHHKDXD1EC",{page_path:t.pathname})}))}));var t=document.createElement("script");t.async=!0,t.src="https://www.googletagmanager.com/gtag/js?id=G-VHHKDXD1EC",document.getElementById("__analytics").insertAdjacentElement("afterEnd",t)}</script>
+  
+    <script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
+  
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ui-components-global-controls-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="FLL Robot Simulator" class="md-header__button md-logo" aria-label="FLL Robot Simulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FLL Robot Simulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Overview & Controls
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jaimeyu/fll_sim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jaimeyu/fll_sim
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  UI & Component Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/advance_driving_base/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../development/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Development & Multi-Agent
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="FLL Robot Simulator" class="md-nav__button md-logo" aria-label="FLL Robot Simulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    FLL Robot Simulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jaimeyu/fll_sim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jaimeyu/fll_sim
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI & Component Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI & Component Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Controls
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-master-application-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Master Application Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Master Application Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#primary-layout-zones" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Primary Layout Zones
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-top-navigation-bar-global-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Top Navigation Bar &amp; Global Controls
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Top Navigation Bar &amp; Global Controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#control-elements-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Control Elements Breakdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-3d-competition-mat-viewport-camera-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 3D Competition Mat Viewport &amp; Camera Navigation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 3D Competition Mat Viewport &amp; Camera Navigation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera-perspectives-orbit-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Perspectives &amp; Orbit Navigation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interactive-viewport-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Viewport Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-3d-compass-heading-indicator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic 3D Compass &amp; Heading Indicator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-dockable-minimizable-telemetry-pane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Dockable &amp; Minimizable Telemetry Pane
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Dockable &amp; Minimizable Telemetry Pane">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#flexible-docking-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flexible Docking Configurations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-cards-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostic Cards Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Diagnostic Cards Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-dual-optical-color-sensors-ports-c-d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dual Optical Color Sensors (Ports C &amp; D)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-ultrasonic-distance-sensor-port-e" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Ultrasonic Distance Sensor (Port E)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-gyro-imu-yaw-heading-hub-gyro" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Gyro / IMU Yaw Heading (Hub Gyro)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-arena-coordinates-pose-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Arena Coordinates &amp; Pose Capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#motor-diagnostics-cards-ports-af" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Motor Diagnostics Cards (Ports A–F)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#live-command-physics-event-logs-stream" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live Command &amp; Physics Event Logs Stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-left-resizable-multi-job-activity-bar-drawer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Left Resizable Multi-Job Activity Bar &amp; Drawer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Left Resizable Multi-Job Activity Bar &amp; Drawer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#activity-bar-views" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activity Bar Views
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#drawer-resizing-mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drawer Resizing Mechanism
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-driver-mode-wasd-motors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual Driver Mode (WASD &amp; Motors)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Manual Driver Mode (WASD &amp; Motors)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-drive-base-controls-wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Drive Base Controls (WASD)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-individual-motor-keybindings-uiop-jkl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Individual Motor Keybindings (UIOP / JKL;)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-spike-prime-word-blocks-studio-python-editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. SPIKE Prime Word Blocks Studio &amp; Python Editor
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. SPIKE Prime Word Blocks Studio &amp; Python Editor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#popout-modal-layout-pin-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Popout Modal Layout &amp; Pin Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-column-word-blocks-workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3-Column Word Blocks Workspace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dual-mode-architecture-project-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dual-Mode Architecture &amp; Project Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-robot-design-hardware-port-mapping-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Robot Design &amp; Hardware Port Mapping Modal
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Robot Design &amp; Hardware Port Mapping Modal">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#section-a-robot-architecture-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Section A: Robot Architecture Selection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#section-b-hardware-port-mapping-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Section B: Hardware Port Mapping Matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-3d-cad-model-inspector-diagnostic-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. 3D CAD Model Inspector &amp; Diagnostic Validator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. 3D CAD Model Inspector &amp; Diagnostic Validator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robot-digital-twin-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robot Digital Twin Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#competition-season-mission-inspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Competition Season Mission Inspection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-kinematics-report-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation &amp; Kinematics Report Panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interactive-visual-physics-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Visual &amp; Physics Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cluster-anchoring-fasteners" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster Anchoring &amp; Fasteners
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-simulation-render-performance-profiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Simulation &amp; Render Performance Profiler
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Simulation &amp; Render Performance Profiler">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#frame-budget-allocation-1667ms-60-fps-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frame Budget Allocation (16.67ms / 60 FPS Target)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#subsystem-metrics-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Subsystem Metrics Cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-global-keyboard-shortcuts-cheat-sheet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Global Keyboard Shortcuts Cheat Sheet
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Global Keyboard Shortcuts Cheat Sheet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#program-execution-mission-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Program Execution &amp; Mission Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-drive-base-hotkeys-driver-mode-armed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual Drive Base Hotkeys (Driver Mode Armed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#individual-motor-hotkeys-driver-mode-armed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Individual Motor Hotkeys (Driver Mode Armed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport-camera-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport &amp; Camera Navigation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary &amp; Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Learning Path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/01_getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Getting Started & Mat Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/02_word_blocks_programming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. SPIKE Word Blocks Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/03_python_programming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Authentic SPIKE Python
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/04_robot_design_and_ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Robot Architecture & Port Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/05_cad_inspector_digital_twins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. 3D CAD Inspector & Digital Twins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/advance_driving_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advance Driving Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/spike_python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SPIKE Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/cad_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CAD Import (.io / .ldr)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development & Multi-Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-master-application-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Master Application Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Master Application Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#primary-layout-zones" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Primary Layout Zones
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-top-navigation-bar-global-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Top Navigation Bar &amp; Global Controls
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Top Navigation Bar &amp; Global Controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#control-elements-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Control Elements Breakdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-3d-competition-mat-viewport-camera-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 3D Competition Mat Viewport &amp; Camera Navigation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 3D Competition Mat Viewport &amp; Camera Navigation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera-perspectives-orbit-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera Perspectives &amp; Orbit Navigation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interactive-viewport-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Viewport Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-3d-compass-heading-indicator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic 3D Compass &amp; Heading Indicator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-dockable-minimizable-telemetry-pane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Dockable &amp; Minimizable Telemetry Pane
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Dockable &amp; Minimizable Telemetry Pane">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#flexible-docking-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flexible Docking Configurations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-cards-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostic Cards Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Diagnostic Cards Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-dual-optical-color-sensors-ports-c-d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dual Optical Color Sensors (Ports C &amp; D)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-ultrasonic-distance-sensor-port-e" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Ultrasonic Distance Sensor (Port E)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-gyro-imu-yaw-heading-hub-gyro" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Gyro / IMU Yaw Heading (Hub Gyro)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-arena-coordinates-pose-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Arena Coordinates &amp; Pose Capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#motor-diagnostics-cards-ports-af" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Motor Diagnostics Cards (Ports A–F)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#live-command-physics-event-logs-stream" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live Command &amp; Physics Event Logs Stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-left-resizable-multi-job-activity-bar-drawer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Left Resizable Multi-Job Activity Bar &amp; Drawer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Left Resizable Multi-Job Activity Bar &amp; Drawer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#activity-bar-views" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activity Bar Views
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#drawer-resizing-mechanism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drawer Resizing Mechanism
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-driver-mode-wasd-motors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual Driver Mode (WASD &amp; Motors)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Manual Driver Mode (WASD &amp; Motors)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-drive-base-controls-wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Drive Base Controls (WASD)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-individual-motor-keybindings-uiop-jkl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Individual Motor Keybindings (UIOP / JKL;)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-spike-prime-word-blocks-studio-python-editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. SPIKE Prime Word Blocks Studio &amp; Python Editor
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. SPIKE Prime Word Blocks Studio &amp; Python Editor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#popout-modal-layout-pin-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Popout Modal Layout &amp; Pin Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-column-word-blocks-workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3-Column Word Blocks Workspace
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dual-mode-architecture-project-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dual-Mode Architecture &amp; Project Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-robot-design-hardware-port-mapping-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Robot Design &amp; Hardware Port Mapping Modal
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Robot Design &amp; Hardware Port Mapping Modal">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#section-a-robot-architecture-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Section A: Robot Architecture Selection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#section-b-hardware-port-mapping-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Section B: Hardware Port Mapping Matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-3d-cad-model-inspector-diagnostic-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. 3D CAD Model Inspector &amp; Diagnostic Validator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. 3D CAD Model Inspector &amp; Diagnostic Validator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#robot-digital-twin-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robot Digital Twin Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#competition-season-mission-inspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Competition Season Mission Inspection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-kinematics-report-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation &amp; Kinematics Report Panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interactive-visual-physics-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Visual &amp; Physics Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cluster-anchoring-fasteners" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster Anchoring &amp; Fasteners
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-simulation-render-performance-profiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Simulation &amp; Render Performance Profiler
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Simulation &amp; Render Performance Profiler">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#frame-budget-allocation-1667ms-60-fps-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frame Budget Allocation (16.67ms / 60 FPS Target)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#subsystem-metrics-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Subsystem Metrics Cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-global-keyboard-shortcuts-cheat-sheet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Global Keyboard Shortcuts Cheat Sheet
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Global Keyboard Shortcuts Cheat Sheet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#program-execution-mission-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Program Execution &amp; Mission Controls
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-drive-base-hotkeys-driver-mode-armed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual Drive Base Hotkeys (Driver Mode Armed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#individual-motor-hotkeys-driver-mode-armed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Individual Motor Hotkeys (Driver Mode Armed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport-camera-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport &amp; Camera Navigation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary &amp; Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/jaimeyu/fll_sim/edit/master/docs/ui/components.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="ui-components-global-controls-reference">🖥️ UI Components &amp; Global Controls Reference<a class="headerlink" href="#ui-components-global-controls-reference" title="Permanent link">&para;</a></h1>
+<p>The <strong>FLL Robot Simulator (<code>fll-sim</code>)</strong> features an authentic, competition-grade web graphical interface engineered specifically for FIRST® LEGO® League teams, mentors, and students. Built with Three.js (WebGL), Rapier3D physics (WebAssembly), and an authentic SPIKE™ Prime execution runtime, the simulator combines real-time 3D simulation with modular telemetry, interactive Scratch Word Blocks, Python programming, and CAD inspection.</p>
+<p>This reference provides an exhaustive guide to every UI component, modal dialog, control surface, docking mode, telemetry feed, and keyboard shortcut available in the simulator.</p>
+<hr />
+<h2 id="1-master-application-overview">1. Master Application Overview<a class="headerlink" href="#1-master-application-overview" title="Permanent link">&para;</a></h2>
+<p>The simulator interface is organized into five primary spatial zones designed for zero-clutter mission execution and fast debugging:</p>
+<p><img alt="Master Application Workspace Overview" src="../../assets/images/01_overview.png" /></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌────────────────────────────────────────────────────────────────────────────────────────┐
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│ [1] TOP NAVIGATION BAR &amp; GLOBAL CONTROLS (Brand, Timer, Camera, Selector, Run, Modals) │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├───────┬───────────────────────────────┬────────────────────────────────────────────────┤
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│       │                               │                                                │
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  [4]  │  [5] LEFT DRAWER              │  [2] 3D COMPETITION MAT VIEWPORT               │
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  LEFT │  (Code / Driver / Assets /    │      (Three.js WebGL Arena, Compass, Orbit)    │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  ACT- │   Fasteners / Field / Term)   │                                                │
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  IVITY│                               │                                                │
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  BAR  │                               ├────────────────────────────────────────────────┤
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│       │                               │  [3] DOCKABLE TELEMETRY PANE                   │
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│ (48px)│  (380px – 760px Resizable)    │      (Sensors, Motors A–F, Command Log Stream) │
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>└───────┴───────────────────────────────┴────────────────────────────────────────────────┘
+</span></code></pre></div>
+<h3 id="primary-layout-zones">Primary Layout Zones<a class="headerlink" href="#primary-layout-zones" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Top Navigation Bar (<code>.hud-topbar</code>)</strong>: Always-visible 48px header containing brand identity, execution status, match countdown timer, camera angle presets, active program selector, script execution triggers (<code>RUN</code>, <code>STOP</code>, <code>RESET</code>), and modal quick-launch icons.</li>
+<li><strong>3D Competition Mat Viewport (<code>#viewport-container</code>)</strong>: High-performance Three.js WebGL rendering canvas simulating official 2362mm × 1143mm competition mats with physically accurate lighting, friction surfaces, drop reticles, and live robot kinematics.</li>
+<li><strong>Dockable &amp; Minimizable Telemetry Pane (<code>#hud-telemetry-dock</code>)</strong>: Flexible diagnostics pane supporting horizontal bottom docking, vertical right docking, or a 30px minimized status bar. Houses live sensor meters, motor velocity cards, and real-time physics event logs.</li>
+<li><strong>Left Activity Bar (<code>.hud-activity-bar</code>)</strong>: Fixed 48px vertical rail providing single-click switching between functional workspaces: Code, Manual Driver, Asset Library, Fasteners, Field Setup, and Debug Terminal.</li>
+<li><strong>Left Resizable Multi-Job Drawer (<code>#hud-drawer-panel</code>)</strong>: Sliding secondary workspace resizable between 380px and 760px. Hosts embedded script editors, WASD manual driving, mission catalog loaders, and layout persistence controls.</li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Workspace Customization</p>
+<p>All panels in the simulator can be resized, collapsed, or popped out into floating modals. On multi-monitor or widescreen displays, open the <strong>Code Editor</strong> and <strong>CAD Inspector</strong> in dedicated modal overlays while keeping the 3D Mat Viewport full-width.</p>
+</div>
+<hr />
+<h2 id="2-top-navigation-bar-global-controls">2. Top Navigation Bar &amp; Global Controls<a class="headerlink" href="#2-top-navigation-bar-global-controls" title="Permanent link">&para;</a></h2>
+<p>The Top Navigation Bar provides central mission command and instant access to execution, timing, and system-wide diagnostic tools.</p>
+<p><img alt="Top Navigation Bar and Global Controls" src="../../assets/images/02_topbar_controls.png" /></p>
+<h3 id="control-elements-breakdown">Control Elements Breakdown<a class="headerlink" href="#control-elements-breakdown" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Control Element</th>
+<th style="text-align: left;">DOM Identifier / Selector</th>
+<th style="text-align: left;">Function &amp; Operational Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Brand &amp; Logo</strong></td>
+<td style="text-align: left;"><code>.hud-brand</code></td>
+<td style="text-align: left;">Displays platform branding with the <strong><code>SPIKE Prime</code></strong> indicator badge.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Execution State Dot</strong></td>
+<td style="text-align: left;"><code>#exec-status-dot</code>, <code>#exec-status-text</code></td>
+<td style="text-align: left;">Real-time VM status indicator. Transitions between: <br>• <strong><code>IDLE</code></strong> (Gray/White): Robot awaiting execution.<br>• <strong><code>RUNNING</code></strong> (Emerald Green, pulsing): Python VM actively evaluating bytecode.<br>• <strong><code>ERROR</code></strong> (Crimson Red): Runtime exception or syntax failure encountered.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Match Countdown Timer</strong></td>
+<td style="text-align: left;"><code>#hud-match-timer</code></td>
+<td style="text-align: left;">Official FIRST LEGO League <strong>02:30</strong> countdown clock. Syncs automatically when a program starts or manual driving begins. Click to start, pause, or reset.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Camera View Presets</strong></td>
+<td style="text-align: left;"><code>[data-cam="ISO"]</code><br><code>[data-cam="TOP_DOWN"]</code><br><code>[data-cam="FOLLOW"]</code></td>
+<td style="text-align: left;">One-click camera perspective triggers: <br>• <strong><code>📐 3D Iso</code></strong>: 45° isometric perspective for obstacle clearance.<br>• <strong><code>🗺️ Top-Down</code></strong>: Orthographic overhead view for precision grid alignment.<br>• <strong><code>🎥 Follow</code></strong>: Smooth chasing camera centered on robot coordinates.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Active Mission Selector</strong></td>
+<td style="text-align: left;"><code>#topbar-program-select</code></td>
+<td style="text-align: left;">Dropdown linking all open editor tabs and standard benchmark programs: <br>• <code>Mission 1: Drive Straight (30 cm)</code><br>• <code>Mission 2: Gyro 90° Turn</code><br>• <code>Mission 3: Proportional Line Follower</code><br>• <code>Mission 4: Dual-Sensor Line Squaring</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Run Program</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-run</code></td>
+<td style="text-align: left;"><strong><code>▶ RUN</code></strong> (Emerald Green). Compiles active Python or Word Blocks code and launches asynchronous execution. Hotkey: ++space++.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Emergency Stop</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-stop</code></td>
+<td style="text-align: left;"><strong><code>⏹ STOP</code></strong> (Crimson Red). Instantly brakes all drive and auxiliary motors, terminates the Python worker thread, and holds robot position. Hotkey: ++space++ (while running).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Reset Robot</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-reset</code></td>
+<td style="text-align: left;"><strong><code>↺ RESET</code></strong> (Amber Yellow). Immediately teleports the robot back to its active launch arc coordinates, clears motor encoders, and re-levels gyro heading. Hotkey: ++ctrl+space++ / ++cmd+space++.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Terminal Modal</strong></td>
+<td style="text-align: left;"><code>#btn-toggle-floating-terminal</code></td>
+<td style="text-align: left;"><strong><code>📟 Terminal</code></strong>. Toggles floating resizable stdout/stderr output console window.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Telemetry Modal</strong></td>
+<td style="text-align: left;"><code>#btn-toggle-telemetry</code></td>
+<td style="text-align: left;"><strong><code>📡 Telemetry</code></strong>. Expands or brings focus to the live diagnostics dock.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Code Editor Modal</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-code</code></td>
+<td style="text-align: left;"><strong><code>💻 Code Editor</code></strong>. Pops out the SPIKE Prime Word Blocks Studio &amp; Python Editor into a multi-column modal.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Robot Design Modal</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-robot-design</code></td>
+<td style="text-align: left;"><strong><code>🤖 Robot Design</code></strong>. Opens robot architecture selection and hardware port configuration matrix.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>CAD Inspector Modal</strong></td>
+<td style="text-align: left;"><code>#btn-topbar-inspector</code></td>
+<td style="text-align: left;"><strong><code>🔬 CAD Inspector</code></strong>. Launches deep 3D inspection, validation, and physics sandbox for <code>.io</code> and <code>.ldr</code> models.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-3d-competition-mat-viewport-camera-navigation">3. 3D Competition Mat Viewport &amp; Camera Navigation<a class="headerlink" href="#3-3d-competition-mat-viewport-camera-navigation" title="Permanent link">&para;</a></h2>
+<p>The 3D Competition Mat Viewport renders the physical competition table with millimeter accuracy, simulating official FLL mat dimensions (2362 mm × 1143 mm) bounded by rigid Baltic birch borders.</p>
+<p><img alt="3D Competition Mat Viewport Isometric View" src="../../assets/images/06_viewport_iso_3d.png" /></p>
+<h3 id="camera-perspectives-orbit-navigation">Camera Perspectives &amp; Orbit Navigation<a class="headerlink" href="#camera-perspectives-orbit-navigation" title="Permanent link">&para;</a></h3>
+<p>The Three.js viewport provides three specialized camera modes:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Top-Down View (Default)</label><label for="__tabbed_1_2">Isometric 3D View</label><label for="__tabbed_1_3">Dynamic Follow Camera</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<ul>
+<li><strong>Optimal For</strong>: Line alignment, path planning, launch angle measurement, and 2D odometry tracking.</li>
+<li><strong>Camera Orientation</strong>: Positioned directly over field center <code>(0.0, 2.5, 0.0)</code> looking straight down with locked pitch.</li>
+<li><strong>Reticle Interaction</strong>: Drag the robot or mission models smoothly along the X/Z ground plane.</li>
+</ul>
+</div>
+<div class="tabbed-block">
+<ul>
+<li><strong>Optimal For</strong>: Inspecting attachment clearance, vertical mission levers, gear meshing, and 3D collisions.</li>
+<li><strong>Camera Orientation</strong>: 45° azimuth, 35° elevation angled view showing depth and elevation profiles.</li>
+<li><strong>Shadow &amp; Depth</strong>: Directional shadow maps highlight ground clearance and tire contact patches.</li>
+</ul>
+</div>
+<div class="tabbed-block">
+<ul>
+<li><strong>Optimal For</strong>: Long-distance navigation runs, obstacle traversal, and driver-perspective missions.</li>
+<li><strong>Tracking Dynamics</strong>: Automatically tracks the robot chassis centroid, maintaining an offset distance while damping high-frequency vibrations.</li>
+</ul>
+</div>
+</div>
+</div>
+<h3 id="interactive-viewport-controls">Interactive Viewport Controls<a class="headerlink" href="#interactive-viewport-controls" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Orbit Rotate</strong>: Click and drag with ++left-button-click++ across the mat surface to orbit around the current focus target.</li>
+<li><strong>Pan Camera</strong>: Click and drag with ++right-button-click++ (or ++ctrl+left-button-click++) to translate the camera target across the mat.</li>
+<li><strong>Smooth Zoom</strong>: Scroll mouse wheel (++wheel-up++ / ++wheel-down++) or pinch-to-zoom on touchpads.</li>
+<li><strong>Object Placement &amp; Dragging</strong>: Click and hold on the robot or any unlocked mission element to enter positioning mode. A cyan drop reticle projects the exact ground footprint.</li>
+<li><strong>Keyboard In-Place Rotation</strong>: While hovering or dragging any object, press ++r++ (clockwise +15°) or ++shift+r++ (counter-clockwise -15°) to rotate in place without moving coordinates.</li>
+</ul>
+<h3 id="dynamic-3d-compass-heading-indicator">Dynamic 3D Compass &amp; Heading Indicator<a class="headerlink" href="#dynamic-3d-compass-heading-indicator" title="Permanent link">&para;</a></h3>
+<p>Positioned in the 3D viewport and telemetry cards, the dynamic compass renders:
+* <strong>North Needle (Crimson Red)</strong>: Real-time absolute field alignment.
+* <strong>Digital Yaw Heading</strong>: Live precision degrees with clockwise positive convention (<code>0.0°</code> to <code>359.9°</code> or <code>±180°</code>).
+* <strong>Heading Zero Button (<code>🧭 Zero</code>)</strong>: Instantly resets the internal IMU software offset to <code>0.0°</code> relative to the robot's current heading.</p>
+<hr />
+<h2 id="4-dockable-minimizable-telemetry-pane">4. Dockable &amp; Minimizable Telemetry Pane<a class="headerlink" href="#4-dockable-minimizable-telemetry-pane" title="Permanent link">&para;</a></h2>
+<p>The Telemetry Pane provides real-time visibility into internal robot state, optical sensors, distance sonars, motor tachometers, and Rapier3D physics collision logs.</p>
+<h3 id="flexible-docking-configurations">Flexible Docking Configurations<a class="headerlink" href="#flexible-docking-configurations" title="Permanent link">&para;</a></h3>
+<p>The telemetry system supports three distinct operational layouts to fit any screen aspect ratio:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:3"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Bottom Dock (2-Column Horizontal)</label><label for="__tabbed_2_2">Right Dock (Vertical Stack)</label><label for="__tabbed_2_3">Minimized Bar Mode (30px Status Bar)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p><img alt="Telemetry Pane Bottom Dock" src="../../assets/images/03_telemetry_dock_bottom.png" />
+* <strong>CSS Class</strong>: <code>.dock-bottom</code>
+* <strong>Layout</strong>: Left column houses live sensor diagnostics and motor cards; right column streams physics commands and logs.
+* <strong>Resizing</strong>: Drag the top border resizer handle (<code>#telem-resizer-n</code>) vertically to expand height from 180px to 450px.</p>
+</div>
+<div class="tabbed-block">
+<p><img alt="Telemetry Pane Right Dock" src="../../assets/images/05_telemetry_dock_right.png" />
+* <strong>CSS Class</strong>: <code>.dock-right</code>
+* <strong>Layout</strong>: Compact vertical column docked to the right edge. Tab navigation switches between <strong><code>Sensors</code></strong>, <strong><code>Motors (A–F)</code></strong>, and <strong><code>Command Logs</code></strong>.
+* <strong>Resizing</strong>: Drag the left border resizer handle (<code>#telem-resizer-w</code>) horizontally to adjust width from 320px to 600px.</p>
+</div>
+<div class="tabbed-block">
+<p><img alt="Telemetry Pane Minimized Bar" src="../../assets/images/04_telemetry_dock_minimized.png" />
+* <strong>CSS Class</strong>: <code>.minimized</code>
+* <strong>Layout</strong>: Collapses into a thin 30px bottom status strip displaying live mini summaries:
+  <code>🧭 Gyro: 0.0° • 📏 Sonar: --cm • 🎨 C: WHITE • ⚙️ Motors: IDLE</code>
+* <strong>Expand</strong>: Click the <strong><code>▲ Expand</code></strong> button or the header toggle to restore full view.</p>
+</div>
+</div>
+</div>
+<hr />
+<h3 id="diagnostic-cards-reference">Diagnostic Cards Reference<a class="headerlink" href="#diagnostic-cards-reference" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>┌─────────────────────────────────┬─────────────────────────────────┐
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>│ COLOR SENSOR C (LEFT)           │ COLOR SENSOR D (RIGHT)          │
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│ Badge: WHITE                    │ Badge: BLACK                    │
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│ Reflected Light: 98% [========] │ Reflected Light: 12% [=       ] │
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│ Swatch: #FFFFFF  RGB(255,255,255│ Swatch: #1A1A1A  RGB(26,26,26)  │
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├─────────────────────────────────┼─────────────────────────────────┤
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│ ULTRASONIC DISTANCE SENSOR      │ GYRO / IMU YAW HEADING          │
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│ Proximity: 🟢 Clear             │ Compass Dial: [ 🧭 90.0° ]      │
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│ Reading: 42.5 cm [======    ]   │ Digital: 90.0° (Clockwise +)    │
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│ Range: 0–150 cm  Raw: 425mm     │ Action: [🧭 Zero Gyro]          │
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>├─────────────────────────────────┴─────────────────────────────────┤
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>│ ROBOT FIELD COORDINATES (MAT ARENA)                               │
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>│ X Position: -0.80 m   │ Z Position: 0.32 m   │ Heading Yaw: 90.0° │
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>│ Actions: [📌 Capture Pose as Spawn]                               │
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>└───────────────────────────────────────────────────────────────────┘
+</span></code></pre></div>
+<h4 id="1-dual-optical-color-sensors-ports-c-d">1. Dual Optical Color Sensors (Ports C &amp; D)<a class="headerlink" href="#1-dual-optical-color-sensors-ports-c-d" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Real-time Color Swatches</strong>: Square preview box showing the exact ground pixel color sampled beneath each sensor aperture.</li>
+<li><strong>RGB Color Value</strong>: Exact sampled 8-bit channels <code>RGB: (r, g, b)</code>.</li>
+<li><strong>Reflected Light Meter</strong>: Proportional bar graph (0% to 100%) used for line following, intersection detection, and dual-sensor squaring.</li>
+<li><strong>Detected Color Badge</strong>: Automatic classification matching official LEGO color tags: <code>WHITE</code>, <code>BLACK</code>, <code>RED</code>, <code>BLUE</code>, <code>YELLOW</code>, <code>GREEN</code>, or <code>NONE</code>.</li>
+</ul>
+<h4 id="2-ultrasonic-distance-sensor-port-e">2. Ultrasonic Distance Sensor (Port E)<a class="headerlink" href="#2-ultrasonic-distance-sensor-port-e" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Distance Reading</strong>: Calibrated reading from 0 cm to 150 cm.</li>
+<li><strong>Proximity Status Badge</strong>:</li>
+<li>🟢 <strong><code>Clear</code></strong> (&gt; 20 cm): Path unobstructed.</li>
+<li>🟡 <strong><code>Approaching</code></strong> (10 cm – 20 cm): Obstacle in braking range.</li>
+<li>🔴 <strong><code>Warning</code></strong> (&lt; 10 cm): Imminent collision hazard.</li>
+<li><strong>Raw Distance Display</strong>: Millimeter-precision internal raycast metric.</li>
+</ul>
+<h4 id="3-gyro-imu-yaw-heading-hub-gyro">3. Gyro / IMU Yaw Heading (Hub Gyro)<a class="headerlink" href="#3-gyro-imu-yaw-heading-hub-gyro" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Rotational Dial</strong>: Real-time rotating needle tracking robot chassis heading.</li>
+<li><strong>Digital Heading Metric</strong>: Continuous precision floating-point angle (<code>-180.0°</code> to <code>+180.0°</code>).</li>
+<li><strong>Zero Button</strong>: Instant recalibration to zero without altering physical position.</li>
+</ul>
+<h4 id="4-arena-coordinates-pose-capture">4. Arena Coordinates &amp; Pose Capture<a class="headerlink" href="#4-arena-coordinates-pose-capture" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Coordinates Grid</strong>: Live tracking of chassis center of mass:</li>
+<li><strong>X</strong>: Millimeters from arena center line (<code>-1.18 m</code> to <code>+1.18 m</code>).</li>
+<li><strong>Z</strong>: Millimeters from arena south edge (<code>-0.57 m</code> to <code>+0.57 m</code>).</li>
+<li><strong>Yaw</strong>: Heading angle in degrees.</li>
+<li><strong><code>📌 Capture Pose</code></strong>: Click to save the robot's current position and rotation as the new starting spawn point.</li>
+</ul>
+<hr />
+<h3 id="motor-diagnostics-cards-ports-af">Motor Diagnostics Cards (Ports A–F)<a class="headerlink" href="#motor-diagnostics-cards-ports-af" title="Permanent link">&para;</a></h3>
+<p>Each motor port card (A, B, C, D, E, F) renders real-time mechanical parameters:</p>
+<p><img alt="Motor Diagnostic Cards in Telemetry" src="../../assets/images/03_telemetry_dock_bottom.png" /></p>
+<ul>
+<li><strong>Drive Motors (Ports A &amp; B)</strong>: Left and right drive wheels configured with differential kinematics.</li>
+<li><strong>Auxiliary Motors (Ports C–F)</strong>: Medium and large angled motors driving mission manipulators, rack-and-pinion pushers, and gearboxes.</li>
+<li><strong>Telemetry Fields</strong>:</li>
+<li><strong>Target Power / Speed</strong>: Programmed velocity setpoint (<code>-100%</code> to <code>+100%</code>).</li>
+<li><strong>Actual Angular Velocity</strong>: Real-time velocity reported in both degrees per second (<code>°/s</code>) and revolutions per minute (<code>RPM</code>).</li>
+<li><strong>Cumulative Encoder Angle</strong>: High-precision rotary tachometer reading with zeroing action (<code>↺ Zero</code>).</li>
+</ul>
+<hr />
+<h3 id="live-command-physics-event-logs-stream">Live Command &amp; Physics Event Logs Stream<a class="headerlink" href="#live-command-physics-event-logs-stream" title="Permanent link">&para;</a></h3>
+<p>The right column of the telemetry dock streams real-time communication events between the Python runtime and the Rapier3D physics solver:</p>
+<ul>
+<li><strong>Category Filter Pills</strong>:</li>
+<li><strong><code>All</code></strong>: Full execution transcript.</li>
+<li><strong><code>Drive</code></strong>: Movement commands (<code>move()</code>, <code>steer()</code>, <code>start_tank()</code>).</li>
+<li><strong><code>Brake</code></strong>: Mechanical stopping events (<code>stop()</code>, active holding torque).</li>
+<li><strong><code>Motors</code></strong>: Individual auxiliary motor actions (<code>run_for_degrees()</code>, <code>run_to_position()</code>).</li>
+<li><strong>Log Controls</strong>:</li>
+<li><strong><code>Auto-scroll Checkbox</code></strong>: Automatically pins view to newest events.</li>
+<li><strong><code>🧹 Clear Logs</code></strong>: Empties memory buffer and clears log console.</li>
+<li><strong>Performance Badge</strong>: Live pulsing badge displaying Three.js rendering frame rate (<code>60 FPS</code>) and physics engine frequency (<code>60 Hz</code>). Clicking opens the Performance Profiler.</li>
+</ul>
+<hr />
+<h2 id="5-left-resizable-multi-job-activity-bar-drawer">5. Left Resizable Multi-Job Activity Bar &amp; Drawer<a class="headerlink" href="#5-left-resizable-multi-job-activity-bar-drawer" title="Permanent link">&para;</a></h2>
+<p>The Left Drawer system houses specialized operational tools without occluding the main 3D arena.</p>
+<p><img alt="Left Activity Drawer in Code Editor View" src="../../assets/images/07_code_editor_drawer.png" /></p>
+<h3 id="activity-bar-views">Activity Bar Views<a class="headerlink" href="#activity-bar-views" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Icon</th>
+<th style="text-align: left;">Name</th>
+<th style="text-align: left;">Key Role &amp; Features</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">💻</td>
+<td style="text-align: left;"><strong>Code</strong></td>
+<td style="text-align: left;">Dual-mode SPIKE Prime Word Blocks and Python script editor with multi-tab management, autosave, and ZIP export.</td>
+</tr>
+<tr>
+<td style="text-align: center;">🎮</td>
+<td style="text-align: left;"><strong>Driver</strong></td>
+<td style="text-align: left;">Direct manual control interface with WASD keyboard steering, individual motor sliders, and live emergency braking.</td>
+</tr>
+<tr>
+<td style="text-align: center;">📦</td>
+<td style="text-align: left;"><strong>Assets</strong></td>
+<td style="text-align: left;">Mission model library for loading official season mission assemblies (<code>.io</code> / <code>.ldr</code>) and batch layout presets.</td>
+</tr>
+<tr>
+<td style="text-align: center;">🔒</td>
+<td style="text-align: left;"><strong>Fasteners</strong></td>
+<td style="text-align: left;">3M™ Dual Lock fastener tool for placing, inspecting, and toggling fixed baseplate anchors.</td>
+</tr>
+<tr>
+<td style="text-align: center;">⚙️</td>
+<td style="text-align: left;"><strong>Field</strong></td>
+<td style="text-align: left;">Field surface selection (Numbered BioGlow, Grid, Procedural), simulation modes, spawn position coordinates, and offline caching.</td>
+</tr>
+<tr>
+<td style="text-align: center;">📟</td>
+<td style="text-align: left;"><strong>Terminal</strong></td>
+<td style="text-align: left;">Integrated stdout/stderr logging console for script print output and runtime debug messages.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="drawer-resizing-mechanism">Drawer Resizing Mechanism<a class="headerlink" href="#drawer-resizing-mechanism" title="Permanent link">&para;</a></h3>
+<p>Hover over the right vertical border of the drawer panel (<code>#hud-panel-resizer</code>) to reveal the horizontal resize cursor. Click and drag horizontally to resize anywhere between <strong>380px</strong> and <strong>760px</strong> width. The 3D viewport canvas automatically resizes with zero aspect ratio distortion.</p>
+<hr />
+<h3 id="manual-driver-mode-wasd-motors">Manual Driver Mode (WASD &amp; Motors)<a class="headerlink" href="#manual-driver-mode-wasd-motors" title="Permanent link">&para;</a></h3>
+<p>Manual Driver Mode allows operators to manually steer the robot and test mission mechanisms using direct keyboard inputs:</p>
+<p><img alt="Manual Driver Mode Interface" src="../../assets/images/12_manual_driver_mode.png" /></p>
+<h4 id="1-drive-base-controls-wasd">1. Drive Base Controls (WASD)<a class="headerlink" href="#1-drive-base-controls-wasd" title="Permanent link">&para;</a></h4>
+<ul>
+<li>++w++: Drive straight forward at configured speed.</li>
+<li>++s++: Drive straight backward in reverse.</li>
+<li>++a++: Spin counter-clockwise in place (left motor reverse, right motor forward).</li>
+<li>++d++: Spin clockwise in place (left motor forward, right motor reverse).</li>
+<li>++space++: Instant emergency brake (both drive motors locked).</li>
+<li><strong>Speed Slider (<code>10% – 100%</code>)</strong>: Sets baseline velocity for WASD driving actions.</li>
+</ul>
+<h4 id="2-individual-motor-keybindings-uiop-jkl">2. Individual Motor Keybindings (UIOP / JKL;)<a class="headerlink" href="#2-individual-motor-keybindings-uiop-jkl" title="Permanent link">&para;</a></h4>
+<p>Drive auxiliary attachments and individual motors directly from keyboard key pairs:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Motor Port</th>
+<th style="text-align: center;">Forward Key</th>
+<th style="text-align: center;">Reverse Key</th>
+<th style="text-align: left;">Default Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><strong>Port A</strong></td>
+<td style="text-align: center;">++u++</td>
+<td style="text-align: center;">++j++</td>
+<td style="text-align: left;">Left Drive Wheel</td>
+</tr>
+<tr>
+<td style="text-align: center;"><strong>Port B</strong></td>
+<td style="text-align: center;">++i++</td>
+<td style="text-align: center;">++k++</td>
+<td style="text-align: left;">Right Drive Wheel</td>
+</tr>
+<tr>
+<td style="text-align: center;"><strong>Port C</strong></td>
+<td style="text-align: center;">++o++</td>
+<td style="text-align: center;">++l++</td>
+<td style="text-align: left;">Left Auxiliary Motor / Arm</td>
+</tr>
+<tr>
+<td style="text-align: center;"><strong>Port D</strong></td>
+<td style="text-align: center;">++p++</td>
+<td style="text-align: center;">++;++</td>
+<td style="text-align: left;">Right Auxiliary Motor / Arm</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Focus Safety</p>
+<p>When typing inside code textareas, file input modals, or rename inputs, the driver mode automatically disarms key listeners to prevent accidental robot movement.</p>
+</div>
+<hr />
+<h2 id="6-spike-prime-word-blocks-studio-python-editor">6. SPIKE Prime Word Blocks Studio &amp; Python Editor<a class="headerlink" href="#6-spike-prime-word-blocks-studio-python-editor" title="Permanent link">&para;</a></h2>
+<p>The code editor provides a complete, authentic FIRST LEGO League programming environment with full parity between Scratch-based Word Blocks and official SPIKE Prime Python code.</p>
+<p><img alt="SPIKE Prime Word Blocks Modal Studio" src="../../assets/images/08_spike_word_blocks_modal.png" /></p>
+<h3 id="popout-modal-layout-pin-modes">Popout Modal Layout &amp; Pin Modes<a class="headerlink" href="#popout-modal-layout-pin-modes" title="Permanent link">&para;</a></h3>
+<p>Clicking <strong><code>⤢ Pop Out</code></strong> or the topbar <strong><code>💻 Code Editor</code></strong> button expands the editor into an interactive modal overlay with specialized window docking controls:</p>
+<ul>
+<li><strong>Pin to Left (<code>◧</code>)</strong>: Pins the code editor to the left 50% of the screen, keeping the 3D viewport active on the right 50%.</li>
+<li><strong>Pin to Right (<code>◨</code>)</strong>: Pins the code editor to the right 50% of the screen.</li>
+<li><strong>Float Window (<code>🗗</code>)</strong>: Centered 90% dialog box with modal backdrop.</li>
+<li><strong>Maximize (<code>⛶</code>)</strong>: Fullscreen editor view.</li>
+<li><strong>Dock Back (<code>⤓</code>)</strong>: Restores the editor into the left activity drawer.</li>
+</ul>
+<hr />
+<h3 id="3-column-word-blocks-workspace">3-Column Word Blocks Workspace<a class="headerlink" href="#3-column-word-blocks-workspace" title="Permanent link">&para;</a></h3>
+<p>The visual programming workspace is structured after official LEGO Education SPIKE App 3.x:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>┌─────────────────┬──────────────────────────┬────────────────────────────────────────┐
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>│ CATEGORY RAIL   │ BLOCK PALETTE DRAWER     │ INTERACTIVE CANVAS VIEWPORT            │
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>│                 │                          │                                        │
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>│ • [All]         │ [When Program Starts 🚩] │    [When Program Starts 🚩]            │
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>│ • [Motors]      │ [Move forward 10 cm  ⬆️] │               │                        │
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>│ • [Movement]    │ [Set speed to 50%    ⚡] │    [Set movement motors to A+B 🚗]      │
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>│ • [Events]      │ [Turn right 90 deg   ↻] │               │                        │
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>│ • [Control]     │ [Wait 1 seconds      ⏳] │    [Set speed to 50% ⚡]                │
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>│ • [Sensors]     │ [Motor A run 360 deg ⚙️] │               │                        │
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>│ • [Operators]   │                          │    [Move forward 30 cm ⬆️]             │
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>│                 │                          │                                        │
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>│                 │                          │              Zoom: [➖] [100%] [➕] [↺]│
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>└─────────────────┴──────────────────────────┴────────────────────────────────────────┘
+</span></code></pre></div>
+<ol>
+<li><strong>Category Sidebar (<code>.spike-category-sidebar</code>)</strong>:</li>
+<li>🟦 <strong>Motors (<code>#0090f5</code>)</strong>: Individual motor velocity, relative positioning, and run-for-degrees.</li>
+<li>🟪 <strong>Movement (<code>#d83b9c</code>)</strong>: Differential drive base steering, centimeters/inches travel, and tank steering.</li>
+<li>🟨 <strong>Events (<code>#ffab19</code>)</strong>: Program launch hats (<code>when program starts</code>) and sensor trigger conditions.</li>
+<li>🟧 <strong>Control (<code>#ffab19</code> / <code>#e67e22</code>)</strong>: Loops (<code>repeat</code>, <code>forever</code>), conditional branching (<code>if-then-else</code>), and timers.</li>
+<li>🟦 <strong>Sensors (<code>#00b5e2</code>)</strong>: Color reflectivity tests, distance sonar thresholds, and gyro yaw angles.</li>
+<li>🟩 <strong>Operators (<code>#40bf4a</code>)</strong>: Mathematical arithmetic, comparisons (<code>&lt;</code>, <code>&gt;</code>, <code>=</code>), and boolean logic.</li>
+<li><strong>Block Palette Drawer (<code>.spike-palette-drawer</code>)</strong>: Displays authentic rounded blocks with dropdown parameter pills and editable input fields.</li>
+<li><strong>Canvas Viewport (<code>.spike-canvas-viewport</code>)</strong>: Infinite dotted canvas supporting pan and zoom. Features floating zoom controls:</li>
+<li><strong><code>➕</code> / <code>➖</code></strong>: Zoom in / out (supports mouse wheel zoom).</li>
+<li><strong><code>↺</code></strong>: Reset zoom to 100% and center stack.</li>
+</ol>
+<hr />
+<h3 id="dual-mode-architecture-project-management">Dual-Mode Architecture &amp; Project Management<a class="headerlink" href="#dual-mode-architecture-project-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Word Blocks ↔ Python Toggle</strong>: Switch instantaneously between visual block stacks and equivalent Python syntax using the mode toggle buttons (<code>🧩 Word Blocks</code> vs <code>💻 Python</code>).</li>
+<li><strong>Autosave Status Indicator (<code>💾 Saved</code>)</strong>: Automatically saves script modifications to browser local storage.</li>
+<li><strong>Multi-Tab Script Management</strong>: Create and organize multiple programs with the <strong><code>➕ New Script</code></strong> tab bar.</li>
+<li><strong>Project Import / Export</strong>:</li>
+<li><strong><code>📦 Export Zip</code></strong>: Bundles all active scripts and assets into a portable ZIP archive.</li>
+<li><strong><code>💾 Export</code></strong>: Downloads active program as <code>.py</code> or <code>.llsp3</code>.</li>
+<li><strong><code>📥 Import Code</code></strong>: Ingests official SPIKE 3 (<code>.llsp3</code>), legacy SPIKE 2 (<code>.llsp</code>), Scratch 3 (<code>.sb3</code>), or raw Python scripts.</li>
+</ul>
+<hr />
+<h2 id="7-robot-design-hardware-port-mapping-modal">7. Robot Design &amp; Hardware Port Mapping Modal<a class="headerlink" href="#7-robot-design-hardware-port-mapping-modal" title="Permanent link">&para;</a></h2>
+<p>The Robot Design Modal configures the simulated robot chassis, dimensions, wheel geometry, and hardware port assignments.</p>
+<p><img alt="Robot Design and Hardware Port Mapping Modal" src="../../assets/images/09_robot_design_modal.png" /></p>
+<h3 id="section-a-robot-architecture-selection">Section A: Robot Architecture Selection<a class="headerlink" href="#section-a-robot-architecture-selection" title="Permanent link">&para;</a></h3>
+<p>Choose between preconfigured competition driving bases or upload custom models:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>┌────────────────────────────────────────┬────────────────────────────────────────┐
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>│ 🏎️ ADVANCED DRIVING BASE (DROIDBOT-E)  │ 🤖 COMPACT SPIKE BASE                  │
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│ [ ACTIVE SELECTION ]                   │ [ SELECT BASE ]                        │
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│ Dual drive motors (A+B), dual optical  │ Lightweight agile chassis designed     │
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│ sensors (C+D), ultrasonic sonar (E),   │ for high-speed maneuvering and quick   │
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│ rear ball caster, rigid Technic frame. │ cornering with lower center of mass.   │
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│ Motors: 2 Drive + 2 Aux  Sensors: 3    │ Motors: 2 Drive  Sensors: Dual Color   │
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>└────────────────────────────────────────┴────────────────────────────────────────┘
+</span></code></pre></div>
+<ul>
+<li><strong><code>➕ Upload Robot CAD (.io / .ldr)</code></strong>: Loads custom robot designs created in BrickLink Studio or LeoCAD.</li>
+<li><strong><code>🔬 Open in 3D CAD Inspector</code></strong>: Immediately jumps into the CAD validator for geometry and kinematic testing.</li>
+</ul>
+<hr />
+<h3 id="section-b-hardware-port-mapping-matrix">Section B: Hardware Port Mapping Matrix<a class="headerlink" href="#section-b-hardware-port-mapping-matrix" title="Permanent link">&para;</a></h3>
+<p>Configure logical port assignments matching physical robot wiring:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Component Role</th>
+<th style="text-align: center;">Assigned Port</th>
+<th style="text-align: center;">Default</th>
+<th style="text-align: left;">Hardware Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Drive Left Wheel</strong></td>
+<td style="text-align: center;"><code>A</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port A</strong></td>
+<td style="text-align: left;">Large Technic Angular Motor (54 mm Wheel)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Drive Right Wheel</strong></td>
+<td style="text-align: center;"><code>B</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port B</strong></td>
+<td style="text-align: left;">Large Technic Angular Motor (54 mm Wheel)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Auxiliary Attachment 1</strong></td>
+<td style="text-align: center;"><code>C</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port C</strong></td>
+<td style="text-align: left;">Medium Technic Angular Motor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Auxiliary Attachment 2</strong></td>
+<td style="text-align: center;"><code>D</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port D</strong></td>
+<td style="text-align: left;">Medium Technic Angular Motor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Auxiliary Attachment 3</strong></td>
+<td style="text-align: center;"><code>E</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port E</strong></td>
+<td style="text-align: left;">Medium Technic Angular Motor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Auxiliary Attachment 4</strong></td>
+<td style="text-align: center;"><code>F</code> (A–F)</td>
+<td style="text-align: center;"><strong>Port F</strong></td>
+<td style="text-align: left;">Medium Technic Angular Motor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Left Color Sensor</strong></td>
+<td style="text-align: center;"><code>C</code> (C, D, None)</td>
+<td style="text-align: center;"><strong>Port C</strong></td>
+<td style="text-align: left;">SPIKE Prime Optical Color/Light Sensor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Right Color Sensor</strong></td>
+<td style="text-align: center;"><code>D</code> (C, D, None)</td>
+<td style="text-align: center;"><strong>Port D</strong></td>
+<td style="text-align: left;">SPIKE Prime Optical Color/Light Sensor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Ultrasonic Sensor</strong></td>
+<td style="text-align: center;"><code>E</code> (E, F, None)</td>
+<td style="text-align: center;"><strong>Port E</strong></td>
+<td style="text-align: left;">SPIKE Prime Ultrasonic Distance Sensor</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Internal 6-Axis IMU</strong></td>
+<td style="text-align: center;"><code>HUB_GYRO</code></td>
+<td style="text-align: center;"><strong>Fixed Bus</strong></td>
+<td style="text-align: left;">Internal 3-Axis Gyroscope &amp; Accelerometer</td>
+</tr>
+</tbody>
+</table>
+<p>All assignments persist automatically across browser sessions.</p>
+<hr />
+<h2 id="8-3d-cad-model-inspector-diagnostic-validator">8. 3D CAD Model Inspector &amp; Diagnostic Validator<a class="headerlink" href="#8-3d-cad-model-inspector-diagnostic-validator" title="Permanent link">&para;</a></h2>
+<p>The CAD Inspector provides engineering validation tools for examining LEGO models exported from BrickLink Studio (<code>.io</code>) or LDraw (<code>.ldr</code>).</p>
+<h3 id="robot-digital-twin-validation">Robot Digital Twin Validation<a class="headerlink" href="#robot-digital-twin-validation" title="Permanent link">&para;</a></h3>
+<p><img alt="CAD Model Inspector Robot Digital Twin" src="../../assets/images/10_cad_inspector_robot.png" /></p>
+<h3 id="competition-season-mission-inspection">Competition Season Mission Inspection<a class="headerlink" href="#competition-season-mission-inspection" title="Permanent link">&para;</a></h3>
+<p><img alt="CAD Model Inspector Season Mission Model" src="../../assets/images/11_cad_inspector_season_mission.png" /></p>
+<hr />
+<h3 id="validation-kinematics-report-panel">Validation &amp; Kinematics Report Panel<a class="headerlink" href="#validation-kinematics-report-panel" title="Permanent link">&para;</a></h3>
+<p>The right column computes comprehensive structural metrics for the active model:</p>
+<ul>
+<li><strong>Model Geometry Status</strong>:</li>
+<li>✅ <strong><code>MODEL GEOMETRY VALID</code></strong>: All parts topologically connected into rigid clusters.</li>
+<li>⚠️ <strong><code>UNANCHORED BODIES DETECTED</code></strong>: Loose parts detected that may fall under gravity.</li>
+<li><strong>Physical Metrics Summary</strong>:</li>
+<li><strong>Total LEGO Parts</strong>: Total element count parsed from the file.</li>
+<li><strong>Submodels</strong>: Number of independent subassemblies identified.</li>
+<li><strong>Kinematic Bodies</strong>: Compound physics bodies generated by the topological solver.</li>
+<li><strong>Estimated Mass</strong>: Total assembly mass in grams based on official LEGO element weights.</li>
+<li><strong>Bounding Dimensions</strong>:</li>
+<li><strong>Width (X)</strong>: Dimensions in millimeters and LEGO Technic studs.</li>
+<li><strong>Depth (Z)</strong>: Depth in millimeters and studs.</li>
+<li><strong>Height (Y)</strong>: Height in millimeters and vertical plate thicknesses.</li>
+<li><strong>Ground Alignment</strong>: Clearance verification (e.g., <code>Flush with mat +0.0 mm</code>).</li>
+</ul>
+<hr />
+<h3 id="interactive-visual-physics-tools">Interactive Visual &amp; Physics Tools<a class="headerlink" href="#interactive-visual-physics-tools" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Wireframe Mode (<code>🕸️ Wireframe: ON/OFF</code>)</strong>: Renders polygon mesh edges for inspecting vertex density and geometry topology.</li>
+<li><strong>Colliders Wireframe (<code>🔲 Colliders: ON/OFF</code>)</strong>: Displays exact Rapier3D collision hulls (compound cuboids, spheres, and convex hulls).</li>
+<li><strong>Live Physics Sandbox (<code>▶ Live Physics: ON/OFF</code>)</strong>: Activates full gravity and collision solving inside the CAD preview.</li>
+<li><strong>Virtual Mouse Grab Tool (<code>✋ Grab</code>)</strong>: Click and drag parts with interactive spring force to test hinge travel and mechanical limits.</li>
+<li><strong>Technic Push Bar (<code>🥢 Technic Bar</code>)</strong>: Spawns an interactive LEGO beam probe to physically push levers, gears, and latches. Scroll the mouse wheel to raise or lower the probe height.</li>
+<li><strong>Assembly Step Build Mode (<code>🧱 Step Build Mode</code>)</strong>: Step through official build instructions step-by-step with play, pause, and scrubber controls.</li>
+</ul>
+<hr />
+<h3 id="cluster-anchoring-fasteners">Cluster Anchoring &amp; Fasteners<a class="headerlink" href="#cluster-anchoring-fasteners" title="Permanent link">&para;</a></h3>
+<p>The <strong>Clusters</strong> tab lists every rigid subassembly detected by the solver. Operators can dynamically anchor individual assemblies to the mat:</p>
+<ul>
+<li><strong><code>📌 Fix Base Only</code></strong>: Anchors stationary baseplates to the mat while keeping levers, gears, and arms dynamic.</li>
+<li><strong><code>🔓 All Movable</code></strong>: Makes all assemblies dynamic subject to gravity and impact forces.</li>
+<li><strong><code>🔒 Lock All</code></strong>: Freezes the entire model as a stationary obstacle.</li>
+<li><strong>Interactive Nudge Controls</strong>: Fine-tune cluster positions along X (±8 mm), Y (±3.2 mm), and Z (±8 mm) axes.</li>
+</ul>
+<hr />
+<h2 id="9-simulation-render-performance-profiler">9. Simulation &amp; Render Performance Profiler<a class="headerlink" href="#9-simulation-render-performance-profiler" title="Permanent link">&para;</a></h2>
+<p>The Performance Profiler provides real-time diagnostic telemetry for GPU rendering, physics solver timing, and memory allocation.</p>
+<p><img alt="Simulation and Render Performance Profiler" src="../../assets/images/13_performance_profiler.png" /></p>
+<h3 id="frame-budget-allocation-1667ms-60-fps-target">Frame Budget Allocation (16.67ms / 60 FPS Target)<a class="headerlink" href="#frame-budget-allocation-1667ms-60-fps-target" title="Permanent link">&para;</a></h3>
+<p>The stacked horizontal budget bar visualizes where frame time is spent relative to the 16.67 ms (60 FPS) budget:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌────────────────────────────────────────────────────────────────────────┐
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│ [Three.js: 5.8ms] [Rapier: 4.2ms] [Sync: 2.5ms] [Sensors: 0.8ms] [Idle]│
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>└────────────────────────────────────────────────────────────────────────┘
+</span></code></pre></div>
+<ul>
+<li><strong>Three.js WebGL Render (<code>seg-render</code>, Cyan)</strong>: GPU drawing time, shader passes, and mesh rendering.</li>
+<li><strong>Rapier 3D Physics (<code>seg-physics</code>, Indigo)</strong>: Collision detection, velocity integration, and constraint resolution.</li>
+<li><strong>Visual &amp; Mesh Sync (<code>seg-sync</code>, Purple)</strong>: Synchronizing Rapier rigid body transforms with Three.js mesh instances.</li>
+<li><strong>Sensors &amp; Script VM (<code>seg-sensors</code>, Amber)</strong>: Python bytecode execution, raycast sensors, and optical color sampling.</li>
+<li><strong>Idle Headroom (<code>seg-idle</code>, Emerald)</strong>: Spare frame time remaining before dropped frames occur.</li>
+</ul>
+<hr />
+<h3 id="subsystem-metrics-cards">Subsystem Metrics Cards<a class="headerlink" href="#subsystem-metrics-cards" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Metric Category</th>
+<th style="text-align: center;">Target Value</th>
+<th style="text-align: left;">Diagnostic Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Three.js WebGL GPU</strong></td>
+<td style="text-align: center;">&lt; 80 Draw Calls</td>
+<td style="text-align: left;">Tracks active WebGL draw calls, rendered triangles, distinct geometries, and texture bindings.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Rapier 3D Physics</strong></td>
+<td style="text-align: center;">60 Hz (16 iters)</td>
+<td style="text-align: left;">Monitors active dynamic rigid bodies, fixed field colliders, and solver velocity iterations.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Frame Stability</strong></td>
+<td style="text-align: center;">60.0 FPS</td>
+<td style="text-align: left;">Measures rolling average FPS, 1% Low FPS (stutter detection), and minimum recorded FPS.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Active Field Models</strong></td>
+<td style="text-align: center;">0 Network Calls</td>
+<td style="text-align: left;">Reports loaded mission models, Draco GLB compression state, and offline cache hit rate.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-global-keyboard-shortcuts-cheat-sheet">10. Global Keyboard Shortcuts Cheat Sheet<a class="headerlink" href="#10-global-keyboard-shortcuts-cheat-sheet" title="Permanent link">&para;</a></h2>
+<p>The simulator provides global hotkeys for hands-on competition training and keyboard-driven debugging:</p>
+<h3 id="program-execution-mission-controls">Program Execution &amp; Mission Controls<a class="headerlink" href="#program-execution-mission-controls" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Shortcut</th>
+<th style="text-align: left;">Context</th>
+<th style="text-align: left;">Action Performed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">++space++</td>
+<td style="text-align: left;">Global (outside text inputs)</td>
+<td style="text-align: left;"><strong>Toggle Program Execution</strong>: Start active program or trigger emergency stop.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++ctrl+space++ / ++cmd+space++</td>
+<td style="text-align: left;">Global</td>
+<td style="text-align: left;"><strong>Reset Robot Pose</strong>: Reset robot to launch coordinates and zero encoders.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++escape++</td>
+<td style="text-align: left;">Modal dialog open</td>
+<td style="text-align: left;"><strong>Dismiss Modal</strong>: Closes active modal window (Code, CAD Inspector, Profiler).</td>
+</tr>
+<tr>
+<td style="text-align: left;">++escape++</td>
+<td style="text-align: left;">Mission Element Selected</td>
+<td style="text-align: left;"><strong>Deselect Element</strong>: Clears active 3D selection reticle.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++r++</td>
+<td style="text-align: left;">Dragging or Hovering 3D Object</td>
+<td style="text-align: left;"><strong>Rotate Clockwise (+15°)</strong>: Rotates robot or mission element in place.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++shift+r++</td>
+<td style="text-align: left;">Dragging or Hovering 3D Object</td>
+<td style="text-align: left;"><strong>Rotate Counter-Clockwise (-15°)</strong>: Rotates robot or mission element.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="manual-drive-base-hotkeys-driver-mode-armed">Manual Drive Base Hotkeys (Driver Mode Armed)<a class="headerlink" href="#manual-drive-base-hotkeys-driver-mode-armed" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Shortcut</th>
+<th style="text-align: center;">Key</th>
+<th style="text-align: left;">Drive Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">++w++</td>
+<td style="text-align: center;"><code>W</code></td>
+<td style="text-align: left;"><strong>Drive Forward</strong>: Both drive motors forward at configured speed.</td>
+</tr>
+<tr>
+<td style="text-align: center;">++s++</td>
+<td style="text-align: center;"><code>S</code></td>
+<td style="text-align: left;"><strong>Drive Reverse</strong>: Both drive motors backward at configured speed.</td>
+</tr>
+<tr>
+<td style="text-align: center;">++a++</td>
+<td style="text-align: center;"><code>A</code></td>
+<td style="text-align: left;"><strong>Spin Left</strong>: Left motor reverse, right motor forward.</td>
+</tr>
+<tr>
+<td style="text-align: center;">++d++</td>
+<td style="text-align: center;"><code>D</code></td>
+<td style="text-align: left;"><strong>Spin Right</strong>: Left motor forward, right motor reverse.</td>
+</tr>
+<tr>
+<td style="text-align: center;">++space++</td>
+<td style="text-align: center;"><code>SPACE</code></td>
+<td style="text-align: left;"><strong>Emergency Brake</strong>: Stops and locks both drive motors.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="individual-motor-hotkeys-driver-mode-armed">Individual Motor Hotkeys (Driver Mode Armed)<a class="headerlink" href="#individual-motor-hotkeys-driver-mode-armed" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Forward Action</th>
+<th style="text-align: center;">Reverse Action</th>
+<th style="text-align: center;">Motor Port</th>
+<th style="text-align: left;">Associated Physical Hardware</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">++u++</td>
+<td style="text-align: center;">++j++</td>
+<td style="text-align: center;"><strong>Port A</strong></td>
+<td style="text-align: left;">Drive Base Left Motor</td>
+</tr>
+<tr>
+<td style="text-align: center;">++i++</td>
+<td style="text-align: center;">++k++</td>
+<td style="text-align: center;"><strong>Port B</strong></td>
+<td style="text-align: left;">Drive Base Right Motor</td>
+</tr>
+<tr>
+<td style="text-align: center;">++o++</td>
+<td style="text-align: center;">++l++</td>
+<td style="text-align: center;"><strong>Port C</strong></td>
+<td style="text-align: left;">Auxiliary Attachment Arm 1</td>
+</tr>
+<tr>
+<td style="text-align: center;">++p++</td>
+<td style="text-align: center;">++;++</td>
+<td style="text-align: center;"><strong>Port D</strong></td>
+<td style="text-align: left;">Auxiliary Attachment Arm 2</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="viewport-camera-navigation">Viewport &amp; Camera Navigation<a class="headerlink" href="#viewport-camera-navigation" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Input Action</th>
+<th style="text-align: left;">Navigation Context</th>
+<th style="text-align: left;">Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">++left-button-click++ + Drag</td>
+<td style="text-align: left;">Viewport Canvas</td>
+<td style="text-align: left;"><strong>Orbit Camera</strong>: Rotates viewing angle around center of interest.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++right-button-click++ + Drag</td>
+<td style="text-align: left;">Viewport Canvas</td>
+<td style="text-align: left;"><strong>Pan Camera</strong>: Translates viewing target across the competition mat.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++wheel-up++ / ++wheel-down++</td>
+<td style="text-align: left;">Viewport Canvas</td>
+<td style="text-align: left;"><strong>Zoom Viewport</strong>: Smoothly zooms camera in or out.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++wheel-up++ / ++wheel-down++</td>
+<td style="text-align: left;">Word Blocks Canvas</td>
+<td style="text-align: left;"><strong>Zoom Blocks</strong>: Zooms visual block workspace canvas.</td>
+</tr>
+<tr>
+<td style="text-align: left;">++wheel-up++ / ++wheel-down++</td>
+<td style="text-align: left;">CAD Inspector (Technic Tool)</td>
+<td style="text-align: left;"><strong>Adjust Tool Height</strong>: Raises or lowers the Technic probe bar.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="summary-next-steps">Summary &amp; Next Steps<a class="headerlink" href="#summary-next-steps" title="Permanent link">&para;</a></h2>
+<p>With this UI reference, team members can navigate every control surface of the FLL Robot Simulator. For next steps and practical exercises, explore:</p>
+<ul>
+<li><a href="../../tutorials/"><strong>Tutorial Learning Path</strong></a>: Complete curriculum for team training.</li>
+<li><a href="../../tutorials/01_getting_started/"><strong>Tutorial 1: Getting Started &amp; Mat Navigation</strong></a>: Hands-on walkthrough of mat navigation and robot positioning.</li>
+<li><a href="../../tutorials/02_word_blocks_programming/"><strong>Tutorial 2: SPIKE Word Blocks Programming</strong></a>: Building competition runs with Scratch blocks.</li>
+<li><a href="../../guides/advance_driving_base/"><strong>Advance Driving Base Guide</strong></a>: Hardware specifications of the competition robot.</li>
+<li><a href="../../guides/spike_python/"><strong>SPIKE Python API Reference</strong></a>: Programming guide for Python scripts.</li>
+<li><a href="../../guides/cad_import/"><strong>CAD Import Guide</strong></a>: Importing <code>.io</code> and <code>.ldr</code> models into the simulator.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Jaime Yu - Licensed under GPL-3.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "content.code.copy", "content.action.edit"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

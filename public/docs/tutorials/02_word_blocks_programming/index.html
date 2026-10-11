@@ -1,0 +1,1845 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Open-Source 3D WebGL Robotics Simulator for FIRST LEGO League">
+      
+      
+        <meta name="author" content="Jaime Yu">
+      
+      
+      
+        <link rel="prev" href="../01_getting_started/">
+      
+      
+        <link rel="next" href="../03_python_programming/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>2. SPIKE Word Blocks Studio - FLL Robot Simulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+  
+
+
+  
+  
+
+<script id="__analytics">function __md_analytics(){function e(){dataLayer.push(arguments)}window.dataLayer=window.dataLayer||[],e("js",new Date),e("config","G-VHHKDXD1EC"),document.addEventListener("DOMContentLoaded",(function(){document.forms.search&&document.forms.search.query.addEventListener("blur",(function(){this.value&&e("event","search",{search_term:this.value})}));document$.subscribe((function(){var t=document.forms.feedback;if(void 0!==t)for(var a of t.querySelectorAll("[type=submit]"))a.addEventListener("click",(function(a){a.preventDefault();var n=document.location.pathname,d=this.getAttribute("data-md-value");e("event","feedback",{page:n,data:d}),t.firstElementChild.disabled=!0;var r=t.querySelector(".md-feedback__note [data-md-value='"+d+"']");r&&(r.hidden=!1)})),t.hidden=!1})),location$.subscribe((function(t){e("config","G-VHHKDXD1EC",{page_path:t.pathname})}))}));var t=document.createElement("script");t.async=!0,t.src="https://www.googletagmanager.com/gtag/js?id=G-VHHKDXD1EC",document.getElementById("__analytics").insertAdjacentElement("afterEnd",t)}</script>
+  
+    <script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
+  
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tutorial-2-programming-with-lego-spike-prime-word-blocks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="FLL Robot Simulator" class="md-header__button md-logo" aria-label="FLL Robot Simulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FLL Robot Simulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              2. SPIKE Word Blocks Studio
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jaimeyu/fll_sim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jaimeyu/fll_sim
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../ui/components/" class="md-tabs__link">
+          
+  
+  
+  UI & Component Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/advance_driving_base/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../development/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Development & Multi-Agent
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="FLL Robot Simulator" class="md-nav__button md-logo" aria-label="FLL Robot Simulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    FLL Robot Simulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jaimeyu/fll_sim" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jaimeyu/fll_sim
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI & Component Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    UI & Component Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Controls
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Learning Path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01_getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Getting Started & Mat Navigation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. SPIKE Word Blocks Studio
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. SPIKE Word Blocks Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#learning-objectives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 Learning Objectives
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-opening-the-word-blocks-studio-drawer-vs-popout-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🖥️ Step 1: Opening the Word Blocks Studio (Drawer vs. Popout Modal)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🖥️ Step 1: Opening the Word Blocks Studio (Drawer vs. Popout Modal)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-the-collapsible-side-drawer-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The Collapsible Side Drawer View
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-the-full-screen-popout-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The Full-Screen Popout Modal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-navigating-the-3-column-spike-workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧩 Step 2: Navigating the 3-Column SPIKE Workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧩 Step 2: Navigating the 3-Column SPIKE Workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-category-sidebar-far-left" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Category Sidebar (Far Left)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-block-palette-drawer-center" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Block Palette Drawer (Center)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-canvas-viewport-right" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Canvas Viewport (Right)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-creating-a-precision-drive-attachment-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 Step 3: Creating a Precision Drive &amp; Attachment Mission
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 Step 3: Creating a Precision Drive &amp; Attachment Mission">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assemble-the-6-core-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assemble the 6 Core Blocks:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-the-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Mission:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-zooming-and-organizing-canvas-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 Step 4: Zooming and Organizing Canvas Blocks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-autosave-exporting-scripts-and-importing-llsp3-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💾 Step 5: Autosave, Exporting Scripts, and Importing .llsp3 Files
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="💾 Step 5: Autosave, Exporting Scripts, and Importing .llsp3 Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-instant-autosave" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Instant Autosave
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-exporting-single-scripts-and-zip-archives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Exporting Single Scripts and ZIP Archives
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-importing-existing-team-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Importing Existing Team Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hands-on-challenge-2-the-coral-reef-lift-return-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏆 Hands-On Challenge 2: The Coral Reef Lift &amp; Return Mission
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏆 Hands-On Challenge 2: The Coral Reef Lift &amp; Return Mission">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#challenge-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Challenge Prompt:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#challenge-2-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Challenge 2 Solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-include-a-05-second-wait-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Include a 0.5-Second Wait Block?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⏭️ Next Step
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../03_python_programming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Authentic SPIKE Python
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04_robot_design_and_ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Robot Architecture & Port Mapping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05_cad_inspector_digital_twins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. 3D CAD Inspector & Digital Twins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/advance_driving_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advance Driving Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/spike_python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SPIKE Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/cad_import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CAD Import (.io / .ldr)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development & Multi-Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#learning-objectives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 Learning Objectives
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-opening-the-word-blocks-studio-drawer-vs-popout-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🖥️ Step 1: Opening the Word Blocks Studio (Drawer vs. Popout Modal)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🖥️ Step 1: Opening the Word Blocks Studio (Drawer vs. Popout Modal)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-the-collapsible-side-drawer-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The Collapsible Side Drawer View
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-the-full-screen-popout-modal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The Full-Screen Popout Modal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-navigating-the-3-column-spike-workspace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧩 Step 2: Navigating the 3-Column SPIKE Workspace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧩 Step 2: Navigating the 3-Column SPIKE Workspace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-category-sidebar-far-left" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Category Sidebar (Far Left)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-block-palette-drawer-center" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Block Palette Drawer (Center)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-canvas-viewport-right" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Canvas Viewport (Right)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-creating-a-precision-drive-attachment-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 Step 3: Creating a Precision Drive &amp; Attachment Mission
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 Step 3: Creating a Precision Drive &amp; Attachment Mission">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assemble-the-6-core-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assemble the 6 Core Blocks:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-the-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Mission:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-zooming-and-organizing-canvas-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 Step 4: Zooming and Organizing Canvas Blocks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-autosave-exporting-scripts-and-importing-llsp3-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💾 Step 5: Autosave, Exporting Scripts, and Importing .llsp3 Files
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="💾 Step 5: Autosave, Exporting Scripts, and Importing .llsp3 Files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-instant-autosave" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Instant Autosave
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-exporting-single-scripts-and-zip-archives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Exporting Single Scripts and ZIP Archives
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-importing-existing-team-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Importing Existing Team Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hands-on-challenge-2-the-coral-reef-lift-return-mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏆 Hands-On Challenge 2: The Coral Reef Lift &amp; Return Mission
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏆 Hands-On Challenge 2: The Coral Reef Lift &amp; Return Mission">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#challenge-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Challenge Prompt:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#challenge-2-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Challenge 2 Solution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-include-a-05-second-wait-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Include a 0.5-Second Wait Block?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⏭️ Next Step
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/jaimeyu/fll_sim/edit/master/docs/tutorials/02_word_blocks_programming.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="tutorial-2-programming-with-lego-spike-prime-word-blocks">Tutorial 2: Programming with LEGO SPIKE Prime Word Blocks<a class="headerlink" href="#tutorial-2-programming-with-lego-spike-prime-word-blocks" title="Permanent link">&para;</a></h1>
+<p>For many FIRST LEGO League teams, the official <strong>LEGO® SPIKE™ Prime Word Blocks</strong> environment is the go-to programming language. Based on Google Blockly and Scratch 3.0, Word Blocks provides an intuitive, color-coded drag-and-drop interface that makes autonomous robotics accessible to students of all skill levels.</p>
+<p>In this tutorial, you will explore the simulator's built-in <strong>Word Blocks Studio</strong>, build a multi-step autonomous drive and attachment mission, learn how to manage and zoom your block canvas, and export/import competition files.</p>
+<hr />
+<h2 id="learning-objectives">🎯 Learning Objectives<a class="headerlink" href="#learning-objectives" title="Permanent link">&para;</a></h2>
+<p>By the end of this tutorial, you will be able to:</p>
+<ol>
+<li>Open and arrange the Word Blocks Studio in both the <strong>Collapsible Side Drawer</strong> and the <strong>Full-Screen Popout Modal</strong>.</li>
+<li>Navigate the <strong>3-Column SPIKE Workspace</strong> (Category Sidebar, Block Palette Drawer, and Dotted Canvas).</li>
+<li>Assemble a complete 6-block autonomous mission controlling both drive motors and an auxiliary attachment motor.</li>
+<li>Pan, zoom, and organize multi-step block stacks on the canvas.</li>
+<li>Save your work with built-in <strong>Autosave</strong>, export projects as <code>.zip</code> bundles, and import official LEGO <code>.llsp3</code> project files.</li>
+<li>Solve <strong>Hands-On Challenge 2</strong> by creating a simulated Coral Reef mission run.</li>
+</ol>
+<hr />
+<h2 id="step-1-opening-the-word-blocks-studio-drawer-vs-popout-modal">🖥️ Step 1: Opening the Word Blocks Studio (Drawer vs. Popout Modal)<a class="headerlink" href="#step-1-opening-the-word-blocks-studio-drawer-vs-popout-modal" title="Permanent link">&para;</a></h2>
+<p><code>fll-sim</code> offers two flexible ways to work with Word Blocks:</p>
+<h3 id="1-the-collapsible-side-drawer-view">1. The Collapsible Side Drawer View<a class="headerlink" href="#1-the-collapsible-side-drawer-view" title="Permanent link">&para;</a></h3>
+<p>Click the <strong>💻 Code</strong> button on the far-left Activity Bar. The side drawer expands on the left, displaying your block stack right alongside the 3D competition table:</p>
+<p><img alt="Code Editor Side Drawer" src="../../assets/images/07_code_editor_drawer.png" /></p>
+<ul>
+<li><strong>Best For</strong>: Rapid tweaking and quick testing where you want to watch the robot drive in the 3D viewport while seeing the active block highlights.</li>
+</ul>
+<h3 id="2-the-full-screen-popout-modal">2. The Full-Screen Popout Modal<a class="headerlink" href="#2-the-full-screen-popout-modal" title="Permanent link">&para;</a></h3>
+<p>When building complex, multi-step programs with dozens of blocks, you need maximum screen real estate. Click either:
+* The <strong>💻 Code Editor</strong> button in the top navigation bar, OR
+* The <strong>⤢ Pop Out</strong> button located in the drawer header.</p>
+<p><img alt="SPIKE Word Blocks Full-Screen Modal" src="../../assets/images/08_spike_word_blocks_modal.png" /></p>
+<ul>
+<li><strong>Window Pinning Controls</strong> (Top Right of Modal):<ul>
+<li><strong><code>⛶</code> Maximize (Full-Screen)</strong>: Expands the Studio across your entire monitor.</li>
+<li><strong><code>◧</code> Pin Left</strong>: Snaps the block canvas to the left half of the screen, leaving the right half open for the 3D field.</li>
+<li><strong><code>◨</code> Pin Right</strong>: Snaps the block canvas to the right half of the screen.</li>
+<li><strong><code>🗗</code> Float</strong>: Turns the editor into a draggable, resizable floating window.</li>
+<li><strong><code>⤓ Dock Back</code></strong>: Collapses the modal back into the side drawer.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="step-2-navigating-the-3-column-spike-workspace">🧩 Step 2: Navigating the 3-Column SPIKE Workspace<a class="headerlink" href="#step-2-navigating-the-3-column-spike-workspace" title="Permanent link">&para;</a></h2>
+<p>The simulator faithfully replicates the 3-column architecture of the official LEGO SPIKE App:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────┬──────────────────────┬─────────────────────────────────────┐
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│ 1. CATEGORY BAR │  2. PALETTE DRAWER   │          3. CANVAS VIEWPORT         │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                 │                      │                                     │
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  ● All          │  [When Program Starts]  [when program starts]               │
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  ● Motors       │  [Move Forward 10cm] │       │                             │
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  ● Movement     │  [Set Speed to 50%]  │       ▼                             │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  ● Events       │  [Motor E Run 90°]   │  [set movement motors to A+B]       │
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  ● Control      │  ...                 │       │                             │
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  ● Sensors      │                      │       ▼                             │
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│  ● Operators    │                      │  [move forward for 35 cm]           │
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>└─────────────────┴──────────────────────┴─────────────────────────────────────┘
+</span></code></pre></div>
+<h3 id="1-category-sidebar-far-left">1. Category Sidebar (Far Left)<a class="headerlink" href="#1-category-sidebar-far-left" title="Permanent link">&para;</a></h3>
+<p>Color-coded icons that filter available blocks by functional robotics subsystem:
+* <strong>Motors (Blue)</strong>: Single-motor commands for attachments on Ports C, D, E, and F (run for degrees, seconds, speed).
+* <strong>Movement (Pink)</strong>: Synchronized differential drive base commands for Ports A+B (move forward, backward, tank turns, steering).
+* <strong>Events (Yellow)</strong>: Program initiation triggers (<code>when program starts</code>, broadcast messages).
+* <strong>Control (Orange)</strong>: Execution flow (<code>wait 1 seconds</code>, <code>repeat 10</code>, <code>forever</code>, <code>if...then...else</code>).
+* <strong>Sensors (Cyan)</strong>: Optical color sensor, ultrasonic distance, and Hub IMU gyro readings.
+* <strong>Operators (Green)</strong>: Mathematical math blocks (<span class="arithmatex">\(+\)</span>, <span class="arithmatex">\(-\)</span>, <span class="arithmatex">\(\times\)</span>, <span class="arithmatex">\(\div\)</span>, comparisons, random numbers).</p>
+<h3 id="2-block-palette-drawer-center">2. Block Palette Drawer (Center)<a class="headerlink" href="#2-block-palette-drawer-center" title="Permanent link">&para;</a></h3>
+<p>Displays the library of available blocks for the selected category. You can drag any block from this drawer directly into your canvas.</p>
+<h3 id="3-canvas-viewport-right">3. Canvas Viewport (Right)<a class="headerlink" href="#3-canvas-viewport-right" title="Permanent link">&para;</a></h3>
+<p>An infinite dotted-grid workspace where you assemble your code. Blocks automatically snap together with an audible and visual click when brought close to a compatible connector notch.</p>
+<hr />
+<h2 id="step-3-creating-a-precision-drive-attachment-mission">🚀 Step 3: Creating a Precision Drive &amp; Attachment Mission<a class="headerlink" href="#step-3-creating-a-precision-drive-attachment-mission" title="Permanent link">&para;</a></h2>
+<p>Let's build a competition mission that drives our robot forward out of the Red Arc, activates an attachment mechanism to interact with a mission model, and then backs up safely to Home Base.</p>
+<pre class="mermaid"><code>flowchart TD
+    Start["🟡 when program starts"] --&gt; Motors["🌸 set movement motors to A+B"]
+    Motors --&gt; Speed["🌸 set movement speed to 50%"]
+    Speed --&gt; DriveOut["🌸 move forward for 35 cm"]
+    DriveOut --&gt; Lever["🔵 motor E run clockwise for 90 degrees"]
+    Lever --&gt; Return["🌸 move backward for 35 cm"]</code></pre>
+<h3 id="assemble-the-6-core-blocks">Assemble the 6 Core Blocks:<a class="headerlink" href="#assemble-the-6-core-blocks" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong><code>when program starts</code> (Events - Yellow)</strong>:<ul>
+<li>Every FLL program begins with this hat block. It acts as the execution entry point when you press <code>▶ RUN</code>.</li>
+</ul>
+</li>
+<li><strong><code>set movement motors to [A + B]</code> (Movement - Pink)</strong>:<ul>
+<li>Tells the virtual SPIKE Hub which motor ports drive the left and right wheels. By default, the Advanced Driving Base uses <strong>Port A</strong> for the left wheel and <strong>Port B</strong> for the right wheel.</li>
+</ul>
+</li>
+<li><strong><code>set movement speed to [50] %</code> (Movement - Pink)</strong>:<ul>
+<li>Configures the cruising velocity. Running at <span class="arithmatex">\(50\%\)</span> provides the optimal balance of speed and mechanical stability on the competition mat.</li>
+</ul>
+</li>
+<li><strong><code>move [forward] for [35] [cm]</code> (Movement - Pink)</strong>:<ul>
+<li>The simulator's kinematic model calculates the exact rotational degrees needed for the 56 mm rubber wheels to travel 35 cm:
+  $<span class="arithmatex">\(\text{Rotations} = \frac{\text{Distance}}{\pi \times \text{Diameter}} = \frac{35\,\text{cm}}{\pi \times 5.6\,\text{cm}} \approx 1.989\,\text{rotations} \approx 716^\circ\)</span>$</li>
+</ul>
+</li>
+<li><strong><code>motor [E] run [clockwise] for [90] [degrees]</code> (Motors - Blue)</strong>:<ul>
+<li>Activates the auxiliary motor connected to <strong>Port E</strong>. This turns your attachment lever by exactly a quarter rotation (<span class="arithmatex">\(90^\circ\)</span>), lifting or pressing the mission model.</li>
+</ul>
+</li>
+<li><strong><code>move [backward] for [35] [cm]</code> (Movement - Pink)</strong>:<ul>
+<li>Reverses the drive motors, bringing your robot back behind the Home Arc perimeter line.</li>
+</ul>
+</li>
+</ol>
+<h3 id="running-the-mission">Running the Mission:<a class="headerlink" href="#running-the-mission" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Click <strong>▶ RUN</strong> at the bottom of the editor (or in the top bar).</li>
+<li>Watch the 3D viewport:<ul>
+<li>The robot accelerates smoothly out of the Red Arc.</li>
+<li>At 35 cm, the drive motors brake.</li>
+<li>Motor E rotates its output shaft by <span class="arithmatex">\(90^\circ\)</span>.</li>
+<li>The robot reverses 35 cm directly back to the starting line!</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="step-4-zooming-and-organizing-canvas-blocks">🔍 Step 4: Zooming and Organizing Canvas Blocks<a class="headerlink" href="#step-4-zooming-and-organizing-canvas-blocks" title="Permanent link">&para;</a></h2>
+<p>As your team develops multiple runs for different missions, your canvas will grow. <code>fll-sim</code> includes full pan and zoom navigation:</p>
+<ul>
+<li><strong>Mouse Wheel</strong>: Scroll up to zoom in, scroll down to zoom out.</li>
+<li><strong>Canvas Panning</strong>: Click and drag any empty area of the dotted canvas background to pan smoothly across your workspace.</li>
+<li><strong>Floating Zoom Controls</strong> (Bottom-Right of Canvas):<ul>
+<li><strong><code>➕</code> Button</strong>: Zooms in by <span class="arithmatex">\(15\%\)</span>.</li>
+<li><strong><code>➖</code> Button</strong>: Zooms out by <span class="arithmatex">\(15\%\)</span>.</li>
+<li><strong><code>↺ 100%</code> Button</strong>: Instantly resets magnification to <span class="arithmatex">\(100\%\)</span> and centers the active block stack.</li>
+<li><strong>Zoom Badge</strong>: Displays current magnification (<span class="arithmatex">\(50\% \text{ to } 200\%\)</span>).</li>
+</ul>
+</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Judging Tip: Clean Canvas &amp; Code Comments</p>
+<p>FLL Robot Design judges love clean code! Keep separate mission runs organized in clear columns across your canvas. Right-click any block to add an explanatory comment (e.g., <em>"Mission 1: Coral Reef push and lever release"</em>). Judges will award high marks for well-documented software engineering!</p>
+</div>
+<hr />
+<h2 id="step-5-autosave-exporting-scripts-and-importing-llsp3-files">💾 Step 5: Autosave, Exporting Scripts, and Importing <code>.llsp3</code> Files<a class="headerlink" href="#step-5-autosave-exporting-scripts-and-importing-llsp3-files" title="Permanent link">&para;</a></h2>
+<p>Never lose team progress! The simulator includes a multi-tier persistence engine:</p>
+<h3 id="1-instant-autosave">1. Instant Autosave<a class="headerlink" href="#1-instant-autosave" title="Permanent link">&para;</a></h3>
+<p>Notice the <strong><code>💾 Saved</code></strong> green status indicator in the editor toolbar. Every change you make—dragging a block, editing a parameter value, or creating a new tab—is immediately saved to your browser's persistent local storage. If you accidentally close your browser tab, your complete program will be restored the moment you return!</p>
+<h3 id="2-exporting-single-scripts-and-zip-archives">2. Exporting Single Scripts and ZIP Archives<a class="headerlink" href="#2-exporting-single-scripts-and-zip-archives" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>💾 Export</code></strong>: Downloads the currently active script as a standalone <code>.py</code> Python file.</li>
+<li><strong><code>📦 Export Zip</code></strong>: Bundles <strong>all</strong> active scripts, word blocks configurations, and custom missions into a single timestamped <code>.zip</code> archive.<ul>
+<li><em>Coach Recommended Workflow</em>: Have your team's software lead click <code>📦 Export Zip</code> at the end of every team meeting and upload the archive to Google Drive or GitHub.</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-importing-existing-team-files">3. Importing Existing Team Files<a class="headerlink" href="#3-importing-existing-team-files" title="Permanent link">&para;</a></h3>
+<p>Click <strong><code>📥 Import Code</code></strong> to upload:
+* Official LEGO SPIKE App v3 projects (<strong><code>.llsp3</code></strong>)
+* Legacy SPIKE App v2 projects (<strong><code>.llsp</code></strong>)
+* Scratch 3.0 projects (<strong><code>.sb3</code></strong>)
+* Standard Python scripts (<strong><code>.py</code></strong>)</p>
+<p>The simulator's built-in <code>spike-scratch-importer</code> parses the JSON AST inside the <code>.llsp3</code> ZIP container and instantly recreates the visual blocks on your canvas!</p>
+<hr />
+<h2 id="hands-on-challenge-2-the-coral-reef-lift-return-mission">🏆 Hands-On Challenge 2: The Coral Reef Lift &amp; Return Mission<a class="headerlink" href="#hands-on-challenge-2-the-coral-reef-lift-return-mission" title="Permanent link">&para;</a></h2>
+<p>Put your Word Blocks skills into practice with a realistic season challenge!</p>
+<h3 id="challenge-prompt">Challenge Prompt:<a class="headerlink" href="#challenge-prompt" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p><strong>Scenario</strong>: The robot must leave the Red Launch Arc, navigate <span class="arithmatex">\(42.0\,\text{cm}\)</span> across the field, stop in front of the coral nursery, lower an attachment arm on <strong>Port E</strong> by <span class="arithmatex">\(120^\circ\)</span> to hook the coral branch, wait <span class="arithmatex">\(0.5\)</span> seconds for physics stabilization, lift the coral branch by <span class="arithmatex">\(120^\circ\)</span> counter-clockwise, and finally drive backward <span class="arithmatex">\(42.0\,\text{cm}\)</span> into Home Base.</p>
+<p><strong>Requirements</strong>:
+1. Set movement speed to <span class="arithmatex">\(45\%\)</span>.
+2. Ensure motor E stops with brake mode enabled.
+3. Use an orange <code>wait</code> block between lowering and lifting to allow physical contact settling.
+4. Verify in the Telemetry Dock that the robot returns within <span class="arithmatex">\(0.5\,\text{cm}\)</span> of the start line.</p>
+</blockquote>
+<hr />
+<h3 id="challenge-2-solution">Challenge 2 Solution<a class="headerlink" href="#challenge-2-solution" title="Permanent link">&para;</a></h3>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Word Blocks Stack</label><label for="__tabbed_1_2">Generated SPIKE Python Equivalent</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>[when program starts]
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>[set movement motors to A+B]
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>[set movement speed to 45%]
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>[move forward for 42 cm]
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>[motor E set stop action to [hold]]
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>[motor E run clockwise for 120 degrees]
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>[wait 0.5 seconds]
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>[motor E run counterclockwise for 120 degrees]
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>[move backward for 42 cm]
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>[stop [all motors]]
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">spike</span><span class="w"> </span><span class="kn">import</span> <span class="n">MotorPair</span><span class="p">,</span> <span class="n">Motor</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">spike.control</span><span class="w"> </span><span class="kn">import</span> <span class="n">wait_for_seconds</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Initialize Drive Base and Attachment Motor E</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">motors</span> <span class="o">=</span> <span class="n">MotorPair</span><span class="p">(</span><span class="s1">'A'</span><span class="p">,</span> <span class="s1">'B'</span><span class="p">)</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">motor_e</span> <span class="o">=</span> <span class="n">Motor</span><span class="p">(</span><span class="s1">'E'</span><span class="p">)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Configure cruising speed</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">motors</span><span class="o">.</span><span class="n">set_default_speed</span><span class="p">(</span><span class="mi">45</span><span class="p">)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"Step 1: Driving 42 cm to Coral Reef..."</span><span class="p">)</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">motors</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="s1">'cm'</span><span class="p">)</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"Step 2: Lowering attachment arm 120 degrees..."</span><span class="p">)</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="n">motor_e</span><span class="o">.</span><span class="n">run_for_degrees</span><span class="p">(</span><span class="mi">120</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="c1"># Allow Rapier 3D physics settling</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="n">wait_for_seconds</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"Step 3: Lifting coral branch 120 degrees..."</span><span class="p">)</span>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">motor_e</span><span class="o">.</span><span class="n">run_for_degrees</span><span class="p">(</span><span class="o">-</span><span class="mi">120</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>
+</span><span id="__span-2-23"><a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"Step 4: Returning to Home Base..."</span><span class="p">)</span>
+</span><span id="__span-2-24"><a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a><span class="n">motors</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="o">-</span><span class="mi">42</span><span class="p">,</span> <span class="s1">'cm'</span><span class="p">)</span>
+</span><span id="__span-2-25"><a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>
+</span><span id="__span-2-26"><a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"Mission Complete!"</span><span class="p">)</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="why-include-a-05-second-wait-block">Why Include a 0.5-Second Wait Block?<a class="headerlink" href="#why-include-a-05-second-wait-block" title="Permanent link">&para;</a></h3>
+<p>In physical robotics, momentum and elastic rebound occur when Technic beams impact plastic mission elements. Pausing for <span class="arithmatex">\(0.5\)</span> seconds lets vibrations dissipate and allows the attachment teeth to seat securely before reversing direction. This simple habit prevents dropped mission elements on the competition field!</p>
+<hr />
+<h2 id="next-step">⏭️ Next Step<a class="headerlink" href="#next-step" title="Permanent link">&para;</a></h2>
+<p>Ready to level up to text-based coding? Proceed to <strong><a href="../03_python_programming/">Tutorial 3: Authentic SPIKE Python Programming &amp; Autonomous Navigation →</a></strong> to learn gyro pivot turns, proportional line tracking, and sensor squaring algorithms!</p>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Jaime Yu - Licensed under GPL-3.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "content.code.copy", "content.action.edit"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
