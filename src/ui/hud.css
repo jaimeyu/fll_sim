@@ -1113,7 +1113,7 @@ body, html {
   bottom: 0;
   left: 48px; /* Offset right of the 48px activity bar */
   right: 0;
-  height: 270px;
+  height: 220px;
   min-height: 180px;
   max-height: calc(100vh - 80px);
   border-bottom: none;
@@ -1366,14 +1366,137 @@ body, html {
   flex-direction: column;
 }
 
-/* Side-by-side mode (.subview-both) in bottom dock left column */
+/* Overview (All) mode (.subview-both): ultra-compact side-by-side view without scrolling */
 .telem-dock-left.subview-both .telem-left-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .telem-dock-left.subview-both .telem-tab-content {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.telem-dock-left.subview-both .telem-sensors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  height: 100%;
+}
+
+.telem-dock-left.subview-both .telem-sensors-grid .telem-card-fullwidth {
+  grid-column: span 1;
+}
+
+.telem-dock-left.subview-both .telem-sensor-card {
+  padding: 4px 8px;
+  gap: 2px;
+  border-radius: 6px;
+  min-height: 0;
+}
+
+.telem-dock-left.subview-both .telem-card-title {
+  font-size: 10px;
+}
+
+.telem-dock-left.subview-both .sensor-badge {
+  font-size: 8px;
+  padding: 1px 4px;
+}
+
+.telem-dock-left.subview-both .sensor-meter-label {
+  font-size: 9px;
+}
+
+.telem-dock-left.subview-both .sensor-meter-track {
+  height: 3px;
+}
+
+.telem-dock-left.subview-both .sensor-color-swatch-row {
+  display: none;
+}
+
+.telem-dock-left.subview-both .telem-gyro-compass {
+  display: none;
+}
+
+.telem-dock-left.subview-both .telem-big-stat {
+  font-size: 14px;
+}
+
+.telem-dock-left.subview-both .telem-subtext {
+  font-size: 8px;
+}
+
+.telem-dock-left.subview-both .telem-pose-grid {
+  display: none;
+}
+
+/* Motors grid in subview-both */
+.telem-dock-left.subview-both .telem-motors-toolbar {
+  display: none;
+}
+
+.telem-dock-left.subview-both .telem-motors-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  height: 100%;
+}
+
+.telem-dock-left.subview-both .telem-motor-card {
+  padding: 4px 6px;
+  gap: 2px;
+  border-radius: 6px;
+  min-height: 0;
+}
+
+.telem-dock-left.subview-both .telem-motor-card-header {
+  margin-bottom: 1px;
+}
+
+.telem-dock-left.subview-both .telem-motor-port-tag {
+  font-size: 9px;
+  padding: 0 4px;
+}
+
+.telem-dock-left.subview-both .telem-motor-role-title {
+  font-size: 9px;
+  margin-left: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.telem-dock-left.subview-both .telem-motor-state-badge {
+  font-size: 8px;
+  padding: 1px 4px;
+}
+
+.telem-dock-left.subview-both .telem-motor-card-stats {
+  font-size: 9px;
+  gap: 1px;
+}
+
+.telem-dock-left.subview-both .telem-stat-row {
+  font-size: 9px;
+}
+
+.telem-dock-left.subview-both .telem-motor-meter-track {
+  height: 3px;
+}
+
+/* Detailed View Mode (.subview-detailed) */
+.telem-dock-left.subview-detailed .telem-left-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.telem-dock-left.subview-detailed .telem-tab-content {
   overflow-y: auto;
   min-height: 0;
 }
@@ -3423,10 +3546,11 @@ body, html {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
+  flex-shrink: 0;
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .sample-select-label {
@@ -3946,6 +4070,160 @@ body, html {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ==========================================================================
+   Pop-out Code & Word Blocks Editor Modal (.hud-popout-code-modal)
+   ========================================================================== */
+.hud-popout-code-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 550;
+  user-select: none;
+}
+
+.popout-code-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.popout-code-card {
+  position: relative;
+  z-index: 1;
+  width: 92vw;
+  max-width: 1400px;
+  height: 86vh;
+  max-height: 900px;
+  display: flex;
+  flex-direction: column;
+  background: #0b1120;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(56, 189, 248, 0.2);
+  overflow: hidden;
+  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.popout-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  flex-shrink: 0;
+}
+
+.popout-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.popout-header-icon {
+  font-size: 24px;
+}
+
+.popout-title-main {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.5px;
+}
+
+.popout-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.popout-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.popout-view-mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.popout-code-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #090d16;
+  position: relative;
+  overflow: hidden;
+}
+
+.popout-editor-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+}
+
+.popout-editor-container textarea#popout-python-code-editor {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: #090d16;
+  color: #38bdf8;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 16px 20px;
+  border: none;
+  outline: none;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.popout-editor-container .scratch-blocks-container {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.popout-code-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(56, 189, 248, 0.2);
+  flex-shrink: 0;
+}
+
+.popout-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popout-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.popout-status-text {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 

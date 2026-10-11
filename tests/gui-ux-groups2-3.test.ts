@@ -40,7 +40,7 @@ describe('GUI & UX Overhaul - Group 2 & Group 3: Editor Toolbar, Profiler, Unifi
     it('redesigns sample mission selector to compact #sample-select dropdown in .sample-mission-bar', () => {
       const hudCode = fs.readFileSync(hudTsPath, 'utf-8');
 
-      expect(hudCode).toContain('class="sample-mission-bar mission-select-container" id="sample-mission-bar"');
+      expect(hudCode).toContain('class="sample-mission-bar" id="sample-mission-bar"');
       expect(hudCode).toContain('<select id="sample-select"');
       expect(hudCode).toContain('value="drive_straight"');
       expect(hudCode).toContain('value="gyro_turn"');

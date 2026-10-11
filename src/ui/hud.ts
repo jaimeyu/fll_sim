@@ -411,7 +411,7 @@ export class SimulatorHud {
 
   // Activity Bar & Drawer state
   private activeView: 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal' = 'code';
-  private isDrawerOpen: boolean = true;
+  private isDrawerOpen: boolean = false;
 
   // Drawer Panel & Views DOM elements
   private drawerPanel!: HTMLElement;
@@ -453,12 +453,22 @@ export class SimulatorHud {
   private isTelemetryOpen: boolean = true;
   private telemDockMode: 'bottom' | 'right' = 'bottom';
   private telemDockCollapsed: boolean = false;
-  private telemSubView: 'sensors' | 'motors' | 'both' = 'sensors';
+  private telemSubView: 'both' | 'detailed' | 'sensors' | 'motors' = 'both';
   // Visual Scratch Block Pan & Zoom state & Imported Missions
   private scratchZoomScale: number = 1.0;
   private scratchPanX: number = 0;
   private scratchPanY: number = 0;
   private importedMissions: Map<string, { title: string; code: string; visualBlocks?: VisualBlock[] }> = new Map();
+
+  // Pop-out Code Editor Modal state
+  private popoutModal!: HTMLElement;
+  private popoutTextarea!: HTMLTextAreaElement;
+  private popoutBlocksContainer!: HTMLElement;
+  private popoutScratchContainer!: HTMLElement;
+  private isPopoutCodeEditorOpen: boolean = false;
+  private popoutZoomScale: number = 1.0;
+  private popoutPanX: number = 0;
+  private popoutPanY: number = 0;
 
   // Fastener & Dual Lock Sidebar Utility
   private fastenerCountBadge!: HTMLElement;
@@ -484,10 +494,10 @@ export class SimulatorHud {
   private pointerBadgeIcon!: HTMLElement;
   private pointerBadgeText!: HTMLElement;
 
-  // Sidebar Camera Focus quick bar
-  private btnFocusRobot!: HTMLButtonElement;
-  private btnFocusCenter!: HTMLButtonElement;
-  private cameraFocusSelect!: HTMLSelectElement;
+  // Sidebar Camera Focus quick bar (optional / backward-compatible)
+  private btnFocusRobot: HTMLButtonElement | null = null;
+  private btnFocusCenter: HTMLButtonElement | null = null;
+  private cameraFocusSelect: HTMLSelectElement | null = null;
 
   // Topbar Program selector and Reset
   private topbarProgramSelect!: HTMLSelectElement;
@@ -647,7 +657,7 @@ export class SimulatorHud {
 
       <!-- Left Activity Bar (Fixed 48px vertical bar) -->
       <nav class="hud-activity-bar">
-        <button class="activity-btn active" id="act-btn-code" title="💻 Python Code Editor" data-view="code">
+        <button class="activity-btn" id="act-btn-code" title="💻 Python Code Editor" data-view="code">
           <span class="act-icon">💻</span>
           <span class="act-label">Code</span>
         </button>
@@ -681,7 +691,7 @@ export class SimulatorHud {
       </nav>
 
       <!-- Left Resizable Multi-Job Drawer Panel -->
-      <aside class="hud-drawer-panel" id="hud-drawer-panel">
+      <aside class="hud-drawer-panel" id="hud-drawer-panel" style="display: none;">
         <div class="drawer-panel-header">
           <div class="drawer-panel-title-group">
             <span class="drawer-panel-icon" id="drawer-panel-icon">💻</span>
@@ -692,19 +702,9 @@ export class SimulatorHud {
           </div>
         </div>
 
-        <!-- Sidebar Camera Focus Quick Bar -->
-        <div class="drawer-camera-focus-bar" id="drawer-camera-focus-bar">
-          <span class="focus-bar-label">🔍 Focus:</span>
-          <button class="btn btn-xs btn-outline active" id="btn-focus-robot" title="Focus Camera on Robot">🤖 Robot</button>
-          <button class="btn btn-xs btn-outline" id="btn-focus-center" title="Focus Camera on Field Center">🎯 Center</button>
-          <select id="camera-focus-select" class="hud-select hud-select-xs" title="Focus camera view on any mission model">
-            <option value="" disabled selected>Element...</option>
-          </select>
-        </div>
-
         <!-- View 1: Python Code & Word Blocks Editor -->
         <div class="drawer-view-content" id="view-content-code">
-          <div class="sample-mission-bar mission-select-container" id="sample-mission-bar">
+          <div class="sample-mission-bar" id="sample-mission-bar">
             <label for="sample-select" class="sample-select-label">📜 Mission:</label>
             <select id="sample-select" class="hud-select hud-select-sm" title="Select Sample Mission">
               <option value="drive_straight">Mission 1: Drive Straight (30 cm)</option>
@@ -730,6 +730,7 @@ export class SimulatorHud {
               <button class="btn btn-xs btn-outline" id="btn-view-mode-python" title="View as SPIKE Python Code">💻 Python</button>
             </div>
             <div class="editor-header-actions">
+              <button id="btn-popout-code-editor" class="btn btn-xs btn-outline" title="Pop out code editor to large modal window">⤢ Pop Out</button>
               <button id="btn-editor-fps-profiler" class="btn btn-xs btn-outline btn-fps-profiler" title="Simulation &amp; Render Performance Profiler">
                 <span class="fps-pulse-dot" id="editor-fps-dot"></span>
                 <span class="fps-val" id="editor-fps-val">60 FPS</span>
@@ -1189,9 +1190,10 @@ export class SimulatorHud {
           <div class="telem-dock-left" id="telem-dock-left">
             <div class="telem-left-tabs-bar" id="telem-left-tabs-bar">
               <span class="telem-col-title">DIAGNOSTICS:</span>
-              <button class="telem-subtab-btn active" data-subtab="sensors" id="btn-subtab-sensors">📡 Sensors</button>
+              <button class="telem-subtab-btn active" data-subtab="both" id="btn-subtab-both">🔲 Overview (All)</button>
+              <button class="telem-subtab-btn" data-subtab="detailed" id="btn-subtab-detailed">🔍 Detailed View</button>
+              <button class="telem-subtab-btn" data-subtab="sensors" id="btn-subtab-sensors">📡 Sensors</button>
               <button class="telem-subtab-btn" data-subtab="motors" id="btn-subtab-motors">⚙️ Motors</button>
-              <button class="telem-subtab-btn" data-subtab="both" id="btn-subtab-both">🔲 Both</button>
             </div>
             <div class="telem-left-content" id="telem-left-content">
               <!-- TAB 1: Sensors & Pose -->
@@ -1797,6 +1799,70 @@ export class SimulatorHud {
         </div>
       </div>
 
+      <!-- Pop-out Code Editor Modal -->
+      <div id="modal-popout-code-editor" class="hud-popout-code-modal" style="display: none;">
+        <div class="popout-code-backdrop" id="popout-code-backdrop"></div>
+        <div class="popout-code-card">
+          <div class="popout-code-header">
+            <div class="popout-header-title">
+              <span class="popout-header-icon">💻</span>
+              <div>
+                <div class="popout-title-main">SPIKE Prime Code &amp; Word Blocks Editor</div>
+                <div class="popout-subtitle">Full-screen Python &amp; Scratch Word Blocks development environment</div>
+              </div>
+            </div>
+            <div class="popout-header-actions">
+              <div class="popout-view-mode-toggle">
+                <button class="btn btn-xs btn-outline active" id="btn-popout-mode-blocks" title="View as Visual SPIKE Word Blocks">🧩 Word Blocks</button>
+                <button class="btn btn-xs btn-outline" id="btn-popout-mode-python" title="View as SPIKE Python Code">💻 Python</button>
+              </div>
+              <button class="btn btn-xs btn-outline" id="btn-popout-dock-back" title="Dock back into side drawer">⤓ Dock Back</button>
+              <button class="btn btn-xs btn-outline" id="btn-close-popout-code" title="Close Pop-out Editor">✖</button>
+            </div>
+          </div>
+
+          <div class="popout-code-body">
+            <div class="popout-editor-container" id="popout-editor-container">
+              <!-- Visual Word Blocks Pan/Zoom View -->
+              <div id="popout-scratch-blocks-container" class="scratch-blocks-container word-blocks-container">
+                <div class="scratch-zoom-toolbar" id="popout-zoom-toolbar">
+                  <div class="zoom-toolbar-label">
+                    <span>🧩 Word Blocks (Full View)</span>
+                  </div>
+                  <div class="zoom-toolbar-actions">
+                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-in" title="Zoom In (or Wheel Up)">➕</button>
+                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-out" title="Zoom Out (or Wheel Down)">➖</button>
+                    <button class="btn btn-xs btn-outline zoom-btn" id="btn-popout-zoom-reset" title="Reset Zoom &amp; Pan">↺ 100%</button>
+                    <span class="scratch-zoom-level" id="popout-zoom-level">100%</span>
+                  </div>
+                </div>
+                <div class="scratch-zoom-viewport" id="popout-zoom-viewport">
+                  <div class="scratch-zoom-content" id="popout-zoom-content">
+                    <div id="popout-word-blocks-container"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Full Python Code Textarea -->
+              <textarea id="popout-python-code-editor" spellcheck="false" style="display: none;"></textarea>
+            </div>
+          </div>
+
+          <div class="popout-code-footer">
+            <div class="popout-footer-left">
+              <button id="btn-popout-run" class="btn btn-sm btn-primary" title="Execute Active Robot Script">▶ RUN</button>
+              <button id="btn-popout-stop" class="btn btn-sm btn-danger" disabled title="Emergency Stop">⏹ STOP</button>
+              <button id="btn-popout-reset" class="btn btn-sm btn-warning" title="Reset Robot Pose">↺ RESET</button>
+              <button id="btn-popout-import-code" class="btn btn-sm btn-secondary" title="Import Code or SPIKE Project">📥 Import Code</button>
+            </div>
+            <div class="popout-footer-right">
+              <span class="popout-status-text" id="popout-status-text">Synchronized with Robot Workspace</span>
+              <button class="btn btn-sm btn-outline" id="btn-popout-done">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Floating Pointer Tool Badge for 3D Viewport Hover Indicators -->
       <div id="hud-pointer-tool-badge" class="hud-pointer-tool-badge" style="display: none;">
         <span id="pointer-badge-icon">🔒</span>
@@ -1836,10 +1902,16 @@ export class SimulatorHud {
     this.driverStatusDot = this.rootElement.querySelector('#driver-status-dot')!;
     this.driverStatusLabel = this.rootElement.querySelector('#driver-status-label')!;
 
-    // Sidebar Camera Focus quick bar
-    this.btnFocusRobot = this.rootElement.querySelector('#btn-focus-robot')!;
-    this.btnFocusCenter = this.rootElement.querySelector('#btn-focus-center')!;
-    this.cameraFocusSelect = this.rootElement.querySelector('#camera-focus-select')!;
+    // Pop-out Code Editor Modal caching
+    this.popoutModal = this.rootElement.querySelector('#modal-popout-code-editor')!;
+    this.popoutTextarea = this.rootElement.querySelector('#popout-python-code-editor')!;
+    this.popoutBlocksContainer = this.rootElement.querySelector('#popout-word-blocks-container')!;
+    this.popoutScratchContainer = this.rootElement.querySelector('#popout-scratch-blocks-container')!;
+
+    // Sidebar Camera Focus quick bar (safely optional)
+    this.btnFocusRobot = this.rootElement.querySelector('#btn-focus-robot');
+    this.btnFocusCenter = this.rootElement.querySelector('#btn-focus-center');
+    this.cameraFocusSelect = this.rootElement.querySelector('#camera-focus-select');
 
     // Floating Terminal elements
     this.floatingTerminal = this.rootElement.querySelector('#hud-floating-terminal')!;
@@ -1965,26 +2037,29 @@ export class SimulatorHud {
       if (this.scriptTabs[this.activeTabIndex]) {
         this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
       }
+      if (this.popoutTextarea && this.popoutTextarea.value !== this.codeTextarea.value) {
+        this.popoutTextarea.value = this.codeTextarea.value;
+      }
       this.saveScriptTabsToStorage();
     });
 
-    // 2. Sidebar Camera Focus Quick Bar
+    // 2. Sidebar Camera Focus Quick Bar (safely optional)
     this.btnFocusRobot?.addEventListener('click', () => {
       this.callbacks.onFocusTarget?.('robot');
-      this.btnFocusRobot.classList.add('active');
-      this.btnFocusCenter.classList.remove('active');
+      this.btnFocusRobot?.classList.add('active');
+      this.btnFocusCenter?.classList.remove('active');
       if (this.cameraFocusSelect) this.cameraFocusSelect.value = 'robot';
     });
 
     this.btnFocusCenter?.addEventListener('click', () => {
       this.callbacks.onFocusTarget?.('center');
-      this.btnFocusCenter.classList.add('active');
-      this.btnFocusRobot.classList.remove('active');
+      this.btnFocusCenter?.classList.add('active');
+      this.btnFocusRobot?.classList.remove('active');
       if (this.cameraFocusSelect) this.cameraFocusSelect.value = 'center';
     });
 
     this.cameraFocusSelect?.addEventListener('change', () => {
-      const val = this.cameraFocusSelect.value;
+      const val = this.cameraFocusSelect?.value;
       if (val === 'robot' || val === 'center') {
         this.callbacks.onFocusTarget?.(val);
       } else if (val) {
@@ -2064,6 +2139,9 @@ export class SimulatorHud {
 
     // Scratch visual block viewer pan & zoom setup
     this.setupScratchPanAndZoom();
+
+    // Pop-out Code Editor Modal setup
+    this.setupPopoutCodeEditorEvents();
 
     // Competition Mat dropdown change
     const mapSelect = this.rootElement.querySelector('#map-select') as HTMLSelectElement | null;
@@ -2591,6 +2669,9 @@ export class SimulatorHud {
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (this.isPopoutCodeEditorOpen) {
+          this.closePopoutCodeEditor();
+        }
         if (this.isRobotDesignModalOpen) {
           this.closeRobotDesignModal();
         }
@@ -2780,15 +2861,13 @@ export class SimulatorHud {
       this.toggleTelemetryPanel(false);
     });
 
-    // 3. Left column sub-tabs (Sensors vs Motors vs Both)
+    // 3. Left column sub-tabs (Overview Both vs Detailed vs Sensors vs Motors)
     const subtabBtns = this.rootElement.querySelectorAll('.telem-subtab-btn[data-subtab]');
     subtabBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
-        const sub = btn.getAttribute('data-subtab') as 'sensors' | 'motors' | 'both';
+        const sub = btn.getAttribute('data-subtab') as 'sensors' | 'motors' | 'both' | 'detailed';
         if (!sub) return;
-        this.telemSubView = sub;
-        subtabBtns.forEach((b) => b.classList.toggle('active', b === btn));
-        this.updateDockViewLayout();
+        this.setTelemSubView(sub);
       });
     });
 
@@ -2945,6 +3024,7 @@ export class SimulatorHud {
       if (dockLeft) {
         dockLeft.style.display = 'flex';
         dockLeft.classList.toggle('subview-both', this.telemSubView === 'both');
+        dockLeft.classList.toggle('subview-detailed', this.telemSubView === 'detailed');
       }
       if (dockRight) dockRight.style.display = 'flex';
       if (tabLogs) tabLogs.style.display = 'flex';
@@ -2955,7 +3035,7 @@ export class SimulatorHud {
       } else if (this.telemSubView === 'motors') {
         if (tabSensors) tabSensors.style.display = 'none';
         if (tabMotors) tabMotors.style.display = 'flex';
-      } else { // 'both'
+      } else { // 'both' or 'detailed'
         if (tabSensors) tabSensors.style.display = 'flex';
         if (tabMotors) tabMotors.style.display = 'flex';
       }
@@ -2963,7 +3043,10 @@ export class SimulatorHud {
       // .dock-right mode
       if (tabsBar) tabsBar.style.display = 'flex';
       if (leftTabsBar) leftTabsBar.style.display = 'none';
-      if (dockLeft) dockLeft.classList.remove('subview-both');
+      if (dockLeft) {
+        dockLeft.classList.remove('subview-both');
+        dockLeft.classList.remove('subview-detailed');
+      }
 
       if (this.activeTelemTab === 'sensors') {
         if (dockLeft) dockLeft.style.display = 'flex';
@@ -3068,6 +3151,17 @@ export class SimulatorHud {
       const subtabBtns = this.rootElement.querySelectorAll('.telem-subtab-btn[data-subtab]');
       subtabBtns.forEach((b) => b.classList.toggle('active', b.getAttribute('data-subtab') === tab));
     }
+    this.updateDockViewLayout();
+  }
+
+  public getTelemSubView(): 'both' | 'detailed' | 'sensors' | 'motors' {
+    return this.telemSubView;
+  }
+
+  public setTelemSubView(sub: 'both' | 'detailed' | 'sensors' | 'motors'): void {
+    this.telemSubView = sub;
+    const subtabBtns = this.rootElement.querySelectorAll('.telem-subtab-btn[data-subtab]');
+    subtabBtns.forEach((b) => b.classList.toggle('active', b.getAttribute('data-subtab') === sub));
     this.updateDockViewLayout();
   }
 
@@ -4305,6 +4399,10 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     this.stopBtn.disabled = !isRunning;
     if (this.topbarRunBtn) this.topbarRunBtn.disabled = isRunning;
     if (this.topbarStopBtn) this.topbarStopBtn.disabled = !isRunning;
+    const popoutRunBtn = this.rootElement.querySelector('#btn-popout-run') as HTMLButtonElement | null;
+    const popoutStopBtn = this.rootElement.querySelector('#btn-popout-stop') as HTMLButtonElement | null;
+    if (popoutRunBtn) popoutRunBtn.disabled = isRunning;
+    if (popoutStopBtn) popoutStopBtn.disabled = !isRunning;
   }
 
   public setActiveDrawerJob(view: 'code' | 'driver' | 'assets' | 'fastener' | 'field' | 'terminal'): void {
@@ -5032,6 +5130,9 @@ print("Finished!")
       </div>
     `;
     this.updateScratchTransform();
+    if (this.isPopoutCodeEditorOpen) {
+      this.renderPopoutVisualBlocks();
+    }
   }
 
   private renderVisualBlockHtml(b: VisualBlock): string {
@@ -5082,10 +5183,12 @@ print("Finished!")
     `;
   }
 
-  private formatBlockLabel(label: string): string {
-    return label
-      .replace(/\[([^\]]+)\]/g, '<span class="word-block-pill">$1</span>')
-      .replace(/<([^>]+)>/g, '<span class="word-block-pill pill-condition">&lt;$1&gt;</span>');
+  public formatBlockLabel(label: string): string {
+    const clean = label.replace(/<\/?span[^>]*>/gi, '');
+    return clean
+      .replace(/\[([^\]]+)\]/g, '___PARAM___$1___ENDPARAM___')
+      .replace(/<([^>]+)>/g, '<span class="word-block-pill pill-condition">&lt;$1&gt;</span>')
+      .replace(/___PARAM___(.*?)___ENDPARAM___/g, '<span class="word-block-pill">$1</span>');
   }
 
   public async handleSpikeScratchFile(file: File): Promise<void> {
@@ -5245,6 +5348,282 @@ print("Finished!")
     }
 
     this.updateScratchTransform();
+  }
+
+  // =========================================================================
+  // Pop-out Code Editor Modal Methods
+  // =========================================================================
+
+  public openPopoutCodeEditor(): void {
+    if (!this.popoutModal) return;
+    this.isPopoutCodeEditorOpen = true;
+    this.popoutModal.style.display = 'flex';
+    if (this.popoutTextarea) {
+      this.popoutTextarea.value = this.codeTextarea.value;
+    }
+    this.setPopoutEditorViewMode(this.editorViewMode);
+    this.renderPopoutVisualBlocks();
+    this.updatePopoutScratchTransform();
+  }
+
+  public closePopoutCodeEditor(): void {
+    if (!this.popoutModal) return;
+    this.isPopoutCodeEditorOpen = false;
+    this.popoutModal.style.display = 'none';
+    if (this.popoutTextarea) {
+      this.codeTextarea.value = this.popoutTextarea.value;
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.popoutTextarea.value;
+      }
+      this.saveScriptTabsToStorage();
+    }
+    this.setEditorViewMode(this.editorViewMode);
+  }
+
+  public togglePopoutCodeEditor(): void {
+    if (this.isPopoutCodeEditorOpen) {
+      this.closePopoutCodeEditor();
+    } else {
+      this.openPopoutCodeEditor();
+    }
+  }
+
+  public getIsPopoutCodeEditorOpen(): boolean {
+    return this.isPopoutCodeEditorOpen;
+  }
+
+  public setPopoutEditorViewMode(mode: 'blocks' | 'python'): void {
+    this.editorViewMode = mode;
+    this.setEditorViewMode(mode);
+
+    const btnBlocks = this.rootElement.querySelector('#btn-popout-mode-blocks');
+    const btnPython = this.rootElement.querySelector('#btn-popout-mode-python');
+
+    btnBlocks?.classList.toggle('active', mode === 'blocks');
+    btnPython?.classList.toggle('active', mode === 'python');
+
+    if (mode === 'blocks') {
+      if (this.popoutScratchContainer) this.popoutScratchContainer.style.display = 'flex';
+      if (this.popoutTextarea) this.popoutTextarea.style.display = 'none';
+      this.renderPopoutVisualBlocks();
+      this.updatePopoutScratchTransform();
+    } else {
+      if (this.popoutScratchContainer) this.popoutScratchContainer.style.display = 'none';
+      if (this.popoutTextarea) {
+        this.popoutTextarea.style.display = 'block';
+        this.popoutTextarea.value = this.codeTextarea.value;
+      }
+    }
+  }
+
+  public renderPopoutVisualBlocks(): void {
+    if (!this.popoutBlocksContainer) return;
+    const currentTab = this.scriptTabs[this.activeTabIndex];
+    if (!currentTab || !currentTab.visualBlocks || currentTab.visualBlocks.length === 0) {
+      this.popoutBlocksContainer.innerHTML = `
+        <div class="word-blocks-empty">
+          <div class="empty-icon">🧩</div>
+          <div class="empty-title">SPIKE Word Blocks View</div>
+          <div class="empty-desc">
+            No visual blocks in this tab yet. You can import your LEGO SPIKE App program (<b>.llsp3</b> or <b>.llsp</b>) to see your code in Word Blocks format!
+          </div>
+          <div class="empty-action-row">
+            <button class="btn btn-sm btn-primary" id="btn-popout-empty-import-spike">
+              📥 Import SPIKE Code (.llsp3 / .llsp)
+            </button>
+          </div>
+        </div>
+      `;
+      const btn = this.popoutBlocksContainer.querySelector('#btn-popout-empty-import-spike');
+      btn?.addEventListener('click', () => {
+        const input = (this.rootElement.querySelector('#input-import-code') || this.spikeScratchFileInput) as HTMLInputElement | null;
+        input?.click();
+      });
+      this.updatePopoutScratchTransform();
+      return;
+    }
+
+    const blocksHtml = currentTab.visualBlocks
+      .map((b) => this.renderVisualBlockHtml(b))
+      .join('');
+
+    this.popoutBlocksContainer.innerHTML = `
+      <div class="word-blocks-stack">
+        <div class="word-blocks-stack-header">
+          <span class="stack-title">🧩 ${currentTab.title}</span>
+          <span class="stack-count">${currentTab.visualBlocks.length} blocks</span>
+        </div>
+        ${blocksHtml}
+      </div>
+    `;
+    this.updatePopoutScratchTransform();
+  }
+
+  public setPopoutScratchZoom(zoom: number): void {
+    this.popoutZoomScale = Math.min(Math.max(0.4, zoom), 2.5);
+    this.updatePopoutScratchTransform();
+  }
+
+  public resetPopoutScratchZoomAndPan(): void {
+    this.popoutZoomScale = 1.0;
+    this.popoutPanX = 0;
+    this.popoutPanY = 0;
+    this.updatePopoutScratchTransform();
+  }
+
+  public getPopoutScratchZoomState(): { scale: number; panX: number; panY: number } {
+    return {
+      scale: this.popoutZoomScale,
+      panX: this.popoutPanX,
+      panY: this.popoutPanY,
+    };
+  }
+
+  public updatePopoutScratchTransform(): void {
+    const content = this.rootElement.querySelector('#popout-zoom-content') as HTMLElement | null;
+    const label = this.rootElement.querySelector('#popout-zoom-level') as HTMLElement | null;
+    if (content) {
+      content.style.transform = `translate(${this.popoutPanX}px, ${this.popoutPanY}px) scale(${this.popoutZoomScale})`;
+    }
+    if (label) {
+      label.textContent = `${Math.round(this.popoutZoomScale * 100)}%`;
+    }
+  }
+
+  private setupPopoutScratchPanAndZoom(): void {
+    const viewport = this.rootElement.querySelector('#popout-zoom-viewport') as HTMLElement | null;
+    const btnZoomIn = this.rootElement.querySelector('#btn-popout-zoom-in') as HTMLButtonElement | null;
+    const btnZoomOut = this.rootElement.querySelector('#btn-popout-zoom-out') as HTMLButtonElement | null;
+    const btnZoomReset = this.rootElement.querySelector('#btn-popout-zoom-reset') as HTMLButtonElement | null;
+
+    btnZoomIn?.addEventListener('click', () => {
+      this.setPopoutScratchZoom(this.popoutZoomScale + 0.15);
+    });
+
+    btnZoomOut?.addEventListener('click', () => {
+      this.setPopoutScratchZoom(this.popoutZoomScale - 0.15);
+    });
+
+    btnZoomReset?.addEventListener('click', () => {
+      this.resetPopoutScratchZoomAndPan();
+    });
+
+    if (viewport) {
+      viewport.addEventListener('wheel', (e: WheelEvent) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        this.setPopoutScratchZoom(this.popoutZoomScale + delta);
+      }, { passive: false });
+
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+      let initialPanX = 0;
+      let initialPanY = 0;
+
+      viewport.addEventListener('mousedown', (e: MouseEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (target && target.closest('button, input, select, textarea, a')) {
+          return;
+        }
+        isDragging = true;
+        viewport.classList.add('is-dragging');
+        startX = e.clientX;
+        startY = e.clientY;
+        initialPanX = this.popoutPanX;
+        initialPanY = this.popoutPanY;
+      });
+
+      window.addEventListener('mousemove', (e: MouseEvent) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        this.popoutPanX = initialPanX + dx;
+        this.popoutPanY = initialPanY + dy;
+        this.updatePopoutScratchTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          viewport.classList.remove('is-dragging');
+        }
+      });
+    }
+
+    this.updatePopoutScratchTransform();
+  }
+
+  private setupPopoutCodeEditorEvents(): void {
+    const btnPopout = this.rootElement.querySelector('#btn-popout-code-editor') as HTMLButtonElement | null;
+    btnPopout?.addEventListener('click', () => {
+      this.openPopoutCodeEditor();
+    });
+
+    const btnClose = this.rootElement.querySelector('#btn-close-popout-code') as HTMLButtonElement | null;
+    btnClose?.addEventListener('click', () => {
+      this.closePopoutCodeEditor();
+    });
+
+    const btnDockBack = this.rootElement.querySelector('#btn-popout-dock-back') as HTMLButtonElement | null;
+    btnDockBack?.addEventListener('click', () => {
+      this.closePopoutCodeEditor();
+    });
+
+    const btnDone = this.rootElement.querySelector('#btn-popout-done') as HTMLButtonElement | null;
+    btnDone?.addEventListener('click', () => {
+      this.closePopoutCodeEditor();
+    });
+
+    const backdrop = this.rootElement.querySelector('#popout-code-backdrop') as HTMLElement | null;
+    backdrop?.addEventListener('click', () => {
+      this.closePopoutCodeEditor();
+    });
+
+    const btnBlocks = this.rootElement.querySelector('#btn-popout-mode-blocks') as HTMLButtonElement | null;
+    btnBlocks?.addEventListener('click', () => {
+      this.setPopoutEditorViewMode('blocks');
+    });
+
+    const btnPython = this.rootElement.querySelector('#btn-popout-mode-python') as HTMLButtonElement | null;
+    btnPython?.addEventListener('click', () => {
+      this.setPopoutEditorViewMode('python');
+    });
+
+    // Bidirectional code sync
+    this.popoutTextarea?.addEventListener('input', () => {
+      if (this.codeTextarea) {
+        this.codeTextarea.value = this.popoutTextarea.value;
+      }
+      if (this.scriptTabs[this.activeTabIndex]) {
+        this.scriptTabs[this.activeTabIndex].code = this.popoutTextarea.value;
+      }
+      this.saveScriptTabsToStorage();
+    });
+
+    // Popout Run/Stop/Reset/Import actions
+    const btnPopoutRun = this.rootElement.querySelector('#btn-popout-run') as HTMLButtonElement | null;
+    btnPopoutRun?.addEventListener('click', () => {
+      this.runBtn?.click();
+    });
+
+    const btnPopoutStop = this.rootElement.querySelector('#btn-popout-stop') as HTMLButtonElement | null;
+    btnPopoutStop?.addEventListener('click', () => {
+      this.stopBtn?.click();
+    });
+
+    const btnPopoutReset = this.rootElement.querySelector('#btn-popout-reset') as HTMLButtonElement | null;
+    btnPopoutReset?.addEventListener('click', () => {
+      this.topbarResetBtn?.click();
+    });
+
+    const btnPopoutImport = this.rootElement.querySelector('#btn-popout-import-code') as HTMLButtonElement | null;
+    btnPopoutImport?.addEventListener('click', () => {
+      const input = (this.rootElement.querySelector('#input-import-code') || this.spikeScratchFileInput) as HTMLInputElement | null;
+      input?.click();
+    });
+
+    this.setupPopoutScratchPanAndZoom();
   }
 
   private loadScriptTabsFromStorage(): void {
