@@ -90,7 +90,7 @@ body, html {
   font-size: 22px;
 }
 
-.hud-title {
+.hud-title, .hud-brand-title {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.4px;
@@ -1354,6 +1354,50 @@ body, html {
   cursor: pointer;
   line-height: 1;
 }
+
+/* --- Telemetry Dock Version Badges (F19) --- */
+.telem-version-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.telem-version-badge:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #7dd3fc;
+}
+
+.telem-sum-item.telem-version-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(56, 189, 248, 0.15);
+  border-radius: 3px;
+  color: #38bdf8;
+}
+
+@media (max-width: 480px) {
+  .telem-version-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 
 /* --- Left Column Sub-Tabs (.telem-left-tabs-bar) --- */
 .telem-left-tabs-bar {
@@ -4720,5 +4764,237 @@ body, html {
   color: #e0f2fe;
 }
 
+/* Script Tab Action Buttons & Inline Rename Input */
+.tab-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
 
+.tab-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 1px 3px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
 
+.tab-action-btn:hover {
+  opacity: 1;
+}
+
+.tab-rename-btn:hover {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.tab-duplicate-btn:hover {
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.15);
+}
+
+.tab-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+.script-tab-rename-input {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid #38bdf8;
+  color: #f8fafc;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 4px;
+  outline: none;
+  width: 90px;
+  max-width: 120px;
+}
+
+/* --- F13: Scripts Manager Popover --- */
+.scripts-manager-popover {
+  position: absolute;
+  top: 42px;
+  right: 8px;
+  width: 380px;
+  max-width: 92vw;
+  max-height: 400px;
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+.scripts-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid var(--border-color, #334155);
+}
+
+.scripts-manager-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.scripts-manager-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 340px;
+  padding: 6px;
+  gap: 4px;
+}
+
+.scripts-manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.scripts-manager-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+.scripts-manager-item.active {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.script-info-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.script-kind-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.script-kind-badge.python {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.script-kind-badge.blocks {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.script-item-title {
+  font-size: 12px;
+  color: #e2e8f0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.scripts-manager-item.active .script-item-title {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.script-actions-col {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.script-actions-col .btn {
+  padding: 2px 6px;
+  font-size: 10px;
+  height: 22px;
+}
+
+/* --- F15: Blocks Read-Only Notice Banner --- */
+.banner-blocks-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 6px;
+  margin: 6px 8px;
+  color: #fef3c7;
+  font-size: 11px;
+}
+
+.banner-blocks-readonly .banner-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.banner-blocks-readonly .banner-icon {
+  font-size: 13px;
+}
+
+.banner-blocks-readonly .banner-text {
+  line-height: 1.3;
+}
+
+.banner-blocks-readonly .banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.banner-blocks-readonly .btn-revert-blocks {
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.banner-blocks-readonly .btn-revert-blocks:hover {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fff;
+}
+
+/* Palette Disabled State */
+.spike-palette-drawer.palette-disabled {
+  opacity: 0.55;
+  filter: grayscale(0.5);
+}
+
+.spike-palette-drawer.palette-disabled .spike-palette-block {
+  cursor: not-allowed;
+}

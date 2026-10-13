@@ -14,14 +14,14 @@ export interface TelemetryState {
   };
   motors: {
     left: {
-      port: 'A' | 'B';
+      port: MotorPort;
       degrees: number;
       speed: number;
       targetPercent?: number;
       status?: 'IDLE' | 'RUNNING' | 'BRAKING';
     };
     right: {
-      port: 'A' | 'B';
+      port: MotorPort;
       degrees: number;
       speed: number;
       targetPercent?: number;

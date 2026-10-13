@@ -1,6 +1,7 @@
 import { SimulationPhysicsEngine } from './physics/engine';
 import { Viewport3D } from './view/viewport';
 import { Robot3DRenderer } from './view/robot-renderer';
+import { MotorPort } from './physics/motor-controller';
 import { VirtualSensorManager } from './sensors/sensor-manager';
 import { VirtualSpikeApi } from './runtime/spike-api';
 import { PythonScriptRunner } from './runtime/python-runner';
@@ -115,6 +116,11 @@ async function bootstrapSimulator() {
       engine.resetRobot(spawnPose);
       viewport.setRobotYaw(spawnPose.yawDegrees);
       sensors.resetYaw();
+      const mappings = hud.getPortMappings();
+      const isPort = (p: string): p is MotorPort => ['A', 'B', 'C', 'D', 'E', 'F'].includes(p);
+      const left = isPort(mappings.driveLeft) ? mappings.driveLeft : 'A';
+      const right = isPort(mappings.driveRight) ? mappings.driveRight : 'B';
+      engine.robot.setDrivePorts?.(left, right);
       hud.setExecutionState('IDLE');
     },
     onSpawnPoseChange: (pose) => {
@@ -129,6 +135,11 @@ async function bootstrapSimulator() {
       engine.setDefaultPose(pose);
       viewport.setRobotYaw(pose.yawDegrees);
       sensors.resetYaw();
+      const mappings = hud.getPortMappings();
+      const isPort = (p: string): p is MotorPort => ['A', 'B', 'C', 'D', 'E', 'F'].includes(p);
+      const left = isPort(mappings.driveLeft) ? mappings.driveLeft : 'A';
+      const right = isPort(mappings.driveRight) ? mappings.driveRight : 'B';
+      engine.robot.setDrivePorts?.(left, right);
       hud.setExecutionState('IDLE');
       hud.setSpawnPose(pose);
       const targetName = label || `(X=${pose.x.toFixed(2)}m, Z=${pose.z.toFixed(2)}m, Yaw=${pose.yawDegrees.toFixed(1)}°)`;
@@ -496,10 +507,22 @@ async function bootstrapSimulator() {
         }`
       );
     },
+    onPortMappingChange: (mappings) => {
+      const isPort = (p: string): p is MotorPort => ['A', 'B', 'C', 'D', 'E', 'F'].includes(p);
+      const left = isPort(mappings.driveLeft) ? mappings.driveLeft : 'A';
+      const right = isPort(mappings.driveRight) ? mappings.driveRight : 'B';
+      engine.robot.setDrivePorts?.(left, right);
+      hud.logConsole(`⚙️ Updated drive wheel ports: Left=[${left}], Right=[${right}]`);
+    },
   });
 
-  // Sync initial robot visual preset with HUD saved state
+  // Sync initial robot visual preset and port mappings with HUD saved state
   robotRenderer.setRobotPreset(hud.getActiveRobotPreset());
+  const initialPortMappings = hud.getPortMappings();
+  const isPort = (p: string): p is MotorPort => ['A', 'B', 'C', 'D', 'E', 'F'].includes(p);
+  const initLeft = isPort(initialPortMappings.driveLeft) ? initialPortMappings.driveLeft : 'A';
+  const initRight = isPort(initialPortMappings.driveRight) ? initialPortMappings.driveRight : 'B';
+  engine.robot.setDrivePorts?.(initLeft, initRight);
 
   engine.robot.onBrakeEngaged = () => {
     hud.logCommand('BRAKE', 'Physics Engine', 'Active electromagnetic brake: Chassis & wheels clamped (0.00 Nm torque)');
@@ -535,8 +558,7 @@ async function bootstrapSimulator() {
   // Hook 3D Viewport Interactive Drag-and-Drop Placement & Rotation
   viewport.onRobotDragStart = () => {
     runner.abort();
-    engine.robot.motors.get('A')?.stop();
-    engine.robot.motors.get('B')?.stop();
+    engine.robot.stopAllMotors();
     hud.setExecutionState('IDLE');
   };
 
@@ -564,8 +586,7 @@ async function bootstrapSimulator() {
 
   viewport.onRobotDrop = (x: number, z: number, yawDegrees?: number) => {
     runner.abort();
-    engine.robot.motors.get('A')?.stop();
-    engine.robot.motors.get('B')?.stop();
+    engine.robot.stopAllMotors();
     hud.setExecutionState('IDLE');
     const currentPose = hud.getSpawnPose();
     const finalYaw = yawDegrees !== undefined ? yawDegrees : currentPose.yawDegrees;
@@ -679,8 +700,10 @@ async function bootstrapSimulator() {
     }
 
     // Sensors & telemetry
-    const motorA = engine.robot.motors.get('A');
-    const motorB = engine.robot.motors.get('B');
+    const driveLeftPort = (engine.robot as any).driveLeftPort || 'A';
+    const driveRightPort = (engine.robot as any).driveRightPort || 'B';
+    const motorLeft = engine.robot.motors.get(driveLeftPort);
+    const motorRight = engine.robot.motors.get(driveRightPort);
     const colorC = sensors.sampleColorSensor('C');
     const colorD = sensors.sampleColorSensor('D');
     const distCm = sensors.sampleDistanceSensor();
@@ -691,7 +714,7 @@ async function bootstrapSimulator() {
     const allMotorsState: Record<
       string,
       {
-        port: any;
+        port: MotorPort;
         degrees: number;
         speed: number;
         targetPercent: number;
@@ -717,8 +740,8 @@ async function bootstrapSimulator() {
       };
     }
 
-    const leftTargetPct = Math.round(((motorA?.targetSpeedDegPerSec || 0) / (motorA?.maxSpeedDegPerSec || 1000)) * 100);
-    const rightTargetPct = Math.round(((motorB?.targetSpeedDegPerSec || 0) / (motorB?.maxSpeedDegPerSec || 1000)) * 100);
+    const leftTargetPct = Math.round(((motorLeft?.targetSpeedDegPerSec || 0) / (motorLeft?.maxSpeedDegPerSec || 1000)) * 100);
+    const rightTargetPct = Math.round(((motorRight?.targetSpeedDegPerSec || 0) / (motorRight?.maxSpeedDegPerSec || 1000)) * 100);
 
     hud.updateTelemetry({
       timeSeconds: now / 1000,
@@ -733,18 +756,18 @@ async function bootstrapSimulator() {
       },
       motors: {
         left: {
-          port: 'A',
-          degrees: Math.round(motorA?.degrees || 0),
-          speed: Math.round(motorA?.velocityDegPerSec || 0),
+          port: driveLeftPort,
+          degrees: Math.round(motorLeft?.degrees || 0),
+          speed: Math.round(motorLeft?.velocityDegPerSec || 0),
           targetPercent: leftTargetPct,
-          status: Math.abs(motorA?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorA?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
+          status: Math.abs(motorLeft?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorLeft?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
         },
         right: {
-          port: 'B',
-          degrees: Math.round(motorB?.degrees || 0),
-          speed: Math.round(motorB?.velocityDegPerSec || 0),
+          port: driveRightPort,
+          degrees: Math.round(motorRight?.degrees || 0),
+          speed: Math.round(motorRight?.velocityDegPerSec || 0),
           targetPercent: rightTargetPct,
-          status: Math.abs(motorB?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorB?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
+          status: Math.abs(motorRight?.targetSpeedDegPerSec || 0) > 0.1 ? 'RUNNING' : (Math.abs(motorRight?.velocityDegPerSec || 0) > 1 ? 'BRAKING' : 'IDLE'),
         },
         all: allMotorsState,
       },

@@ -26,10 +26,22 @@ export class VirtualMotor {
   }
 
   /**
+   * Alias getter/setter for targetVelocityDegPerSec used by test suites and telemetry
+   */
+  public get targetVelocityDegPerSec(): number {
+    return this.targetSpeedDegPerSec;
+  }
+
+  public set targetVelocityDegPerSec(v: number) {
+    this.targetSpeedDegPerSec = v;
+  }
+
+  /**
    * Set continuous speed (-100% to 100% or absolute deg/s)
    */
   public start(speedPercent: number = 50): void {
-    const degPerSec = (speedPercent / 100) * this.maxSpeedDegPerSec;
+    const clamped = Math.max(-100, Math.min(100, isNaN(speedPercent) ? 0 : speedPercent));
+    const degPerSec = (clamped / 100) * this.maxSpeedDegPerSec;
     this.targetSpeedDegPerSec = degPerSec;
     this.activeTarget = {
       type: 'CONTINUOUS',
@@ -39,12 +51,27 @@ export class VirtualMotor {
   }
 
   /**
-   * Run for specified degrees with callback on finish
+   * Run for specified degrees with callback on finish.
+   * Preserves speed direction: negative speed produces reverse rotation.
    */
   public runForDegrees(degrees: number, speedPercent: number = 50, onComplete?: () => void): void {
-    const dir = degrees >= 0 ? 1 : -1;
+    // Check for near-zero or non-finite degrees / speed to prevent hanging
+    if (
+      !Number.isFinite(degrees) ||
+      Math.abs(degrees) < 1e-4 ||
+      !Number.isFinite(speedPercent) ||
+      Math.abs(speedPercent) < 1e-4
+    ) {
+      this.targetSpeedDegPerSec = 0;
+      this.activeTarget = null;
+      if (onComplete) onComplete();
+      return;
+    }
+
+    const clampedSpeed = Math.max(-100, Math.min(100, speedPercent));
+    const totalDir = (degrees >= 0 ? 1 : -1) * (clampedSpeed >= 0 ? 1 : -1);
     const absDeg = Math.abs(degrees);
-    const speed = Math.abs((speedPercent / 100) * this.maxSpeedDegPerSec) * dir;
+    const speed = Math.abs((clampedSpeed / 100) * this.maxSpeedDegPerSec) * totalDir;
 
     this.activeTarget = {
       type: 'DEGREES',
@@ -59,11 +86,21 @@ export class VirtualMotor {
    * Run for duration in seconds
    */
   public runForTime(seconds: number, speedPercent: number = 50, onComplete?: () => void): void {
-    const speed = (speedPercent / 100) * this.maxSpeedDegPerSec;
+    const clampedSpeed = Math.max(-100, Math.min(100, isNaN(speedPercent) ? 0 : speedPercent));
+    const speed = (clampedSpeed / 100) * this.maxSpeedDegPerSec;
+    const safeSeconds = Math.max(0, isNaN(seconds) || !Number.isFinite(seconds) ? 0 : seconds);
+
+    if (safeSeconds <= 0 || Math.abs(clampedSpeed) < 1e-4) {
+      this.targetSpeedDegPerSec = 0;
+      this.activeTarget = null;
+      if (onComplete) onComplete();
+      return;
+    }
+
     this.activeTarget = {
       type: 'TIME',
       targetSpeedDegPerSec: speed,
-      remainingSeconds: seconds,
+      remainingSeconds: safeSeconds,
       stopAction: 'BRAKE',
       onComplete,
     };

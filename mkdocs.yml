@@ -4,6 +4,8 @@ site_author: Jaime Yu
 repo_name: jaimeyu/fll_sim
 repo_url: https://github.com/jaimeyu/fll_sim
 copyright: Copyright &copy; 2026 Jaime Yu - Licensed under GPL-3.0
+exclude_docs: |
+  index.html
 
 theme:
   name: material

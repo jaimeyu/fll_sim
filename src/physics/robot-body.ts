@@ -2,6 +2,18 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { RobotAssemblySpec } from '../cad/types';
 import { VirtualMotor, MotorPort } from './motor-controller';
 
+if (!Object.prototype.hasOwnProperty.call(VirtualMotor.prototype, 'targetVelocityDegPerSec')) {
+  Object.defineProperty(VirtualMotor.prototype, 'targetVelocityDegPerSec', {
+    get(this: VirtualMotor) {
+      return this.targetSpeedDegPerSec;
+    },
+    set(this: VirtualMotor, v: number) {
+      this.targetSpeedDegPerSec = v;
+    },
+    configurable: true,
+  });
+}
+
 export interface SpawnPose {
   x: number;
   y: number;
@@ -20,6 +32,12 @@ export class RobotPhysicsBody {
   // Robot physical specs
   public wheelRadius = 0.028; // 56mm diameter / 2 = 28mm radius
   public trackWidth = 0.128; // 128mm (16 studs)
+
+  // Active drivebase ports and wheel cluster tracking
+  public driveLeftPort: MotorPort = 'A';
+  public driveRightPort: MotorPort = 'B';
+  public leftWheelClusterId: string | null = null;
+  public rightWheelClusterId: string | null = null;
 
   constructor(world: RAPIER.World, spec: RobotAssemblySpec, spawnPose: SpawnPose) {
     this.world = world;
@@ -82,7 +100,15 @@ export class RobotPhysicsBody {
       if (cluster.name === 'Drive Wheel') {
         const jointSpec = this.spec.joints.find((j) => j.childClusterId === cluster.clusterId);
         const anchor = jointSpec?.anchorParent || [0, 0, 0];
-        const port = jointSpec?.motorPort || (anchor[0] < 0 ? 'A' : 'B');
+        const isLeft = anchor[0] < 0;
+        if (isLeft) {
+          this.leftWheelClusterId = cluster.clusterId;
+          if (jointSpec?.motorPort) this.driveLeftPort = jointSpec.motorPort;
+        } else {
+          this.rightWheelClusterId = cluster.clusterId;
+          if (jointSpec?.motorPort) this.driveRightPort = jointSpec.motorPort;
+        }
+        const port = jointSpec?.motorPort || (isLeft ? this.driveLeftPort : this.driveRightPort);
 
         // Rotate wheel local position into world space
         const rotatedAnchor = rotateLocal(anchor[0], anchor[1], anchor[2]);
@@ -155,11 +181,27 @@ export class RobotPhysicsBody {
   }
 
   /**
-   * Set continuous driving speeds for left (Port A) and right (Port B) drivebase
+   * Sets active drive wheel motor ports, dynamically updating left and right wheel assignments.
+   */
+  public setDrivePorts(leftPort: MotorPort, rightPort: MotorPort): void {
+    this.driveLeftPort = leftPort;
+    this.driveRightPort = rightPort;
+    if (this.leftWheelClusterId) {
+      const jL = this.spec.joints.find((j) => j.childClusterId === this.leftWheelClusterId);
+      if (jL) jL.motorPort = leftPort;
+    }
+    if (this.rightWheelClusterId) {
+      const jR = this.spec.joints.find((j) => j.childClusterId === this.rightWheelClusterId);
+      if (jR) jR.motorPort = rightPort;
+    }
+  }
+
+  /**
+   * Set continuous driving speeds for configured drivebase ports (left & right)
    */
   public setDriveSpeeds(leftPercent: number, rightPercent: number): void {
-    const motorL = this.motors.get('A');
-    const motorR = this.motors.get('B');
+    const motorL = this.motors.get(this.driveLeftPort);
+    const motorR = this.motors.get(this.driveRightPort);
     if (Math.abs(leftPercent) < 0.1) {
       motorL?.stop('BRAKE');
     } else {
@@ -183,10 +225,11 @@ export class RobotPhysicsBody {
     if (!motor) return;
     if (Math.abs(speedPercent) < 0.1) {
       motor.stop('BRAKE');
-      if (port === 'A' || port === 'B') {
-        const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
-        const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
-        if (Math.abs(spdA) < 0.1 && Math.abs(spdB) < 0.1) {
+      const isDrivePort = port === this.driveLeftPort || port === this.driveRightPort;
+      if (isDrivePort) {
+        const spdL = this.motors.get(this.driveLeftPort)?.targetSpeedDegPerSec ?? 0;
+        const spdR = this.motors.get(this.driveRightPort)?.targetSpeedDegPerSec ?? 0;
+        if (Math.abs(spdL) < 0.1 && Math.abs(spdR) < 0.1) {
           this.brakeChassisAndWheels();
         }
       }
@@ -200,10 +243,11 @@ export class RobotPhysicsBody {
    */
   public stopMotor(port: MotorPort): void {
     this.motors.get(port)?.stop('BRAKE');
-    if (port === 'A' || port === 'B') {
-      const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
-      const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
-      if (Math.abs(spdA) < 0.1 && Math.abs(spdB) < 0.1) {
+    const isDrivePort = port === this.driveLeftPort || port === this.driveRightPort;
+    if (isDrivePort) {
+      const spdL = this.motors.get(this.driveLeftPort)?.targetSpeedDegPerSec ?? 0;
+      const spdR = this.motors.get(this.driveRightPort)?.targetSpeedDegPerSec ?? 0;
+      if (Math.abs(spdL) < 0.1 && Math.abs(spdR) < 0.1) {
         this.brakeChassisAndWheels();
       }
     }
@@ -264,11 +308,11 @@ export class RobotPhysicsBody {
     const nonRootClusters = this.spec.clusters.filter((c) => !c.isRootChassis);
     let anyDriveActive = false;
 
-    // Detect straight-line driving between Drive Motors A & B
-    const spdA = this.motors.get('A')?.targetSpeedDegPerSec ?? 0;
-    const spdB = this.motors.get('B')?.targetSpeedDegPerSec ?? 0;
+    // Detect straight-line driving between configured Drive Motors
+    const spdL = this.motors.get(this.driveLeftPort)?.targetSpeedDegPerSec ?? 0;
+    const spdR = this.motors.get(this.driveRightPort)?.targetSpeedDegPerSec ?? 0;
     const isDrivingStraight =
-      Math.abs(spdA) > 0.1 && Math.abs(spdB) > 0.1 && Math.abs(spdA - spdB) < 1.0;
+      Math.abs(spdL) >= 1.0 && Math.abs(spdR) >= 1.0 && Math.abs(spdL - spdR) < 1.0;
 
     let yawError = 0;
     if (isDrivingStraight) {
@@ -290,14 +334,18 @@ export class RobotPhysicsBody {
     }
 
     for (const [port, motor] of this.motors.entries()) {
-      if (port !== 'A' && port !== 'B') {
+      const isDriveLeft = port === this.driveLeftPort;
+      const isDriveRight = port === this.driveRightPort;
+
+      // Non-drive / auxiliary motors step independently and never touch drive wheel physics
+      if (!isDriveLeft && !isDriveRight) {
         motor.step(dt);
         continue;
       }
 
-      // Drive wheels A & B
+      // Drive wheels
       const targetDegPerSec = motor.targetSpeedDegPerSec;
-      const isIdle = Math.abs(targetDegPerSec) < 0.1;
+      const isIdle = Math.abs(targetDegPerSec) < 1.0;
       let targetRadPerSec = (targetDegPerSec * Math.PI) / 180;
 
       // Differential wheel speed trim to keep wheels in lockstep
@@ -305,9 +353,9 @@ export class RobotPhysicsBody {
         const trimGain = 0.05;
         const trim = Math.max(-1.5, Math.min(1.5, yawError * trimGain));
         const sign = targetDegPerSec > 0 ? 1 : -1;
-        if (port === 'A') {
+        if (isDriveLeft) {
           targetRadPerSec -= trim * sign;
-        } else if (port === 'B') {
+        } else if (isDriveRight) {
           targetRadPerSec += trim * sign;
         }
       }
@@ -315,12 +363,18 @@ export class RobotPhysicsBody {
       for (const cluster of nonRootClusters) {
         if (cluster.name === 'Drive Wheel') {
           const jointSpec = this.spec.joints.find((j) => j.childClusterId === cluster.clusterId);
-          const isPortMatch =
-            jointSpec?.motorPort === port ||
-            (port === 'A' && (jointSpec?.anchorParent[0] ?? 0) < 0) ||
-            (port === 'B' && (jointSpec?.anchorParent[0] ?? 0) > 0);
+          const anchorX = jointSpec?.anchorParent[0] ?? 0;
+          const isLeftWheel =
+            cluster.clusterId === this.leftWheelClusterId || anchorX < 0;
+          const isRightWheel =
+            cluster.clusterId === this.rightWheelClusterId || anchorX > 0;
 
-          if (!isPortMatch) continue;
+          // Discriminate physical wheel match: only the assigned drive port actuates its wheel
+          const isWheelMatch =
+            (isDriveLeft && isLeftWheel) ||
+            (isDriveRight && isRightWheel);
+
+          if (!isWheelMatch) continue;
 
           const wb = this.wheelBodies.get(cluster.clusterId);
           if (!wb) continue;
@@ -360,6 +414,15 @@ export class RobotPhysicsBody {
             const torque = Math.max(-maxTorque, Math.min(maxTorque, spinError * Kp));
 
             wb.addTorque({ x: torque * ux, y: torque * uy, z: torque * uz }, true);
+            const spinAcc = Math.max(-2.0, Math.min(2.0, (torque / 0.001) * dt));
+            wb.setAngvel(
+              {
+                x: wAng.x + spinAcc * ux,
+                y: wAng.y + spinAcc * uy,
+                z: wAng.z + spinAcc * uz,
+              },
+              true
+            );
           }
         }
       }

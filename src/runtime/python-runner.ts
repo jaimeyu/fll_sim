@@ -254,7 +254,7 @@ export class PythonScriptRunner {
     const self = this;
     const PrimeHub = () => this.api.createPrimeHub();
     const Motor = (port: any) => this.api.createMotor(port);
-    const MotorPair = (l: any = 'A', r: any = 'B') => this.api.createMotorPair(l, r);
+    const MotorPair = (l?: any, r?: any) => this.api.createMotorPair(l, r);
     const ColorSensor = (port: any = 'C') => this.api.createColorSensor(port);
     const DistanceSensor = () => this.api.createDistanceSensor();
     const Timer = function () {

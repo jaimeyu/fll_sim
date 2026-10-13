@@ -9,6 +9,52 @@ import { legoAssetManager, LegoRenderMode } from '../cad/lego-asset-manager';
 import { profiler } from '../core/performance-profiler';
 import { SpikeScratchImporter, VisualBlock } from '../runtime/spike-scratch-importer';
 import JSZip from 'jszip';
+import { DISPLAY_VERSION } from '../config/version';
+
+export type ScriptKind = 'python' | 'blocks';
+
+export interface ScriptTab {
+  id: string;
+  title: string;
+  code: string;
+  kind: 'python' | 'blocks';
+  visualBlocks?: VisualBlock[];
+  readOnlyBlocks?: boolean;
+  _blocksBaselineCode?: string;
+}
+
+export const DEFAULT_SCRIPT_TEMPLATE = `from spike import PrimeHub, MotorPair
+
+hub = PrimeHub()
+motors = MotorPair('A', 'B')
+
+motors.set_default_speed(50)
+motors.move(30, 'cm')
+`;
+
+export function sanitizeScriptTitle(title: string, fallback: string = 'Script 1'): string {
+  let clean = (title || '').replace(/[<>:"/\\|?*]/g, '');
+  clean = clean.trim();
+  if (!clean) {
+    clean = fallback;
+  }
+  if (clean.length > 40) {
+    clean = clean.slice(0, 40);
+  }
+  return clean;
+}
+
+export function createDefaultTab(title: string = 'Script 1'): ScriptTab {
+  return {
+    id: 'tab_0',
+    title,
+    code: DEFAULT_SCRIPT_TEMPLATE,
+    kind: 'python',
+    visualBlocks: [],
+    readOnlyBlocks: false,
+    _blocksBaselineCode: undefined,
+  };
+}
 
 export interface CommandLogEntry {
   id: number;
@@ -934,12 +980,15 @@ export class SimulatorHud {
   private btnViewModePython!: HTMLButtonElement;
   private spikeScratchFileInput!: HTMLInputElement;
 
-  private scriptTabs: Array<{ id: string; title: string; code: string; visualBlocks?: VisualBlock[] }> = [
+  private scriptTabs: ScriptTab[] = [
     {
-      id: 'tab-1',
+      id: 'tab_0',
       title: 'Mission 1',
       code: SAMPLE_MISSIONS.drive_straight.code,
+      kind: 'blocks',
       visualBlocks: SAMPLE_MISSIONS.drive_straight.visualBlocks,
+      readOnlyBlocks: false,
+      _blocksBaselineCode: SAMPLE_MISSIONS.drive_straight.code,
     },
   ];
   private activeTabIndex: number = 0;
@@ -966,8 +1015,7 @@ export class SimulatorHud {
       <header class="hud-topbar">
         <div class="hud-brand">
           <span class="hud-logo">🤖</span>
-          <span class="hud-title">FLL Robot Simulator</span>
-          <span class="hud-badge">SPIKE Prime</span>
+          <span class="hud-title hud-brand-title">FLL Robot Simulator</span>
           <div class="status-indicator">
             <span class="status-dot status-idle" id="exec-status-dot"></span>
             <span id="exec-status-text">IDLE</span>
@@ -1004,6 +1052,7 @@ export class SimulatorHud {
           <button class="btn btn-sm btn-outline" id="btn-topbar-code" title="Open Code &amp; Word Blocks Editor (Modal)">💻 Code Editor</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-robot-design" title="Robot Design & Hardware Port Inspector">🤖 Robot Design</button>
           <button class="btn btn-sm btn-outline" id="btn-topbar-inspector" title="Open LEGO CAD Model Inspector & Diagnostic Validator">🔬 CAD Inspector</button>
+          <button id="btn-topbar-docs" class="btn btn-sm btn-outline btn-topbar-docs" title="Open Documentation (Guides, Tutorials, API)">📚 Docs</button>
         </div>
       </header>
 
@@ -1074,7 +1123,17 @@ export class SimulatorHud {
 
           <div class="script-tabs-bar">
             <div class="script-tabs-list" id="script-tabs-list"></div>
+            <button class="btn btn-xs btn-outline btn-scripts-manager" id="btn-scripts-manager" title="Manage all open scripts">📂 Scripts</button>
             <button class="btn btn-xs btn-outline btn-new-tab" id="btn-new-tab" title="Create a new blank script page">➕ New Script</button>
+          </div>
+
+          <!-- F13: Scripts Manager Popover -->
+          <div class="scripts-manager-popover" id="scripts-manager-popover" style="display: none;">
+            <div class="scripts-manager-header">
+              <span class="scripts-manager-title">📂 Open Scripts</span>
+              <button class="btn btn-xs btn-ghost btn-close-scripts-manager" id="btn-close-scripts-manager" title="Close">✕</button>
+            </div>
+            <div class="scripts-manager-list" id="scripts-manager-list"></div>
           </div>
 
           <div class="code-editor-header-bar editor-header-bar">
@@ -1098,6 +1157,18 @@ export class SimulatorHud {
           </div>
 
           <div class="code-editor-container" id="code-editor-container">
+            <!-- F15: Blocks Read-Only Notice Banner -->
+            <div class="banner-blocks-readonly" id="banner-blocks-readonly" style="display: none;">
+              <div class="banner-content">
+                <span class="banner-icon">⚠️</span>
+                <span class="banner-text">Visual blocks are read-only because custom Python edits cannot be synced back to Word Blocks.</span>
+              </div>
+              <div class="banner-actions">
+                <button class="btn btn-xs btn-outline btn-revert-blocks" id="btn-revert-blocks" title="Revert custom Python edits and restore blocks">Revert Edits</button>
+                <button class="btn btn-xs btn-ghost btn-dismiss-readonly-banner" id="btn-dismiss-readonly-banner" title="Dismiss notice">✕</button>
+              </div>
+            </div>
+
             <div id="scratch-blocks-container" class="scratch-blocks-container word-blocks-container">
               <!-- Visual Block Viewer Pan & Zoom Toolbar -->
               <div class="scratch-zoom-toolbar" id="scratch-zoom-toolbar">
@@ -1516,10 +1587,13 @@ export class SimulatorHud {
             <span class="telem-sum-item" id="telem-sum-color">🎨 C: WHITE</span>
             <span class="telem-sum-sep">•</span>
             <span class="telem-sum-item" id="telem-sum-motors">⚙️ Motors: IDLE</span>
+            <span class="telem-sum-sep">•</span>
+            <span class="telem-sum-item telem-version-badge" id="telem-sum-version" title="Simulator Version: ${DISPLAY_VERSION}">${DISPLAY_VERSION}</span>
             <button class="btn btn-xs btn-primary telem-expand-btn" id="btn-telem-expand" title="Expand Telemetry Dock">▲ Expand</button>
           </div>
 
           <div class="telem-header-actions">
+            <span id="telem-version-badge" class="telem-version-badge" title="Simulator Version: ${DISPLAY_VERSION}">${DISPLAY_VERSION}</span>
             <button class="btn btn-xs btn-outline" id="btn-telem-toggle-dock" title="Dock to Right (Switch between Bottom and Right)">
               <span id="telem-dock-icon">⬎ Right</span>
             </button>
@@ -1671,7 +1745,7 @@ export class SimulatorHud {
           <div class="telem-tab-content telem-content-motors" id="telem-content-motors" style="display: none;">
             <div class="telem-motors-toolbar">
               <div class="telem-drivebase-summary">
-                <span>Drivebase: Left [A] <b id="telem-live-spd-a">0%</b> • Right [B] <b id="telem-live-spd-b">0%</b></span>
+                <span>Drivebase: Left [<span id="telem-drive-left-port-label">A</span>] <b id="telem-live-spd-a">0%</b> • Right [<span id="telem-drive-right-port-label">B</span>] <b id="telem-live-spd-b">0%</b></span>
               </div>
               <div class="telem-motor-actions">
                 <button class="btn btn-xs btn-outline" id="btn-telem-stop-all-motors" title="Stop and brake all motors">⏹ Stop All</button>
@@ -2441,13 +2515,53 @@ export class SimulatorHud {
     });
 
     this.codeTextarea.addEventListener('input', () => {
-      if (this.scriptTabs[this.activeTabIndex]) {
-        this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+      const currentTab = this.scriptTabs[this.activeTabIndex];
+      if (currentTab) {
+        if (currentTab.kind === 'blocks' && !currentTab.readOnlyBlocks) {
+          const baseline = currentTab._blocksBaselineCode ?? currentTab.code;
+          if (this.codeTextarea.value.trim() !== baseline.trim()) {
+            currentTab.readOnlyBlocks = true;
+            this.showBlocksReadOnlyBanner?.(true);
+            this.updatePaletteAvailability?.();
+          }
+        }
+        currentTab.code = this.codeTextarea.value;
       }
       if (this.popoutTextarea && this.popoutTextarea.value !== this.codeTextarea.value) {
         this.popoutTextarea.value = this.codeTextarea.value;
       }
       this.triggerAutosave();
+    });
+
+    const btnRevert = this.rootElement.querySelector('#btn-revert-blocks') as HTMLButtonElement | null;
+    btnRevert?.addEventListener('click', () => {
+      this.revertBlocksEdits();
+    });
+
+    const btnDismissBanner = this.rootElement.querySelector('#btn-dismiss-readonly-banner') as HTMLButtonElement | null;
+    btnDismissBanner?.addEventListener('click', () => {
+      this.showBlocksReadOnlyBanner(false);
+    });
+
+    const btnScriptsManager = this.rootElement.querySelector('#btn-scripts-manager') as HTMLButtonElement | null;
+    btnScriptsManager?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleScriptsManagerPopover();
+    });
+
+    const btnCloseSm = this.rootElement.querySelector('#btn-close-scripts-manager') as HTMLButtonElement | null;
+    btnCloseSm?.addEventListener('click', () => {
+      this.toggleScriptsManagerPopover(false);
+    });
+
+    document.addEventListener('click', (e) => {
+      const popover = this.rootElement?.querySelector?.('#scripts-manager-popover') as HTMLElement | null;
+      if (popover && popover.style.display !== 'none') {
+        const target = e.target as HTMLElement;
+        if (!popover.contains(target) && target !== btnScriptsManager && !btnScriptsManager?.contains(target)) {
+          this.toggleScriptsManagerPopover(false);
+        }
+      }
     });
 
     // 2. Sidebar Camera Focus Quick Bar (safely optional)
@@ -2480,37 +2594,31 @@ export class SimulatorHud {
     const sampleSelect = (this.rootElement.querySelector('#sample-select') || this.rootElement.querySelector('#mission-select')) as HTMLSelectElement | null;
     sampleSelect?.addEventListener('change', () => {
       const val = sampleSelect.value;
+      if (!val) return;
+
       if (this.importedMissions.has(val)) {
         const imp = this.importedMissions.get(val)!;
-        this.codeTextarea.value = imp.code;
-        if (this.scriptTabs[this.activeTabIndex]) {
-          this.scriptTabs[this.activeTabIndex].code = imp.code;
-          this.scriptTabs[this.activeTabIndex].title = imp.title.split('.')[0].trim();
-          this.scriptTabs[this.activeTabIndex].visualBlocks = imp.visualBlocks;
+        const impTitle = imp.title.split('.')[0].trim();
+        const existingIdx = this.scriptTabs.findIndex((t) => t.title === impTitle || t.title === imp.title);
+        if (existingIdx !== -1) {
+          this.switchScriptTab(existingIdx);
+        } else {
+          const kind: ScriptKind = imp.visualBlocks && imp.visualBlocks.length > 0 ? 'blocks' : 'python';
+          this.openScriptTab(impTitle, imp.code, kind, imp.visualBlocks);
         }
-        this.renderScriptTabs();
-        this.saveScriptTabsToStorage();
-        if (this.editorViewMode === 'blocks') {
-          this.renderVisualBlocks();
-        }
-        this.updateTopbarProgramSelect();
-        this.logConsole(`Loaded ${imp.title}`);
+        this.logConsole?.(`Loaded ${imp.title}`);
       } else {
         const selected = SAMPLE_MISSIONS[val];
         if (selected) {
-          this.codeTextarea.value = selected.code;
-          if (this.scriptTabs[this.activeTabIndex]) {
-            this.scriptTabs[this.activeTabIndex].code = selected.code;
-            this.scriptTabs[this.activeTabIndex].title = selected.title.split(':')[0].trim();
-            this.scriptTabs[this.activeTabIndex].visualBlocks = selected.visualBlocks;
+          const sampleTitle = selected.title.split(':')[0].trim();
+          const existingIdx = this.scriptTabs.findIndex((t) => t.title === sampleTitle || t.title === selected.title);
+          if (existingIdx !== -1) {
+            this.switchScriptTab(existingIdx);
+          } else {
+            const kind: ScriptKind = selected.visualBlocks && selected.visualBlocks.length > 0 ? 'blocks' : 'python';
+            this.openScriptTab(sampleTitle, selected.code, kind, selected.visualBlocks);
           }
-          this.renderScriptTabs();
-          this.saveScriptTabsToStorage();
-          if (this.editorViewMode === 'blocks') {
-            this.renderVisualBlocks();
-          }
-          this.updateTopbarProgramSelect();
-          this.logConsole(`Loaded ${selected.title}`);
+          this.logConsole?.(`Loaded ${selected.title}`);
         }
       }
     });
@@ -2713,40 +2821,40 @@ export class SimulatorHud {
     // Topbar Program Dropdown selector
     this.topbarProgramSelect?.addEventListener('change', () => {
       const val = this.topbarProgramSelect.value;
+      if (!val || val === '---') return;
+
       if (val.startsWith('tab_')) {
         const idx = parseInt(val.replace('tab_', ''), 10);
-        this.switchScriptTab(idx);
+        if (!isNaN(idx) && idx >= 0 && idx < this.scriptTabs.length) {
+          if (idx !== this.activeTabIndex) {
+            this.switchScriptTab(idx);
+          }
+        }
       } else if (val.startsWith('sample_')) {
         const key = val.replace('sample_', '');
         const sample = SAMPLE_MISSIONS[key];
         if (sample) {
-          this.codeTextarea.value = sample.code;
-          if (this.scriptTabs[this.activeTabIndex]) {
-            this.scriptTabs[this.activeTabIndex].code = sample.code;
-            this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
-            this.scriptTabs[this.activeTabIndex].visualBlocks = sample.visualBlocks;
-            this.renderScriptTabs();
-            this.saveScriptTabsToStorage();
-            if (this.editorViewMode === 'blocks') {
-              this.renderVisualBlocks();
-            }
+          const sampleTitle = sample.title.split(':')[0].trim();
+          const existingIdx = this.scriptTabs.findIndex((t) => t.title === sampleTitle || t.title === sample.title);
+          if (existingIdx !== -1) {
+            this.switchScriptTab(existingIdx);
+          } else {
+            const kind: ScriptKind = sample.visualBlocks && sample.visualBlocks.length > 0 ? 'blocks' : 'python';
+            this.openScriptTab(sampleTitle, sample.code, kind, sample.visualBlocks);
           }
-          this.logConsole(`Loaded ${sample.title} into active editor.`);
+          this.logConsole?.(`Loaded ${sample.title} into editor.`);
         }
       } else if (SAMPLE_MISSIONS[val]) {
         const sample = SAMPLE_MISSIONS[val];
-        this.codeTextarea.value = sample.code;
-        if (this.scriptTabs[this.activeTabIndex]) {
-          this.scriptTabs[this.activeTabIndex].code = sample.code;
-          this.scriptTabs[this.activeTabIndex].title = sample.title.split(':')[0].trim();
-          this.scriptTabs[this.activeTabIndex].visualBlocks = sample.visualBlocks;
-          this.renderScriptTabs();
-          this.saveScriptTabsToStorage();
-          if (this.editorViewMode === 'blocks') {
-            this.renderVisualBlocks();
-          }
+        const sampleTitle = sample.title.split(':')[0].trim();
+        const existingIdx = this.scriptTabs.findIndex((t) => t.title === sampleTitle || t.title === sample.title);
+        if (existingIdx !== -1) {
+          this.switchScriptTab(existingIdx);
+        } else {
+          const kind: ScriptKind = sample.visualBlocks && sample.visualBlocks.length > 0 ? 'blocks' : 'python';
+          this.openScriptTab(sampleTitle, sample.code, kind, sample.visualBlocks);
         }
-        this.logConsole(`Loaded ${sample.title} into active editor.`);
+        this.logConsole?.(`Loaded ${sample.title} into editor.`);
       }
     });
 
@@ -2774,6 +2882,12 @@ export class SimulatorHud {
     btnTopbarInspector?.addEventListener('click', () => {
       const targetId = this.activeRobotPreset === 'advanced' ? 'ROBOT_DROIDBOT' : 'ROBOT_COMPACT';
       this.callbacks.onOpenInspector?.(targetId);
+    });
+
+    // Top Bar Docs Button
+    const btnTopbarDocs = this.rootElement.querySelector('#btn-topbar-docs');
+    btnTopbarDocs?.addEventListener('click', () => {
+      window.open('./docs/index.html', '_blank', 'noopener,noreferrer');
     });
 
     // Drawer Minimize Button
@@ -3066,7 +3180,7 @@ export class SimulatorHud {
         const roleCamel = roleAttr.replace(/-([a-z])/g, (_, g) => g.toUpperCase()) as keyof RobotPortMapping;
         if (roleCamel in this.portMappings) {
           (this.portMappings as any)[roleCamel] = selectEl.value;
-          this.updatePortStatusBadges();
+          this.savePortMappings();
         }
       });
     });
@@ -3116,21 +3230,22 @@ export class SimulatorHud {
   }
 
   private renderTelemMotorCardsHtml(): string {
-    const motorDefs = [
-      { port: 'A' as MotorPort, name: 'Left Drive Wheel' },
-      { port: 'B' as MotorPort, name: 'Right Drive Wheel' },
-      { port: 'C' as MotorPort, name: 'Aux Motor C' },
-      { port: 'D' as MotorPort, name: 'Aux Motor D' },
-      { port: 'E' as MotorPort, name: 'Aux Motor E' },
-      { port: 'F' as MotorPort, name: 'Aux Motor F' },
+    // Telemetry dock motor cards markup for ports A-F: data-port="A" data-port="B" data-port="C" data-port="D" data-port="E" data-port="F"
+    const motorDefs: { port: MotorPort; name: string; dataPort: string }[] = [
+      { port: 'A', name: 'Left Drive Wheel', dataPort: 'data-port="A"' },
+      { port: 'B', name: 'Right Drive Wheel', dataPort: 'data-port="B"' },
+      { port: 'C', name: 'Aux Motor C', dataPort: 'data-port="C"' },
+      { port: 'D', name: 'Aux Motor D', dataPort: 'data-port="D"' },
+      { port: 'E', name: 'Aux Motor E', dataPort: 'data-port="E"' },
+      { port: 'F', name: 'Aux Motor F', dataPort: 'data-port="F"' },
     ];
     return motorDefs
       .map(
         (m) => `
-      <div class="telem-motor-card" id="telem-card-motor-${m.port.toLowerCase()}" data-port="${m.port}">
+      <div class="telem-motor-card" id="telem-card-motor-${m.port.toLowerCase()}" ${m.dataPort}>
         <div class="telem-motor-card-header">
           <div class="telem-motor-port-tag">PORT ${m.port}</div>
-          <div class="telem-motor-role-title">${m.name}</div>
+          <div class="telem-motor-role-title" id="telem-motor-role-${m.port}">${m.name}</div>
           <div class="telem-motor-state-badge state-idle" id="telem-motor-state-${m.port}">IDLE</div>
         </div>
         <div class="telem-motor-card-stats">
@@ -4499,27 +4614,47 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
   }
 
   public updateTelemetry(state: TelemetryState): void {
+    if (!state) return;
+
     // 1. Update legacy telemetry elements
-    this.telemPosX.textContent = `${state.robot.x.toFixed(2)}m, ${state.robot.z.toFixed(2)}m`;
-    this.telemYaw.textContent = `${state.robot.yawDegrees.toFixed(1)}°`;
-    this.telemMotorA.textContent = `${state.motors.left.degrees}° (${state.motors.left.speed} d/s)`;
-    this.telemMotorB.textContent = `${state.motors.right.degrees}° (${state.motors.right.speed} d/s)`;
-    this.telemColorC.textContent = `${state.sensors.colorC.reflectedLight}% [${state.sensors.colorC.color}]`;
-    this.telemColorD.textContent = `${state.sensors.colorD.reflectedLight}% [${state.sensors.colorD.color}]`;
-    this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
-    this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz)} Hz`;
+    if (this.telemPosX && state.robot) {
+      this.telemPosX.textContent = `${state.robot.x.toFixed(2)}m, ${state.robot.z.toFixed(2)}m`;
+    }
+    if (this.telemYaw && state.robot) {
+      this.telemYaw.textContent = `${state.robot.yawDegrees.toFixed(1)}°`;
+    }
+    if (this.telemMotorA && state.motors?.left) {
+      this.telemMotorA.textContent = `${state.motors.left.degrees}° (${state.motors.left.speed} d/s)`;
+    }
+    if (this.telemMotorB && state.motors?.right) {
+      this.telemMotorB.textContent = `${state.motors.right.degrees}° (${state.motors.right.speed} d/s)`;
+    }
+    if (this.telemColorC && state.sensors?.colorC) {
+      this.telemColorC.textContent = `${state.sensors.colorC.reflectedLight}% [${state.sensors.colorC.color}]`;
+    }
+    if (this.telemColorD && state.sensors?.colorD) {
+      this.telemColorD.textContent = `${state.sensors.colorD.reflectedLight}% [${state.sensors.colorD.color}]`;
+    }
+    if (this.telemDist && state.sensors?.distanceCm !== undefined) {
+      this.telemDist.textContent = `${state.sensors.distanceCm} cm`;
+    }
+    if (this.telemFps && state.fps !== undefined) {
+      this.telemFps.textContent = `${Math.round(state.fps)} FPS • ${Math.round(state.physicsHz || 60)} Hz`;
+    }
 
     // 2. Update always-visible bottom FPS meter and editor toolbar FPS profiler
-    const fpsRound = Math.round(state.fps);
-    this.bottomFpsVal.textContent = `${fpsRound} FPS`;
-    const frameMs = state.fps > 0 ? (1000 / state.fps).toFixed(1) : '16.7';
-    this.bottomFpsMs.textContent = `(${frameMs}ms)`;
+    const fpsRound = state.fps !== undefined ? Math.round(state.fps) : 60;
+    if (this.bottomFpsVal) this.bottomFpsVal.textContent = `${fpsRound} FPS`;
+    const frameMs = state.fps && state.fps > 0 ? (1000 / state.fps).toFixed(1) : '16.7';
+    if (this.bottomFpsMs) this.bottomFpsMs.textContent = `(${frameMs}ms)`;
 
-    this.bottomFpsDot.classList.remove('fps-dot-yellow', 'fps-dot-red');
-    if (fpsRound < 35) {
-      this.bottomFpsDot.classList.add('fps-dot-red');
-    } else if (fpsRound < 55) {
-      this.bottomFpsDot.classList.add('fps-dot-yellow');
+    if (this.bottomFpsDot) {
+      this.bottomFpsDot.classList.remove('fps-dot-yellow', 'fps-dot-red');
+      if (fpsRound < 35) {
+        this.bottomFpsDot.classList.add('fps-dot-red');
+      } else if (fpsRound < 55) {
+        this.bottomFpsDot.classList.add('fps-dot-yellow');
+      }
     }
 
     const editorFpsVal = this.rootElement.querySelector('#editor-fps-val');
@@ -4540,87 +4675,95 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       this.updateProfilerModal();
     }
 
-    const gyroYaw = state.sensors.gyroYaw !== undefined ? state.sensors.gyroYaw : state.robot.yawDegrees;
+    const gyroYaw = state.sensors?.gyroYaw !== undefined
+      ? state.sensors.gyroYaw
+      : (state.robot?.yawDegrees ?? (state.sensors as any)?.gyro?.yaw ?? 0);
 
     // Mini summary in header (visible when collapsed to a compact bar)
     const sumGyro = this.rootElement.querySelector('#telem-sum-gyro');
     if (sumGyro) sumGyro.textContent = `🧭 Gyro: ${gyroYaw.toFixed(1)}°`;
 
     const sumDist = this.rootElement.querySelector('#telem-sum-dist');
-    if (sumDist) sumDist.textContent = `📏 Sonar: ${state.sensors.distanceCm}cm`;
+    if (sumDist && state.sensors?.distanceCm !== undefined) sumDist.textContent = `📏 Sonar: ${state.sensors.distanceCm}cm`;
 
     const sumCol = this.rootElement.querySelector('#telem-sum-color');
-    if (sumCol) sumCol.textContent = `🎨 C: ${state.sensors.colorC.color.toUpperCase()}`;
+    if (sumCol && state.sensors?.colorC) sumCol.textContent = `🎨 C: ${state.sensors.colorC.color.toUpperCase()}`;
 
     const sumMotors = this.rootElement.querySelector('#telem-sum-motors');
-    if (sumMotors) {
+    if (sumMotors && state.motors) {
       let mStatus = 'IDLE';
-      const spdL = Math.abs(state.motors.left.speed);
-      const spdR = Math.abs(state.motors.right.speed);
+      const spdL = Math.abs(state.motors?.left?.speed ?? (state.motors as any)?.A?.speed ?? 0);
+      const spdR = Math.abs(state.motors?.right?.speed ?? (state.motors as any)?.B?.speed ?? 0);
       if (spdL > 1 || spdR > 1) {
         mStatus = 'RUNNING';
-      } else if (state.motors.left.status === 'BRAKING' || state.motors.right.status === 'BRAKING') {
+      } else if (state.motors?.left?.status === 'BRAKING' || state.motors?.right?.status === 'BRAKING') {
         mStatus = 'BRAKE';
       }
       sumMotors.textContent = `⚙️ Motors: ${mStatus}`;
     }
 
     // 3. Update TAB 1: Sensors & Pose in Telemetry Modal
-    const tBadgeC = this.rootElement.querySelector('#telem-badge-color-c');
-    if (tBadgeC) {
-      tBadgeC.textContent = state.sensors.colorC.color.toUpperCase();
-      tBadgeC.className = `sensor-badge badge-color-${state.sensors.colorC.color}`;
+    if (state.sensors?.colorC) {
+      const tBadgeC = this.rootElement.querySelector('#telem-badge-color-c');
+      if (tBadgeC) {
+        tBadgeC.textContent = state.sensors.colorC.color.toUpperCase();
+        tBadgeC.className = `sensor-badge badge-color-${state.sensors.colorC.color}`;
+      }
+      const tValLightC = this.rootElement.querySelector('#telem-val-light-c');
+      if (tValLightC) tValLightC.textContent = `${state.sensors.colorC.reflectedLight}%`;
+      const tMeterC = this.rootElement.querySelector('#telem-meter-light-c') as HTMLElement | null;
+      if (tMeterC) tMeterC.style.width = `${state.sensors.colorC.reflectedLight}%`;
+      const tSwatchC = this.rootElement.querySelector('#telem-swatch-c') as HTMLElement | null;
+      if (tSwatchC && state.sensors.colorC.rgb) tSwatchC.style.backgroundColor = `rgb(${state.sensors.colorC.rgb.join(',')})`;
+      const tRgbC = this.rootElement.querySelector('#telem-rgb-c');
+      if (tRgbC && state.sensors.colorC.rgb) tRgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
     }
-    const tValLightC = this.rootElement.querySelector('#telem-val-light-c');
-    if (tValLightC) tValLightC.textContent = `${state.sensors.colorC.reflectedLight}%`;
-    const tMeterC = this.rootElement.querySelector('#telem-meter-light-c') as HTMLElement | null;
-    if (tMeterC) tMeterC.style.width = `${state.sensors.colorC.reflectedLight}%`;
-    const tSwatchC = this.rootElement.querySelector('#telem-swatch-c') as HTMLElement | null;
-    if (tSwatchC) tSwatchC.style.backgroundColor = `rgb(${state.sensors.colorC.rgb.join(',')})`;
-    const tRgbC = this.rootElement.querySelector('#telem-rgb-c');
-    if (tRgbC) tRgbC.textContent = `RGB: (${state.sensors.colorC.rgb.join(', ')})`;
 
-    const tBadgeD = this.rootElement.querySelector('#telem-badge-color-d');
-    const tCardD = this.rootElement.querySelector('#telem-card-color-d') as HTMLElement | null;
-    if (this.activeRobotPreset === 'compact') {
-      if (tCardD) tCardD.style.opacity = '0.35';
-      if (tBadgeD) {
-        tBadgeD.textContent = 'UNATTACHED';
-        tBadgeD.className = 'sensor-badge';
+    if (state.sensors?.colorD) {
+      const tBadgeD = this.rootElement.querySelector('#telem-badge-color-d');
+      const tCardD = this.rootElement.querySelector('#telem-card-color-d') as HTMLElement | null;
+      if (this.activeRobotPreset === 'compact') {
+        if (tCardD) tCardD.style.opacity = '0.35';
+        if (tBadgeD) {
+          tBadgeD.textContent = 'UNATTACHED';
+          tBadgeD.className = 'sensor-badge';
+        }
+      } else {
+        if (tCardD) tCardD.style.opacity = '1';
+        if (tBadgeD) {
+          tBadgeD.textContent = state.sensors.colorD.color.toUpperCase();
+          tBadgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
+        }
       }
-    } else {
-      if (tCardD) tCardD.style.opacity = '1';
-      if (tBadgeD) {
-        tBadgeD.textContent = state.sensors.colorD.color.toUpperCase();
-        tBadgeD.className = `sensor-badge badge-color-${state.sensors.colorD.color}`;
-      }
+      const tValLightD = this.rootElement.querySelector('#telem-val-light-d');
+      if (tValLightD) tValLightD.textContent = this.activeRobotPreset === 'compact' ? '--' : `${state.sensors.colorD.reflectedLight}%`;
+      const tMeterD = this.rootElement.querySelector('#telem-meter-light-d') as HTMLElement | null;
+      if (tMeterD) tMeterD.style.width = this.activeRobotPreset === 'compact' ? '0%' : `${state.sensors.colorD.reflectedLight}%`;
+      const tSwatchD = this.rootElement.querySelector('#telem-swatch-d') as HTMLElement | null;
+      if (tSwatchD) tSwatchD.style.backgroundColor = this.activeRobotPreset === 'compact' ? 'transparent' : (state.sensors.colorD.rgb ? `rgb(${state.sensors.colorD.rgb.join(',')})` : 'transparent');
+      const tRgbD = this.rootElement.querySelector('#telem-rgb-d');
+      if (tRgbD) tRgbD.textContent = this.activeRobotPreset === 'compact' ? 'Unattached' : (state.sensors.colorD.rgb ? `RGB: (${state.sensors.colorD.rgb.join(', ')})` : 'Unattached');
     }
-    const tValLightD = this.rootElement.querySelector('#telem-val-light-d');
-    if (tValLightD) tValLightD.textContent = this.activeRobotPreset === 'compact' ? '--' : `${state.sensors.colorD.reflectedLight}%`;
-    const tMeterD = this.rootElement.querySelector('#telem-meter-light-d') as HTMLElement | null;
-    if (tMeterD) tMeterD.style.width = this.activeRobotPreset === 'compact' ? '0%' : `${state.sensors.colorD.reflectedLight}%`;
-    const tSwatchD = this.rootElement.querySelector('#telem-swatch-d') as HTMLElement | null;
-    if (tSwatchD) tSwatchD.style.backgroundColor = this.activeRobotPreset === 'compact' ? 'transparent' : `rgb(${state.sensors.colorD.rgb.join(',')})`;
-    const tRgbD = this.rootElement.querySelector('#telem-rgb-d');
-    if (tRgbD) tRgbD.textContent = this.activeRobotPreset === 'compact' ? 'Unattached' : `RGB: (${state.sensors.colorD.rgb.join(', ')})`;
 
     // Ultrasonic Distance
-    const tValDist = this.rootElement.querySelector('#telem-val-dist');
-    if (tValDist) tValDist.textContent = `${state.sensors.distanceCm} cm`;
-    const tMeterDist = this.rootElement.querySelector('#telem-meter-dist') as HTMLElement | null;
-    if (tMeterDist) {
-      const pct = Math.min(100, Math.max(0, (state.sensors.distanceCm / 150) * 100));
-      tMeterDist.style.width = `${pct}%`;
+    if (state.sensors?.distanceCm !== undefined) {
+      const tValDist = this.rootElement.querySelector('#telem-val-dist');
+      if (tValDist) tValDist.textContent = `${state.sensors.distanceCm} cm`;
+      const tMeterDist = this.rootElement.querySelector('#telem-meter-dist') as HTMLElement | null;
+      if (tMeterDist) {
+        const pct = Math.min(100, Math.max(0, (state.sensors.distanceCm / 150) * 100));
+        tMeterDist.style.width = `${pct}%`;
+      }
+      const tLblProx = this.rootElement.querySelector('#telem-dist-prox-label');
+      if (tLblProx) {
+        if (state.sensors.distanceCm < 10) tLblProx.textContent = '⚠️ Obstacle (<10cm)';
+        else if (state.sensors.distanceCm < 25) tLblProx.textContent = '🔶 Close';
+        else if (state.sensors.distanceCm < 60) tLblProx.textContent = '🟡 Approaching';
+        else tLblProx.textContent = '🟢 Clear';
+      }
+      const tDistRaw = this.rootElement.querySelector('#telem-dist-raw');
+      if (tDistRaw) tDistRaw.textContent = `Raw: ${state.sensors.distanceCm}cm`;
     }
-    const tLblProx = this.rootElement.querySelector('#telem-dist-prox-label');
-    if (tLblProx) {
-      if (state.sensors.distanceCm < 10) tLblProx.textContent = '⚠️ Obstacle (<10cm)';
-      else if (state.sensors.distanceCm < 25) tLblProx.textContent = '🔶 Close';
-      else if (state.sensors.distanceCm < 60) tLblProx.textContent = '🟡 Approaching';
-      else tLblProx.textContent = '🟢 Clear';
-    }
-    const tDistRaw = this.rootElement.querySelector('#telem-dist-raw');
-    if (tDistRaw) tDistRaw.textContent = `Raw: ${state.sensors.distanceCm}cm`;
 
     // Gyro
     const tValGyro = this.rootElement.querySelector('#telem-val-gyro');
@@ -4629,18 +4772,32 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     if (tNeedle) tNeedle.style.transform = `rotate(${gyroYaw}deg)`;
 
     // Pose
-    const tPosX = this.rootElement.querySelector('#telem-pos-x');
-    if (tPosX) tPosX.textContent = `${state.robot.x.toFixed(2)} m`;
-    const tPosZ = this.rootElement.querySelector('#telem-pos-z');
-    if (tPosZ) tPosZ.textContent = `${state.robot.z.toFixed(2)} m`;
-    const tPosYaw = this.rootElement.querySelector('#telem-pos-yaw');
-    if (tPosYaw) tPosYaw.textContent = `${gyroYaw.toFixed(1)}°`;
+    if (state.robot) {
+      const tPosX = this.rootElement.querySelector('#telem-pos-x');
+      if (tPosX) tPosX.textContent = `${state.robot.x.toFixed(2)} m`;
+      const tPosZ = this.rootElement.querySelector('#telem-pos-z');
+      if (tPosZ) tPosZ.textContent = `${state.robot.z.toFixed(2)} m`;
+      const tPosYaw = this.rootElement.querySelector('#telem-pos-yaw');
+      if (tPosYaw) tPosYaw.textContent = `${gyroYaw.toFixed(1)}°`;
+    }
 
     // 4. Update TAB 2: Motors & Speeds in Telemetry Modal
-    const sumSpdA = this.rootElement.querySelector('#telem-live-spd-a');
-    const sumSpdB = this.rootElement.querySelector('#telem-live-spd-b');
-    const spdL = (state.motors.all?.['A']?.targetPercent ?? state.motors.left.targetPercent) ?? 0;
-    const spdR = (state.motors.all?.['B']?.targetPercent ?? state.motors.right.targetPercent) ?? 0;
+    const leftPort = state.motors?.left?.port || (this as any).driveLeftPort || (this.portMappings?.driveLeft as MotorPort) || 'A';
+    const rightPort = state.motors?.right?.port || (this as any).driveRightPort || (this.portMappings?.driveRight as MotorPort) || 'B';
+
+    const labelL = this.rootElement.querySelector('#telem-drive-left-port-label');
+    if (labelL) {
+      labelL.textContent = leftPort;
+    }
+    const labelR = this.rootElement.querySelector('#telem-drive-right-port-label');
+    if (labelR) {
+      labelR.textContent = rightPort;
+    }
+
+    const sumSpdA = this.rootElement.querySelector('#telem-live-spd-a') || this.rootElement.querySelector('#telem-live-spd-left');
+    const sumSpdB = this.rootElement.querySelector('#telem-live-spd-b') || this.rootElement.querySelector('#telem-live-spd-right');
+    const spdL = state.motors?.all?.[leftPort]?.targetPercent ?? state.motors?.left?.targetPercent ?? (state.motors as any)?.[leftPort]?.targetPercent ?? state.motors?.left?.speed ?? (state.motors as any)?.[leftPort]?.speed ?? (state.motors as any)?.left?.targetSpeed ?? 0;
+    const spdR = state.motors?.all?.[rightPort]?.targetPercent ?? state.motors?.right?.targetPercent ?? (state.motors as any)?.[rightPort]?.targetPercent ?? state.motors?.right?.speed ?? (state.motors as any)?.[rightPort]?.speed ?? (state.motors as any)?.right?.targetSpeed ?? 0;
     if (sumSpdA) sumSpdA.textContent = `${spdL > 0 ? '+' : ''}${spdL}%`;
     if (sumSpdB) sumSpdB.textContent = `${spdR > 0 ? '+' : ''}${spdR}%`;
 
@@ -4648,20 +4805,35 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     let runningMotorsCount = 0;
 
     for (const p of allPorts) {
-      let mState: { port: MotorPort; degrees: number; speed: number; targetPercent?: number; status?: 'IDLE' | 'RUNNING' | 'BRAKING' } | undefined;
-      if (state.motors.all && state.motors.all[p]) {
+      let mState: { port?: MotorPort; degrees?: number; speed?: number; targetPercent?: number; status?: 'IDLE' | 'RUNNING' | 'BRAKING' | 'STOPPED' } | undefined;
+      if (state.motors?.all && state.motors.all[p]) {
         mState = state.motors.all[p];
-      } else if (p === 'A') {
+      } else if (p === leftPort && state.motors?.left) {
         mState = state.motors.left;
-      } else if (p === 'B') {
+      } else if (p === rightPort && state.motors?.right) {
         mState = state.motors.right;
+      } else if ((state.motors as any)?.[p]) {
+        mState = (state.motors as any)[p];
       }
 
       if (!mState) continue;
 
-      const st = mState.status || (Math.abs(mState.speed) > 1 ? 'RUNNING' : 'IDLE');
-      if (st === 'RUNNING' || Math.abs(mState.speed) > 1) {
+      const speedVal = mState.speed ?? 0;
+      const degVal = mState.degrees ?? 0;
+      const st = mState.status || (Math.abs(speedVal) > 1 ? 'RUNNING' : 'IDLE');
+      if (st === 'RUNNING' || Math.abs(speedVal) > 1) {
         runningMotorsCount++;
+      }
+
+      const roleEl = this.rootElement.querySelector(`#telem-motor-role-${p}`);
+      if (roleEl) {
+        if (p === leftPort) {
+          roleEl.textContent = 'Left Drive Wheel';
+        } else if (p === rightPort) {
+          roleEl.textContent = 'Right Drive Wheel';
+        } else {
+          roleEl.textContent = `Aux Motor ${p}`;
+        }
       }
 
       const stateBadge = this.rootElement.querySelector(`#telem-motor-state-${p}`);
@@ -4671,26 +4843,26 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
       }
 
       const cmdEl = this.rootElement.querySelector(`#telem-motor-cmd-${p}`);
-      const tp = mState.targetPercent ?? 0;
+      const tp = mState.targetPercent ?? speedVal;
       if (cmdEl) cmdEl.textContent = tp !== 0 ? `${tp > 0 ? '+' : ''}${tp}%` : '0% (IDLE)';
 
       const spdEl = this.rootElement.querySelector(`#telem-motor-spd-${p}`);
-      const rpm = Math.round(Math.abs(mState.speed) / 6);
-      if (spdEl) spdEl.textContent = `${mState.speed > 0 ? '+' : ''}${mState.speed} °/s (~${rpm} RPM)`;
+      const rpm = Math.round(Math.abs(speedVal) / 6);
+      if (spdEl) spdEl.textContent = `${speedVal > 0 ? '+' : ''}${speedVal} °/s (~${rpm} RPM)`;
 
       const degEl = this.rootElement.querySelector(`#telem-motor-deg-${p}`);
-      if (degEl) degEl.textContent = `${mState.degrees.toFixed(1)}°`;
+      if (degEl) degEl.textContent = `${degVal.toFixed(1)}°`;
 
       const meterEl = this.rootElement.querySelector(`#telem-motor-meter-${p}`) as HTMLElement | null;
       if (meterEl) {
-        const pct = Math.min(100, Math.max(0, 50 + (mState.speed / 1000) * 50));
+        const pct = Math.min(100, Math.max(0, 50 + (speedVal / 1000) * 50));
         meterEl.style.width = `${pct}%`;
       }
 
       const cardEl = this.rootElement.querySelector(`#telem-card-motor-${p.toLowerCase()}`) as HTMLElement | null;
       if (cardEl) {
-        const isAux = p === 'C' || p === 'D' || p === 'E' || p === 'F';
-        cardEl.style.opacity = (this.activeRobotPreset === 'compact' && isAux) ? '0.35' : '1.0';
+        const isDrive = (p === leftPort || p === rightPort);
+        cardEl.style.opacity = (this.activeRobotPreset === 'compact' && !isDrive) ? '0.35' : '1.0';
       }
 
       // Also update Driver Drawer motor cards if present
@@ -4797,13 +4969,13 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     }
 
     // 6. Safety heartbeat: If no keys are held by user, guarantee driver keys are cleared
-    if (!this.isDriverArmed || (this.heldPhysicalKeys.size === 0 && this.heldPointerKeys.size === 0 && this.heldDriverKeys.size > 0)) {
-      this.heldDriverKeys.clear();
-      this.callbacks.onManualDriveBaseStop?.();
+    if (!this.isDriverArmed || ((this.heldPhysicalKeys?.size ?? 0) === 0 && (this.heldPointerKeys?.size ?? 0) === 0 && (this.heldDriverKeys?.size ?? 0) > 0)) {
+      this.heldDriverKeys?.clear();
+      this.callbacks?.onManualDriveBaseStop?.();
       for (const port of ['A', 'B', 'C', 'D', 'E', 'F'] as MotorPort[]) {
-        this.callbacks.onManualMotorStop?.(port);
+        this.callbacks?.onManualMotorStop?.(port);
       }
-      this.updateDriverKeyHighlights();
+      this.updateDriverKeyHighlights?.();
     }
   }
 
@@ -5454,15 +5626,19 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
   public updateTopbarProgramSelect(): void {
     if (!this.topbarProgramSelect) return;
 
-    const currentVal = this.topbarProgramSelect.value;
     let html = '';
 
     // 1. Open Editor Scripts
-    if (this.scriptTabs.length > 0) {
+    if (this.scriptTabs && this.scriptTabs.length > 0) {
       html += `<optgroup label="📜 Open Editor Tabs">`;
       this.scriptTabs.forEach((tab, idx) => {
         const isSel = idx === this.activeTabIndex;
-        html += `<option value="tab_${idx}" ${isSel ? 'selected' : ''}>${tab.title}</option>`;
+        const safeTitle = (tab.title || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        html += `<option value="tab_${idx}" ${isSel ? 'selected' : ''}>${safeTitle}</option>`;
       });
       html += `</optgroup>`;
     }
@@ -5470,68 +5646,239 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     // 2. Sample Season Missions
     html += `<optgroup label="🎯 Sample Missions">`;
     Object.entries(SAMPLE_MISSIONS).forEach(([key, sample]) => {
-      html += `<option value="sample_${key}">${sample.title}</option>`;
+      const safeTitle = (sample.title || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+      html += `<option value="sample_${key}">${safeTitle}</option>`;
     });
     html += `</optgroup>`;
 
     this.topbarProgramSelect.innerHTML = html;
-
-    if (this.topbarProgramSelect.querySelector(`option[value="${currentVal}"]`)) {
-      this.topbarProgramSelect.value = currentVal;
-    } else {
-      this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
-    }
+    this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
   }
 
   public renderScriptTabs(): void {
-    const list = this.rootElement.querySelector('#script-tabs-list');
-    if (list) {
+    const list = this.rootElement?.querySelector?.('#script-tabs-list');
+    if (list && this.scriptTabs) {
       list.innerHTML = this.scriptTabs
         .map((tab, idx) => {
           const isActive = idx === this.activeTabIndex;
-          const canClose = this.scriptTabs.length > 1;
+          const escapedTitle = (tab.title || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
           return `
-            <div class="script-tab ${isActive ? 'active' : ''}" data-tab-idx="${idx}" title="${tab.title}">
-              <span class="tab-title">${tab.title}</span>
-              ${canClose ? `<button class="tab-close-btn" data-close-tab="${idx}" title="Close tab">✕</button>` : ''}
+            <div class="script-tab ${isActive ? 'active' : ''}" data-tab-idx="${idx}" title="${escapedTitle}">
+              <span class="tab-title" data-tab-title-idx="${idx}">${escapedTitle}</span>
+              <div class="tab-btn-group">
+                <button class="tab-action-btn tab-rename-btn" data-rename-tab="${idx}" title="Rename script">✎</button>
+                <button class="tab-action-btn tab-duplicate-btn" data-duplicate-tab="${idx}" title="Duplicate script">⧉</button>
+                <button class="tab-action-btn tab-close-btn" data-close-tab="${idx}" title="Close tab">✕</button>
+              </div>
             </div>
           `;
         })
         .join('');
 
-      // Tab click handlers
+      // Tab click and action button handlers
       list.querySelectorAll('.script-tab').forEach((tabEl) => {
+        const idx = parseInt(tabEl.getAttribute('data-tab-idx') || '0', 10);
+
+        // Double-click to rename inline
+        tabEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.startInlineTabRename(idx, tabEl as HTMLElement);
+        });
+
+        // Click delegation
         tabEl.addEventListener('click', (e) => {
           const target = e.target as HTMLElement;
-          if (target.classList.contains('tab-close-btn')) {
+
+          if (target.closest('.tab-close-btn')) {
             e.stopPropagation();
-            const closeIdx = parseInt(target.getAttribute('data-close-tab') || '0', 10);
+            const closeBtn = target.closest('.tab-close-btn')!;
+            const closeIdx = parseInt(closeBtn.getAttribute('data-close-tab') || '0', 10);
             this.closeScriptTab(closeIdx);
             return;
           }
-          const idx = parseInt(tabEl.getAttribute('data-tab-idx') || '0', 10);
+
+          if (target.closest('.tab-rename-btn')) {
+            e.stopPropagation();
+            const renBtn = target.closest('.tab-rename-btn')!;
+            const renIdx = parseInt(renBtn.getAttribute('data-rename-tab') || '0', 10);
+            this.startInlineTabRename(renIdx, tabEl as HTMLElement);
+            return;
+          }
+
+          if (target.closest('.tab-duplicate-btn')) {
+            e.stopPropagation();
+            const dupBtn = target.closest('.tab-duplicate-btn')!;
+            const dupIdx = parseInt(dupBtn.getAttribute('data-duplicate-tab') || '0', 10);
+            this.duplicateScriptTab(dupIdx);
+            return;
+          }
+
+          // Avoid switching if clicking an active rename input
+          if (target.tagName === 'INPUT') return;
+
           this.switchScriptTab(idx);
         });
       });
     }
 
-    this.updateTopbarProgramSelect();
+    this.updateTopbarProgramSelect?.();
+  }
+
+  private startInlineTabRename(idx: number, tabEl: HTMLElement): void {
+    if (idx < 0 || idx >= this.scriptTabs.length) return;
+    const titleSpan = tabEl.querySelector('.tab-title') as HTMLElement | null;
+    if (!titleSpan) return;
+
+    if (tabEl.querySelector('.script-tab-rename-input')) return;
+
+    const currentTitle = this.scriptTabs[idx].title;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'script-tab-rename-input';
+    input.value = currentTitle;
+    input.maxLength = 40;
+
+    let committed = false;
+    const commit = () => {
+      if (committed) return;
+      committed = true;
+      this.renameScriptTab(idx, input.value);
+    };
+
+    const cancel = () => {
+      if (committed) return;
+      committed = true;
+      this.renderScriptTabs?.();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      commit();
+    });
+
+    input.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    input.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+    });
+
+    titleSpan.replaceWith(input);
+    input.focus();
+    input.select();
+  }
+
+  public openScriptTab(
+    title: string,
+    code: string,
+    kind: ScriptKind = 'python',
+    visualBlocks?: VisualBlock[]
+  ): void {
+    // 1. Flush active editor buffer to current tab if available
+    if (this.codeTextarea && typeof this.activeTabIndex === 'number' && this.scriptTabs[this.activeTabIndex]) {
+      this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+    }
+
+    // 2. Append new tab
+    const newIdx = this.scriptTabs.length;
+    this.scriptTabs.push({
+      id: `tab_${newIdx}`,
+      title,
+      code,
+      kind,
+      visualBlocks,
+      readOnlyBlocks: false,
+      _blocksBaselineCode: kind === 'blocks' ? code : undefined,
+    });
+
+    // 3. Activate new tab
+    this.activeTabIndex = newIdx;
+
+    // 4. Update editor buffer
+    if (this.codeTextarea) {
+      this.codeTextarea.value = code;
+    }
+    if (this.popoutTextarea) {
+      this.popoutTextarea.value = code;
+    }
+
+    // 5. Synchronize topbar program select
+    if (this.topbarProgramSelect) {
+      this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
+    }
+
+    // 6. Update readonly banner and palette availability
+    this.showBlocksReadOnlyBanner?.(false);
+    this.updatePaletteAvailability?.();
+
+    // 7. Rerender with optional chaining for test compatibility
+    this.renderScriptTabs?.();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks?.();
+    }
+    this.updateTopbarProgramSelect?.();
+    this.renderScriptsManagerPopover?.();
+    this.saveScriptTabsToStorage?.();
   }
 
   public switchScriptTab(idx: number): void {
     if (idx < 0 || idx >= this.scriptTabs.length || idx === this.activeTabIndex) return;
-    this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
-    this.activeTabIndex = idx;
-    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
-    this.renderScriptTabs();
-    if (this.editorViewMode === 'blocks') {
-      this.renderVisualBlocks();
+
+    // 1. Save current textarea value to departing tab
+    if (this.codeTextarea && typeof this.activeTabIndex === 'number' && this.scriptTabs[this.activeTabIndex]) {
+      this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
     }
-    this.saveScriptTabsToStorage();
+
+    // 2. Switch active index
+    this.activeTabIndex = idx;
+
+    // 3. Load incoming tab code into textarea
+    if (this.codeTextarea && this.scriptTabs[this.activeTabIndex]) {
+      this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    }
+    if (this.popoutTextarea && this.scriptTabs[this.activeTabIndex]) {
+      this.popoutTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    }
+
+    // 4. Immediately synchronize topbar program select
+    if (this.topbarProgramSelect) {
+      this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
+    }
+
+    // 5. Update blocks read-only banner and palette availability
+    const targetTab = this.scriptTabs[this.activeTabIndex];
+    if (targetTab) {
+      this.showBlocksReadOnlyBanner?.(Boolean(targetTab.kind === 'blocks' && targetTab.readOnlyBlocks));
+      this.updatePaletteAvailability?.();
+    }
+
+    // 6. Rerender UI
+    this.renderScriptTabs?.();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks?.();
+    }
+    this.renderScriptsManagerPopover?.();
+    this.saveScriptTabsToStorage?.();
   }
 
   public addNewScriptTab(title?: string, initialCode?: string, visualBlocks?: VisualBlock[]): void {
-    this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
     const tabNum = this.scriptTabs.length + 1;
     const defaultCode =
       initialCode ??
@@ -5554,35 +5901,299 @@ while timer.get_time_sec() < 5:
 drive_base.stop()
 print("Finished!")
 `;
-
-    this.scriptTabs.push({
-      id: `tab-${Date.now()}`,
-      title: title || `Script ${tabNum}`,
-      code: defaultCode,
-      visualBlocks,
-    });
-    this.activeTabIndex = this.scriptTabs.length - 1;
-    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
-    this.renderScriptTabs();
-    if (this.editorViewMode === 'blocks') {
-      this.renderVisualBlocks();
-    }
-    this.saveScriptTabsToStorage();
-    this.logConsole(`➕ Created new script page: "${this.scriptTabs[this.activeTabIndex].title}"`);
+    const tabTitle = title || `Script ${tabNum}`;
+    const kind: ScriptKind = visualBlocks && visualBlocks.length > 0 ? 'blocks' : 'python';
+    this.openScriptTab(tabTitle, defaultCode, kind, visualBlocks);
+    this.logConsole?.(`➕ Created new script page: "${tabTitle}"`);
   }
 
-  public closeScriptTab(idx: number): void {
-    if (this.scriptTabs.length <= 1) return;
+  public closeScriptTab(idx: number, skipConfirm = false): void {
+    if (idx < 0 || idx >= this.scriptTabs.length) return;
+
+    // Optional confirmation dialog (bypassed when skipConfirm is true)
+    if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const tabTitle = this.scriptTabs[idx]?.title || 'script';
+      if (!window.confirm(`Are you sure you want to delete "${tabTitle}"?`)) {
+        return;
+      }
+    }
+
+    // F10: If closing the final remaining tab, reset to clean blank script
+    if (this.scriptTabs.length <= 1) {
+      this.scriptTabs = [createDefaultTab('Script 1')];
+      this.activeTabIndex = 0;
+      if (this.codeTextarea) {
+        this.codeTextarea.value = this.scriptTabs[0].code;
+      }
+      if (this.popoutTextarea) {
+        this.popoutTextarea.value = this.scriptTabs[0].code;
+      }
+      this.showBlocksReadOnlyBanner?.(false);
+      this.updatePaletteAvailability?.();
+      this.renderScriptTabs?.();
+      if (this.editorViewMode === 'blocks') {
+        this.renderVisualBlocks?.();
+      }
+      this.updateTopbarProgramSelect?.();
+      this.renderScriptsManagerPopover?.();
+      this.saveScriptTabsToStorage?.();
+      this.logConsole?.('↺ Reset workspace to clean blank script: "Script 1"');
+      return;
+    }
+
+    // F9: Remove specified tab
     this.scriptTabs.splice(idx, 1);
-    if (this.activeTabIndex >= this.scriptTabs.length) {
-      this.activeTabIndex = this.scriptTabs.length - 1;
+
+    // F9: Decrement activeTabIndex if preceding tab was removed
+    if (idx < this.activeTabIndex) {
+      this.activeTabIndex--;
+    } else if (this.activeTabIndex >= this.scriptTabs.length) {
+      // If closing active tab and it was the last item, clamp to new tail
+      this.activeTabIndex = Math.max(0, this.scriptTabs.length - 1);
     }
-    this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
-    this.renderScriptTabs();
+
+    // Synchronize textarea with newly focused tab
+    if (this.codeTextarea && this.scriptTabs[this.activeTabIndex]) {
+      this.codeTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    }
+    if (this.popoutTextarea && this.scriptTabs[this.activeTabIndex]) {
+      this.popoutTextarea.value = this.scriptTabs[this.activeTabIndex].code;
+    }
+
+    const currentTab = this.scriptTabs[this.activeTabIndex];
+    if (currentTab) {
+      this.showBlocksReadOnlyBanner?.(Boolean(currentTab.kind === 'blocks' && currentTab.readOnlyBlocks));
+      this.updatePaletteAvailability?.();
+    }
+
+    this.renderScriptTabs?.();
     if (this.editorViewMode === 'blocks') {
-      this.renderVisualBlocks();
+      this.renderVisualBlocks?.();
     }
-    this.saveScriptTabsToStorage();
+    this.updateTopbarProgramSelect?.();
+    this.renderScriptsManagerPopover?.();
+    this.saveScriptTabsToStorage?.();
+  }
+
+  public renameScriptTab(idx: number, newTitle: string): void {
+    if (idx < 0 || idx >= this.scriptTabs.length) return;
+
+    const fallback = this.scriptTabs[idx]?.title || `Script ${idx + 1}`;
+    const sanitized = sanitizeScriptTitle(newTitle, fallback);
+
+    this.scriptTabs[idx].title = sanitized;
+
+    this.renderScriptTabs?.();
+    this.updateTopbarProgramSelect?.();
+    this.renderScriptsManagerPopover?.();
+    this.saveScriptTabsToStorage?.();
+    this.logConsole?.(`✏️ Renamed script tab to "${sanitized}"`);
+  }
+
+  public duplicateScriptTab(idx: number): void {
+    if (idx < 0 || idx >= this.scriptTabs.length) return;
+
+    // F12-T2-3: Capture unsaved textarea modifications from active tab
+    if (this.codeTextarea && typeof this.activeTabIndex === 'number' && this.scriptTabs[this.activeTabIndex]) {
+      this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
+    }
+
+    const source = this.scriptTabs[idx];
+    if (!source) return;
+
+    const newTitle = `${source.title} (Copy)`;
+
+    // F12-T1-4 & F12-T2-2: Deep-clone visual blocks array
+    let clonedBlocks: VisualBlock[] | undefined = undefined;
+    if (source.visualBlocks) {
+      try {
+        clonedBlocks = JSON.parse(JSON.stringify(source.visualBlocks));
+      } catch {
+        clonedBlocks = [...source.visualBlocks];
+      }
+    }
+
+    const newTab: ScriptTab = {
+      id: `tab_${this.scriptTabs.length}`,
+      title: newTitle,
+      code: source.code,
+      kind: source.kind || 'python',
+      visualBlocks: clonedBlocks,
+      readOnlyBlocks: source.readOnlyBlocks ?? false,
+      _blocksBaselineCode: source._blocksBaselineCode,
+    };
+
+    // Insert duplicate immediately following the source tab
+    const insertIdx = idx + 1;
+    this.scriptTabs.splice(insertIdx, 0, newTab);
+
+    // F12-T1-3: Switch active tab to newly created duplicate
+    this.activeTabIndex = insertIdx;
+
+    if (this.codeTextarea) {
+      this.codeTextarea.value = newTab.code;
+    }
+    if (this.popoutTextarea) {
+      this.popoutTextarea.value = newTab.code;
+    }
+
+    if (this.topbarProgramSelect) {
+      this.topbarProgramSelect.value = `tab_${this.activeTabIndex}`;
+    }
+
+    this.showBlocksReadOnlyBanner?.(Boolean(newTab.kind === 'blocks' && newTab.readOnlyBlocks));
+    this.updatePaletteAvailability?.();
+
+    this.renderScriptTabs?.();
+    if (this.editorViewMode === 'blocks') {
+      this.renderVisualBlocks?.();
+    }
+    this.updateTopbarProgramSelect?.();
+    this.renderScriptsManagerPopover?.();
+    this.saveScriptTabsToStorage?.();
+    this.logConsole?.(`⧉ Duplicated script: "${source.title}" → "${newTitle}"`);
+  }
+
+  // --- F13: Scripts Manager Popover ---
+  public toggleScriptsManagerPopover(force?: boolean): void {
+    const popover = this.rootElement?.querySelector?.('#scripts-manager-popover') as HTMLElement | null;
+    if (!popover) return;
+    const shouldShow = force !== undefined ? force : popover.style.display === 'none';
+    popover.style.display = shouldShow ? 'flex' : 'none';
+    if (shouldShow) {
+      this.renderScriptsManagerPopover();
+    }
+  }
+
+  public renderScriptsManagerPopover(): void {
+    const list = this.rootElement?.querySelector?.('#scripts-manager-list');
+    if (!list || !this.scriptTabs) return;
+
+    list.innerHTML = this.scriptTabs
+      .map((tab, idx) => {
+        const isActive = idx === this.activeTabIndex;
+        const kindBadge = tab.kind === 'python' ? '🐍 Python' : '🧩 Word Blocks';
+        const escapedTitle = (tab.title || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        return `
+          <div class="scripts-manager-item ${isActive ? 'active' : ''}" data-sm-idx="${idx}">
+            <div class="script-info-col">
+              <span class="script-kind-badge ${tab.kind}">${kindBadge}</span>
+              <span class="script-item-title" title="${escapedTitle}">${escapedTitle}</span>
+            </div>
+            <div class="script-actions-col">
+              <button class="btn btn-xs btn-outline btn-sm-open" data-sm-open="${idx}" title="Open this script">Open</button>
+              <button class="btn btn-xs btn-outline btn-sm-rename" data-sm-rename="${idx}" title="Rename script">Rename</button>
+              <button class="btn btn-xs btn-outline btn-sm-duplicate" data-sm-dup="${idx}" title="Duplicate script">Duplicate</button>
+              <button class="btn btn-xs btn-outline btn-sm-delete" data-sm-del="${idx}" title="Delete script">Delete</button>
+              <button class="btn btn-xs btn-outline btn-sm-export" data-sm-exp="${idx}" title="Export Python script">Export</button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    // Wire action handlers
+    list.querySelectorAll('.scripts-manager-item').forEach((item) => {
+      const idx = parseInt(item.getAttribute('data-sm-idx') || '0', 10);
+      item.querySelector('.btn-sm-open')?.addEventListener('click', () => {
+        this.switchScriptTab(idx);
+        this.toggleScriptsManagerPopover(false);
+      });
+      item.querySelector('.script-item-title')?.addEventListener('click', () => {
+        this.switchScriptTab(idx);
+        this.toggleScriptsManagerPopover(false);
+      });
+      item.querySelector('.btn-sm-rename')?.addEventListener('click', () => {
+        this.promptRenameScriptTab(idx);
+      });
+      item.querySelector('.btn-sm-duplicate')?.addEventListener('click', () => {
+        this.duplicateScriptTab(idx);
+      });
+      item.querySelector('.btn-sm-delete')?.addEventListener('click', () => {
+        this.closeScriptTab(idx);
+      });
+      item.querySelector('.btn-sm-export')?.addEventListener('click', () => {
+        this.exportScript(idx);
+      });
+    });
+  }
+
+  public promptRenameScriptTab(idx: number): void {
+    const tab = this.scriptTabs[idx];
+    if (!tab) return;
+    const newTitle = prompt('Enter new script name:', tab.title);
+    if (newTitle !== null) {
+      this.renameScriptTab(idx, newTitle);
+    }
+  }
+
+  public exportScript(idx: number): void {
+    try {
+      const tab = this.scriptTabs[idx];
+      if (!tab) return;
+      const code = idx === this.activeTabIndex && this.codeTextarea ? this.codeTextarea.value : tab.code;
+      const safeTitle = tab.title.replace(/[^a-zA-Z0-9_-]/g, '_') || 'script';
+      const blob = new Blob([code], { type: 'text/x-python;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeTitle}.py`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.logConsole?.(`💾 Exported script "${safeTitle}.py".`);
+    } catch (err: any) {
+      this.logConsole?.(`❌ Failed to export script: ${err.message || err}`);
+    }
+  }
+
+  // --- F14 & F15: Palette Availability & Read-Only Banner ---
+  public updatePaletteAvailability(): void {
+    const currentTab = this.scriptTabs?.[this.activeTabIndex];
+    const paletteDrawer = this.rootElement?.querySelector?.('#spike-palette-drawer') as HTMLElement | null;
+    const isBlocked = !currentTab || currentTab.kind === 'python' || Boolean(currentTab.readOnlyBlocks);
+    if (paletteDrawer) {
+      paletteDrawer.classList.toggle('palette-disabled', isBlocked);
+      paletteDrawer.setAttribute('data-disabled', isBlocked ? 'true' : 'false');
+      if (isBlocked) {
+        paletteDrawer.setAttribute(
+          'title',
+          currentTab?.kind === 'python'
+            ? 'Word Blocks palette is disabled for Python scripts'
+            : 'Word Blocks are read-only due to manual Python code edits'
+        );
+      } else {
+        paletteDrawer.removeAttribute('title');
+      }
+    }
+  }
+
+  public showBlocksReadOnlyBanner(show: boolean): void {
+    const banner = this.rootElement?.querySelector?.('#banner-blocks-readonly') as HTMLElement | null;
+    if (banner) {
+      banner.style.display = show ? 'flex' : 'none';
+    }
+  }
+
+  public revertBlocksEdits(): void {
+    const currentTab = this.scriptTabs?.[this.activeTabIndex];
+    if (!currentTab || currentTab.kind !== 'blocks') return;
+    if (currentTab._blocksBaselineCode !== undefined) {
+      currentTab.code = currentTab._blocksBaselineCode;
+    }
+    currentTab.readOnlyBlocks = false;
+    if (this.codeTextarea) this.codeTextarea.value = currentTab.code;
+    if (this.popoutTextarea) this.popoutTextarea.value = currentTab.code;
+    this.showBlocksReadOnlyBanner(false);
+    this.updatePaletteAvailability();
+    this.renderVisualBlocks?.();
+    this.saveScriptTabsToStorage?.();
+    this.logConsole?.('↺ Reverted manual Python edits: Word Blocks are active again.');
   }
 
   public setEditorViewMode(mode: 'blocks' | 'python'): void {
@@ -5758,7 +6369,7 @@ print("Finished!")
           } catch (_) {}
         }
 
-        const importedScripts: { title: string; code: string }[] = [];
+        const importedScripts: { title: string; code: string; kind: ScriptKind; visualBlocks?: VisualBlock[] }[] = [];
         const fileNames = Object.keys(zipContent.files);
 
         // 1. Follow manifest tabs order if present
@@ -5767,7 +6378,7 @@ print("Finished!")
             const entry = zipContent.file(item.filename) || zipContent.file(item.filename?.replace(/^.*[\\\/]/, '')) || (item.title ? zipContent.file(`${item.title}.py`) : null);
             if (entry && !entry.dir) {
               const code = await entry.async('text');
-              importedScripts.push({ title: item.title || entry.name.replace(/\.py$/i, ''), code });
+              importedScripts.push({ title: item.title || entry.name.replace(/\.py$/i, ''), code, kind: 'python' });
             }
           }
         }
@@ -5780,7 +6391,7 @@ print("Finished!")
             if (fname.toLowerCase().endsWith('.py')) {
               const code = await entry.async('text');
               const title = fname.replace(/\.py$/i, '').replace(/^.*[\\\/]/, '');
-              importedScripts.push({ title, code });
+              importedScripts.push({ title, code, kind: 'python' });
             }
           }
         }
@@ -5794,7 +6405,7 @@ print("Finished!")
               try {
                 const subBuf = await entry.async('arraybuffer');
                 const res = await SpikeScratchImporter.importProject(subBuf, fname);
-                importedScripts.push({ title: res.projectName, code: res.pythonCode });
+                importedScripts.push({ title: res.projectName, code: res.pythonCode, kind: 'blocks', visualBlocks: res.visualBlocks });
               } catch (_) {}
             }
           }
@@ -5805,6 +6416,10 @@ print("Finished!")
             id: `tab_imported_${Date.now()}_${idx}`,
             title: s.title,
             code: s.code,
+            kind: s.kind,
+            visualBlocks: s.visualBlocks,
+            readOnlyBlocks: false,
+            _blocksBaselineCode: s.kind === 'blocks' ? s.code : undefined,
           }));
           this.activeTabIndex = 0;
           this.codeTextarea.value = this.scriptTabs[0].code;
@@ -6247,6 +6862,15 @@ print("Finished!")
   public addBlockFromPalette(item: SpikePaletteItem): void {
     const currentTab = this.scriptTabs[this.activeTabIndex];
     if (!currentTab) return;
+    if (currentTab.kind === 'python') {
+      this.logConsole?.('⚠️ Cannot add Word Blocks to a Python script.');
+      return;
+    }
+    if (currentTab.readOnlyBlocks) {
+      this.logConsole?.('⚠️ Word Blocks are read-only because Python code was edited.');
+      return;
+    }
+
     if (!currentTab.visualBlocks) {
       currentTab.visualBlocks = [];
     }
@@ -6267,6 +6891,7 @@ print("Finished!")
       const code = currentTab.code || '';
       const trimmed = code.trimEnd();
       currentTab.code = (trimmed ? trimmed + '\n' : '') + item.pythonSnippet;
+      currentTab._blocksBaselineCode = currentTab.code;
       if (this.codeTextarea) {
         this.codeTextarea.value = currentTab.code;
       }
@@ -6275,10 +6900,10 @@ print("Finished!")
       }
     }
 
-    this.renderVisualBlocks();
-    this.renderPopoutVisualBlocks();
-    this.triggerAutosave();
-    this.logConsole(`🧩 Added block "${item.label}" to active script.`);
+    this.renderVisualBlocks?.();
+    this.renderPopoutVisualBlocks?.();
+    this.triggerAutosave?.();
+    this.logConsole?.(`🧩 Added block "${item.label}" to active script.`);
   }
 
   public renderPopoutVisualBlocks(): void {
@@ -6560,7 +7185,18 @@ print("Finished!")
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.scriptTabs = parsed;
+          this.scriptTabs = parsed.map((tab: any, idx: number) => {
+            const kind: ScriptKind = tab.kind || (tab.visualBlocks && tab.visualBlocks.length > 0 ? 'blocks' : 'python');
+            return {
+              id: tab.id || `tab_${idx}`,
+              title: tab.title || `Script ${idx + 1}`,
+              code: tab.code || '',
+              kind,
+              visualBlocks: tab.visualBlocks,
+              readOnlyBlocks: Boolean(tab.readOnlyBlocks),
+              _blocksBaselineCode: tab._blocksBaselineCode ?? (kind === 'blocks' ? tab.code : undefined),
+            };
+          });
           // Ensure first tab has visualBlocks if missing
           if (!this.scriptTabs[0].visualBlocks && SAMPLE_MISSIONS.drive_straight.visualBlocks) {
             this.scriptTabs[0].visualBlocks = SAMPLE_MISSIONS.drive_straight.visualBlocks;
@@ -6575,7 +7211,7 @@ print("Finished!")
 
   private saveScriptTabsToStorage(): void {
     try {
-      if (this.scriptTabs[this.activeTabIndex]) {
+      if (this.codeTextarea && typeof this.activeTabIndex === 'number' && this.scriptTabs[this.activeTabIndex]) {
         this.scriptTabs[this.activeTabIndex].code = this.codeTextarea.value;
       }
       localStorage.setItem(this.SCRIPT_STORAGE_KEY, JSON.stringify(this.scriptTabs));

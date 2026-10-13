@@ -167,11 +167,32 @@ export class VirtualSpikeApi {
     };
   }
 
-  public createMotorPair(leftPort: any = 'A', rightPort: any = 'B') {
+  public createMotorPair(leftPort?: any, rightPort?: any) {
     const self = this;
-    // Map requested ports or fallback to drive motors 'A' and 'B'
-    const motorL = self.engine.robot.motors.get(leftPort) || self.engine.robot.motors.get('A');
-    const motorR = self.engine.robot.motors.get(rightPort) || self.engine.robot.motors.get('B');
+    const normalizePort = (p: any, defaultPort: MotorPort): MotorPort => {
+      if (p === undefined || p === null) {
+        return defaultPort;
+      }
+      if (typeof p === 'string') {
+        const upper = p.trim().toUpperCase();
+        if (['A', 'B', 'C', 'D', 'E', 'F'].includes(upper)) {
+          return upper as MotorPort;
+        }
+      }
+      throw new Error(`Invalid port: ${p}`);
+    };
+
+    const normLeft = normalizePort(leftPort, self.engine.robot ? self.engine.robot.driveLeftPort : 'A');
+    const normRight = normalizePort(rightPort, self.engine.robot ? self.engine.robot.driveRightPort : 'B');
+
+    if (normLeft === normRight) {
+      throw new Error(`Left and right motor ports cannot be the same port: ${normLeft}`);
+    }
+
+    self.engine.robot?.setDrivePorts(normLeft, normRight);
+
+    const motorL = self.engine.robot?.motors.get(normLeft) || self.engine.robot?.motors.get('A');
+    const motorR = self.engine.robot?.motors.get(normRight) || self.engine.robot?.motors.get('B');
     let defaultSpeed = 50;
 
     // Wheel physical specs:
@@ -229,6 +250,7 @@ export class VirtualSpikeApi {
       stop: () => {
         motorL?.stop();
         motorR?.stop();
+        self.engine.robot?.brakeChassisAndWheels();
       },
       move: async (amount: number, unit = 'cm', steering = 0, speed?: number) => {
         self.checkAborted();
@@ -243,27 +265,47 @@ export class VirtualSpikeApi {
           leftSpeed = spd * (1 - (2 * Math.abs(steering)) / 100);
         }
 
+        const maxSpeed = Math.max(Math.abs(leftSpeed), Math.abs(rightSpeed));
+        if (maxSpeed < 1e-4 || Math.abs(targetDeg) < 1e-4) {
+          return;
+        }
+
+        const targetDegL = targetDeg * (Math.abs(leftSpeed) / maxSpeed);
+        const targetDegR = targetDeg * (Math.abs(rightSpeed) / maxSpeed);
+
         return new Promise<void>((resolve, reject) => {
-          let leftDone = false;
-          let rightDone = false;
+          let leftDone = Math.abs(leftSpeed) < 1e-4;
+          let rightDone = Math.abs(rightSpeed) < 1e-4;
 
           const checkDone = () => {
             if (leftDone && rightDone) {
-              if (steering === 0) {
-                self.engine.robot.brakeChassisAndWheels();
-              }
+              self.engine.robot?.brakeChassisAndWheels();
               resolve();
             }
           };
 
-          motorL?.runForDegrees(targetDeg, leftSpeed, () => {
-            leftDone = true;
-            checkDone();
-          });
-          motorR?.runForDegrees(targetDeg, rightSpeed, () => {
-            rightDone = true;
-            checkDone();
-          });
+          if (!leftDone) {
+            if (motorL) {
+              motorL.runForDegrees(targetDegL, leftSpeed, () => {
+                leftDone = true;
+                checkDone();
+              });
+            } else {
+              leftDone = true;
+            }
+          }
+          if (!rightDone) {
+            if (motorR) {
+              motorR.runForDegrees(targetDegR, rightSpeed, () => {
+                rightDone = true;
+                checkDone();
+              });
+            } else {
+              rightDone = true;
+            }
+          }
+
+          checkDone();
 
           const abortCheck = setInterval(() => {
             if (self.abortSignal?.aborted) {
@@ -286,28 +328,47 @@ export class VirtualSpikeApi {
       ) => {
         self.checkAborted();
         const targetDeg = distanceToDegrees(amount, unit);
+        const maxSpeed = Math.max(Math.abs(leftSpeed), Math.abs(rightSpeed));
+        if (maxSpeed < 1e-4 || Math.abs(targetDeg) < 1e-4) {
+          return;
+        }
+
+        const targetDegL = targetDeg * (Math.abs(leftSpeed) / maxSpeed);
+        const targetDegR = targetDeg * (Math.abs(rightSpeed) / maxSpeed);
 
         return new Promise<void>((resolve, reject) => {
-          let leftDone = false;
-          let rightDone = false;
+          let leftDone = Math.abs(leftSpeed) < 1e-4;
+          let rightDone = Math.abs(rightSpeed) < 1e-4;
 
           const checkDone = () => {
             if (leftDone && rightDone) {
-              if (leftSpeed === rightSpeed) {
-                self.engine.robot.brakeChassisAndWheels();
-              }
+              self.engine.robot?.brakeChassisAndWheels();
               resolve();
             }
           };
 
-          motorL?.runForDegrees(targetDeg, leftSpeed, () => {
-            leftDone = true;
-            checkDone();
-          });
-          motorR?.runForDegrees(targetDeg, rightSpeed, () => {
-            rightDone = true;
-            checkDone();
-          });
+          if (!leftDone) {
+            if (motorL) {
+              motorL.runForDegrees(targetDegL, leftSpeed, () => {
+                leftDone = true;
+                checkDone();
+              });
+            } else {
+              leftDone = true;
+            }
+          }
+          if (!rightDone) {
+            if (motorR) {
+              motorR.runForDegrees(targetDegR, rightSpeed, () => {
+                rightDone = true;
+                checkDone();
+              });
+            } else {
+              rightDone = true;
+            }
+          }
+
+          checkDone();
 
           const abortCheck = setInterval(() => {
             if (self.abortSignal?.aborted) {

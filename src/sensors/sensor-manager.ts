@@ -21,6 +21,9 @@ export class VirtualSensorManager {
 
   constructor(robot: RobotPhysicsBody) {
     this.robot = robot;
+    if (this.robot) {
+      this.resetYaw();
+    }
   }
 
   public setMatSampler(sampler: MatColorSampler): void {
