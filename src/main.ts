@@ -489,13 +489,13 @@ async function bootstrapSimulator() {
       for (const m of engine.robot.motors.values()) {
         m.resetDegrees();
       }
-      hud.logConsole('🔄 Zeroed all virtual motor encoders.');
-      hud.logCommand('CMD', 'UI Button', 'Zeroed all motor encoders to 0.0°');
+      hud?.logConsole?.('🔄 Zeroed all virtual motor encoders.');
+      hud?.logCommand?.('CMD', 'UI Button', 'Zeroed all motor encoders to 0.0°');
     },
     onResetGyro: () => {
       sensors.resetYaw();
-      hud.logConsole('🧭 Zeroed Gyro heading to 0.0°.');
-      hud.logCommand('CMD', 'UI Button', 'Calibrated and zeroed Gyro IMU heading to 0.0°');
+      hud?.logConsole?.('🧭 Zeroed Gyro heading to 0.0°.');
+      hud?.logCommand?.('CMD', 'UI Button', 'Calibrated and zeroed Gyro IMU heading to 0.0°');
     },
     onRobotPresetChange: (preset) => {
       robotRenderer.setRobotPreset(preset);
@@ -512,7 +512,7 @@ async function bootstrapSimulator() {
       const left = isPort(mappings.driveLeft) ? mappings.driveLeft : 'A';
       const right = isPort(mappings.driveRight) ? mappings.driveRight : 'B';
       engine.robot.setDrivePorts?.(left, right);
-      hud.logConsole(`⚙️ Updated drive wheel ports: Left=[${left}], Right=[${right}]`);
+      hud?.logConsole?.(`⚙️ Updated drive wheel ports: Left=[${left}], Right=[${right}]`);
     },
   });
 

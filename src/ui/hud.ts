@@ -1005,7 +1005,7 @@ export class SimulatorHud {
     this.render();
     this.setupEvents();
     this.syncPortMappingUI();
-    this.selectRobotPreset(this.activeRobotPreset);
+    this.updatePresetUI(this.activeRobotPreset);
     this.startMatchTimer();
   }
 
@@ -1834,7 +1834,7 @@ export class SimulatorHud {
             <!-- Frame Budget Stacked Bar -->
             <div class="profiler-budget-section">
               <div class="budget-header">
-                <span>Frame Budget Allocation (16.67ms / 60 FPS Target)</span>
+                <span id="prof-budget-header-title">Frame Budget Allocation (16.67ms / 60 FPS Target)</span>
                 <span id="prof-total-frame-time">Total: 16.4ms</span>
               </div>
               <div class="budget-bar-track">
@@ -1893,7 +1893,7 @@ export class SimulatorHud {
                 <div class="prof-substats">
                   <div>1% Low FPS: <strong id="stat-low-fps">58 FPS</strong></div>
                   <div>Min FPS: <strong id="stat-min-fps">56 FPS</strong></div>
-                  <div>Target: <strong>60.0 FPS</strong></div>
+                  <div>Target: <strong id="stat-target-fps">60.0 FPS</strong></div>
                 </div>
               </div>
 
@@ -4269,9 +4269,21 @@ export class SimulatorHud {
   public updateProfilerModal(): void {
     if (!this.isProfilerModalOpen) return;
     const snap = profiler.getSnapshot();
+    const targetFps = snap.targetFps || (snap.fps > 85 ? 120 : 60);
+    const targetBudgetMs = (1000 / targetFps).toFixed(1);
 
     const fpsEl = this.rootElement.querySelector('#prof-header-fps');
     if (fpsEl) fpsEl.textContent = `${snap.fps} FPS`;
+
+    const budgetHeader = this.rootElement.querySelector('#prof-budget-header-title');
+    if (budgetHeader) {
+      budgetHeader.textContent = `Frame Budget Allocation (${targetBudgetMs}ms / ${targetFps} FPS Target)`;
+    }
+
+    const statTargetFps = this.rootElement.querySelector('#stat-target-fps');
+    if (statTargetFps) {
+      statTargetFps.textContent = `${targetFps}.0 FPS`;
+    }
 
     // Bottleneck Banner
     const banner = this.rootElement.querySelector('#prof-bottleneck-banner') as HTMLElement | null;
@@ -4284,7 +4296,7 @@ export class SimulatorHud {
       if (snap.bottleneckSeverity === 'OPTIMAL') {
         bannerIcon.textContent = '🟢';
         bannerTitle.textContent = `Optimal Performance: ${snap.primaryBottleneck}`;
-        bannerDesc.textContent = `Total frame time is ${snap.avgFrameMs.toFixed(1)}ms (target: 16.7ms for 60 FPS). Smooth rendering with generous CPU headroom.`;
+        bannerDesc.textContent = `Total frame time is ${snap.avgFrameMs.toFixed(1)}ms (target: ${targetBudgetMs}ms for ${targetFps} FPS). Smooth rendering with generous CPU headroom.`;
       } else if (snap.bottleneckSeverity === 'MODERATE') {
         bannerIcon.textContent = '🟡';
         bannerTitle.textContent = `Heavy Subsystem: ${snap.primaryBottleneck}`;
@@ -4292,13 +4304,13 @@ export class SimulatorHud {
       } else {
         bannerIcon.textContent = '🔴';
         bannerTitle.textContent = `Primary Bottleneck: ${snap.primaryBottleneck}`;
-        bannerDesc.textContent = `Frame drops detected (${snap.fps} FPS, ${snap.avgFrameMs.toFixed(1)}ms frame time). Follow the recommendations below to restore 60 FPS.`;
+        bannerDesc.textContent = `Frame drops detected (${snap.fps} FPS, ${snap.avgFrameMs.toFixed(1)}ms frame time). Follow the recommendations below to restore ${targetFps} FPS.`;
       }
     }
 
     // Budget allocation
     const totalEl = this.rootElement.querySelector('#prof-total-frame-time');
-    if (totalEl) totalEl.textContent = `Total: ${snap.avgFrameMs.toFixed(1)}ms (${Math.round((snap.avgFrameMs / 16.667) * 100)}% budget)`;
+    if (totalEl) totalEl.textContent = `Total: ${snap.avgFrameMs.toFixed(1)}ms (${Math.round((snap.avgFrameMs / (snap.frameBudgetMs || 16.667)) * 100)}% budget)`;
 
     const barRender = this.rootElement.querySelector('#bar-render') as HTMLElement | null;
     if (barRender) barRender.style.width = `${snap.renderPct.toFixed(1)}%`;
@@ -4379,7 +4391,7 @@ export class SimulatorHud {
     const report = `# FLL Simulator Performance Diagnostic Report
 - **Timestamp**: ${new Date().toISOString()}
 - **FPS**: ${snap.fps} FPS (Avg: ${snap.avgFps}, 1% Low: ${snap.onePercentLowFps}, Min: ${snap.minFps})
-- **Frame Time**: ${snap.avgFrameMs.toFixed(2)} ms (Budget: 16.67 ms)
+- **Frame Time**: ${snap.avgFrameMs.toFixed(2)} ms (Budget: ${snap.frameBudgetMs.toFixed(2)} ms / Target: ${snap.targetFps} FPS)
 - **Primary Bottleneck**: ${snap.primaryBottleneck} (${snap.bottleneckSeverity})
 
 ## Frame Time Breakdown
@@ -4441,45 +4453,7 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
     }
   }
 
-  public selectRobotPreset(preset: 'advanced' | 'compact'): void {
-    this.activeRobotPreset = preset;
-    try {
-      localStorage.setItem(this.ROBOT_PRESET_STORAGE_KEY, preset);
-    } catch (e) {
-      console.warn('Could not save robot preset to localStorage:', e);
-    }
-
-    // Configure authentic hardware port mappings for each robot preset
-    if (preset === 'advanced') {
-      this.portMappings = {
-        driveLeft: 'A',
-        driveRight: 'B',
-        colorLeft: 'C',
-        colorRight: 'D',
-        ultrasonic: 'E',
-        aux1: 'E',
-        aux2: 'F',
-        aux3: 'C',
-        aux4: 'D',
-        imu: 'HUB_GYRO',
-      };
-    } else {
-      this.portMappings = {
-        driveLeft: 'A',
-        driveRight: 'B',
-        colorLeft: 'C',
-        colorRight: 'OFF' as any,
-        ultrasonic: 'D',
-        aux1: 'OFF' as any,
-        aux2: 'OFF' as any,
-        aux3: 'OFF' as any,
-        aux4: 'OFF' as any,
-        imu: 'HUB_GYRO',
-      };
-    }
-    this.syncPortMappingUI?.();
-    this.savePortMappings?.();
-
+  public updatePresetUI(preset: 'advanced' | 'compact'): void {
     const cardAdv = this.rootElement?.querySelector('#preset-card-advanced');
     const cardComp = this.rootElement?.querySelector('#preset-card-compact');
     if (cardAdv) {
@@ -4498,9 +4472,53 @@ ${snap.recommendations.map((r) => `- ${r}`).join('\n')}
         tag.className = `preset-tag ${preset === 'compact' ? 'active-tag' : ''}`;
       }
     }
+  }
+
+  public selectRobotPreset(preset: 'advanced' | 'compact', applyDefaults: boolean = true): void {
+    this.activeRobotPreset = preset;
+    try {
+      localStorage.setItem(this.ROBOT_PRESET_STORAGE_KEY, preset);
+    } catch (e) {
+      console.warn('Could not save robot preset to localStorage:', e);
+    }
+
+    if (applyDefaults) {
+      // Configure authentic hardware port mappings for each robot preset
+      if (preset === 'advanced') {
+        this.portMappings = {
+          driveLeft: 'A',
+          driveRight: 'B',
+          colorLeft: 'C',
+          colorRight: 'D',
+          ultrasonic: 'E',
+          aux1: 'E',
+          aux2: 'F',
+          aux3: 'C',
+          aux4: 'D',
+          imu: 'HUB_GYRO',
+        };
+      } else {
+        this.portMappings = {
+          driveLeft: 'A',
+          driveRight: 'B',
+          colorLeft: 'C',
+          colorRight: 'OFF' as any,
+          ultrasonic: 'D',
+          aux1: 'OFF' as any,
+          aux2: 'OFF' as any,
+          aux3: 'OFF' as any,
+          aux4: 'OFF' as any,
+          imu: 'HUB_GYRO',
+        };
+      }
+      this.syncPortMappingUI?.();
+      this.savePortMappings?.();
+    }
+
+    this.updatePresetUI?.(preset);
 
     const presetName = preset === 'advanced' ? 'Advanced Driving Base (DroidBot-E)' : 'Compact SPIKE Base';
-    this.logConsole(`🤖 Selected robot design preset: "${presetName}".`);
+    this.logConsole?.(`🤖 Selected robot design preset: "${presetName}".`);
     this.callbacks.onRobotPresetChange?.(preset);
   }
 

@@ -30,10 +30,11 @@ export interface ProfilerFrameMetrics {
 
 export interface ProfilerSnapshot {
   fps: number;
+  targetFps: number;
   avgFps: number;
   minFps: number;
   onePercentLowFps: number;
-  frameBudgetMs: number; // 16.67ms for 60Hz
+  frameBudgetMs: number; // 8.33ms for 120Hz, 16.67ms for 60Hz
   avgFrameMs: number;
   physicsMs: number;
   physicsPct: number;
@@ -141,13 +142,15 @@ export class PerformanceProfiler {
     if (this.frameTimes.length === 0) return 60;
     const avgDt = this.average(this.frameTimes);
     if (avgDt <= 0) return 60;
-    return Math.min(120, Math.round(1000 / avgDt));
+    return Math.min(240, Math.round(1000 / avgDt));
   }
 
   public getSnapshot(): ProfilerSnapshot {
-    const frameBudgetMs = 16.667; // standard 60 FPS target
-    const avgFrameMs = this.average(this.frameTimes) || 16.667;
     const currentFps = this.getCurrentFps();
+    // Dynamically detect display refresh rate target (e.g. 120Hz ProMotion vs standard 60Hz)
+    const targetFps = currentFps > 85 ? 120 : (currentFps > 70 ? 90 : 60);
+    const frameBudgetMs = Number((1000 / targetFps).toFixed(3));
+    const avgFrameMs = this.average(this.frameTimes) || frameBudgetMs;
 
     // 1% Low FPS calculation
     const sortedDts = [...this.frameTimes].sort((a, b) => b - a); // highest dt = lowest fps
@@ -173,19 +176,19 @@ export class PerformanceProfiler {
     const sensorsPct = Math.min(100, (avgSensors / safeFrameMs) * 100);
     const idlePct = Math.max(0, 100 - (physicsPct + syncPct + renderPct + sensorsPct));
 
-    // Determine primary bottleneck
+    // Determine primary bottleneck relative to target frame budget
     let primaryBottleneck = 'Balanced Frame Budget';
     let bottleneckSeverity: 'OPTIMAL' | 'MODERATE' | 'BOTTLENECK' = 'OPTIMAL';
     const recommendations: string[] = [];
 
-    const isFpsDropping = currentFps < 55;
-    const isFpsCritical = currentFps <= 45;
+    const isFpsDropping = currentFps < (targetFps - 5);
+    const isFpsCritical = currentFps <= Math.round(targetFps * 0.75);
 
-    if (avgRender >= avgPhysics && avgRender >= avgSync && avgRender > 5.0) {
+    if (avgRender >= avgPhysics && avgRender >= avgSync && avgRender > (frameBudgetMs * 0.35)) {
       primaryBottleneck = `Three.js WebGL Render (${avgRender.toFixed(1)}ms, ${renderPct.toFixed(0)}% of frame)`;
-    } else if (avgPhysics >= avgRender && avgPhysics >= avgSync && avgPhysics > 4.0) {
+    } else if (avgPhysics >= avgRender && avgPhysics >= avgSync && avgPhysics > (frameBudgetMs * 0.25)) {
       primaryBottleneck = `Rapier 3D Physics Solver (${avgPhysics.toFixed(1)}ms, ${physicsPct.toFixed(0)}% of frame)`;
-    } else if (avgSync > 3.0) {
+    } else if (avgSync > (frameBudgetMs * 0.2)) {
       primaryBottleneck = `Visual Transform Sync (${avgSync.toFixed(1)}ms, ${syncPct.toFixed(0)}% of frame)`;
     } else if (isFpsDropping) {
       primaryBottleneck = `System Throttling / Background Overhead (${avgFrameMs.toFixed(1)}ms frame time)`;
@@ -200,7 +203,7 @@ export class PerformanceProfiler {
     }
 
     // Dynamic recommendations
-    const isRenderHeavy = avgRender > 8.0 || isFpsDropping;
+    const isRenderHeavy = avgRender > (frameBudgetMs * 0.5) || isFpsDropping;
     const isDracoActive =
       typeof legoAssetManager !== 'undefined' &&
       typeof legoAssetManager.getRenderMode === 'function' &&
@@ -238,12 +241,13 @@ export class PerformanceProfiler {
 
     if (recommendations.length === 0) {
       recommendations.push(
-        'Frame budget is optimal. The simulation runs smoothly at 60 FPS with healthy CPU/GPU headroom.'
+        `Frame budget is optimal. The simulation runs smoothly at ${targetFps} FPS with healthy CPU/GPU headroom.`
       );
     }
 
     return {
       fps: currentFps,
+      targetFps,
       avgFps: currentFps,
       minFps,
       onePercentLowFps,
