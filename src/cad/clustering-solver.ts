@@ -269,18 +269,66 @@ export class CadClusteringPreSolver {
       });
     }
 
-    // Ensure root chassis exists (pick the largest non-chain rigid assembly as root chassis/base)
+    // Ensure root chassis exists (pick the ground-resting, joint-bearing base or largest rigid assembly as root chassis/base)
     if (!clusters.some((c) => c.isRootChassis)) {
       if (clusters.length > 0) {
         const nonChainClusters = clusters.filter(
           (c) => !c.parts?.some((p) => p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel))
         );
-        const targetList = nonChainClusters.length > 0 ? nonChainClusters : clusters;
-        targetList.sort((a, b) => b.partIds.length - a.partIds.length);
-        const oldId = targetList[0].clusterId;
-        targetList[0].isRootChassis = true;
-        targetList[0].isFixed = true;
-        targetList[0].clusterId = 'chassis_root';
+        const candidates = nonChainClusters.length > 0 ? nonChainClusters : clusters;
+
+        // Ground-level calculation: lowest bottom-Y among parts
+        let globalMinY = Infinity;
+        for (const p of parts) {
+          if (p.position[1] < globalMinY) globalMinY = p.position[1];
+        }
+
+        // Count incident non-rigid links (joints) for each cluster candidate
+        const jointIncidentCount = new Map<string, number>();
+        for (const link of activeLinks) {
+          if (link.connectionType !== 'RIGID_PIN') {
+            const cA = partToClusterId.get(link.fromPartId);
+            const cB = partToClusterId.get(link.toPartId);
+            if (cA && cB && cA !== cB) {
+              jointIncidentCount.set(cA, (jointIncidentCount.get(cA) || 0) + 1);
+              jointIncidentCount.set(cB, (jointIncidentCount.get(cB) || 0) + 1);
+            }
+          }
+        }
+
+        // Candidate score: prefer ground-resting (minY within 12mm of globalMinY),
+        // prefer having active mechanism joints, then largest part count
+        const scoredCandidates = candidates.map((c) => {
+          let minY = Infinity;
+          for (const pid of c.partIds) {
+            const p = partMap.get(pid);
+            if (p && p.position[1] < minY) minY = p.position[1];
+          }
+          const isGround = minY <= globalMinY + 12.0;
+          const jCount = jointIncidentCount.get(c.clusterId) || 0;
+          return { cluster: c, isGround, jCount, partsCount: c.partIds.length };
+        });
+
+        const hasAnyJoints = scoredCandidates.some((c) => c.jCount > 0);
+
+        scoredCandidates.sort((a, b) => {
+          if (hasAnyJoints) {
+            const aHasJ = a.jCount > 0 ? 1 : 0;
+            const bHasJ = b.jCount > 0 ? 1 : 0;
+            if (aHasJ !== bHasJ) return bHasJ - aHasJ;
+            if (a.jCount !== b.jCount) return b.jCount - a.jCount;
+            if (a.isGround !== b.isGround) return a.isGround ? -1 : 1;
+            return b.partsCount - a.partsCount;
+          }
+          // Default when no joints exist: pick largest cluster by part count
+          return b.partsCount - a.partsCount;
+        });
+
+        const chosen = scoredCandidates[0].cluster;
+        const oldId = chosen.clusterId;
+        chosen.isRootChassis = true;
+        chosen.isFixed = true;
+        chosen.clusterId = 'chassis_root';
         for (const [partId, cid] of partToClusterId.entries()) {
           if (cid === oldId) {
             partToClusterId.set(partId, 'chassis_root');
@@ -316,6 +364,37 @@ export class CadClusteringPreSolver {
         maxTorqueNm: 0.25, // SPIKE large motor rated torque
         maxVelocityDegPerSec: 1000,
       });
+    }
+
+    // Merge redundant collinear joints between the same pair of clusters (e.g. co-axial hinge pins)
+    const mergedJoints: ExtractedJoint[] = [];
+    const jointClusterPairs = new Map<string, ExtractedJoint[]>();
+    for (const j of joints) {
+      const pairKey = [j.parentClusterId, j.childClusterId].sort().join(':::') + `:::${j.type}:::${j.axis.join(',')}`;
+      if (!jointClusterPairs.has(pairKey)) jointClusterPairs.set(pairKey, []);
+      jointClusterPairs.get(pairKey)!.push(j);
+    }
+    for (const jList of jointClusterPairs.values()) {
+      if (jList.length === 1) {
+        mergedJoints.push(jList[0]);
+      } else {
+        const rep = jList[0];
+        const avgParent: [number, number, number] = [0, 0, 0];
+        const avgChild: [number, number, number] = [0, 0, 0];
+        for (const j of jList) {
+          avgParent[0] += j.anchorParent[0] / jList.length;
+          avgParent[1] += j.anchorParent[1] / jList.length;
+          avgParent[2] += j.anchorParent[2] / jList.length;
+          avgChild[0] += j.anchorChild[0] / jList.length;
+          avgChild[1] += j.anchorChild[1] / jList.length;
+          avgChild[2] += j.anchorChild[2] / jList.length;
+        }
+        mergedJoints.push({
+          ...rep,
+          anchorParent: avgParent,
+          anchorChild: avgChild,
+        });
+      }
     }
 
     // Determine cluster fixed state:
@@ -383,7 +462,7 @@ export class CadClusteringPreSolver {
     return {
       name,
       clusters,
-      joints,
+      joints: mergedJoints,
       sensors,
     };
   }

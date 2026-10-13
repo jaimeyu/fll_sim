@@ -758,6 +758,10 @@ export class Viewport3D {
             if (elem.clusterMeshes instanceof Map) {
               let searchObj: THREE.Object3D | null = hit.object;
               while (searchObj && searchObj !== elem.rootGroup) {
+                if (searchObj.userData?.clusterId) {
+                  clusterId = searchObj.userData.clusterId;
+                  break;
+                }
                 for (const [cid, group] of elem.clusterMeshes.entries()) {
                   if (group === searchObj) {
                     clusterId = cid;

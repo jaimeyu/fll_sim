@@ -202,8 +202,8 @@ export class CustomImportedMissionElement implements MissionElement {
         true
       );
       if (!shouldBeFixed) {
-        body.setLinearDamping(2.0);
-        body.setAngularDamping(3.0);
+        body.setLinearDamping(1.5);
+        body.setAngularDamping(2.0);
         body.wakeUp();
       }
     }
@@ -460,8 +460,8 @@ export class CustomImportedMissionElement implements MissionElement {
         rapierJoint.setContactsEnabled(false);
         if (jointSpec.type === 'REVOLUTE') {
           // Apply realistic physical axle friction and damping so mechanisms rotate smoothly without snapping or flailing
-          (rapierJoint as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 1.0);
-          (rapierJoint as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.5);
+          (rapierJoint as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 0.5);
+          (rapierJoint as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.01);
         }
         this.joints.push(rapierJoint);
       }
@@ -569,7 +569,19 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public getInteractiveMeshes(): THREE.Object3D[] {
-    return this.interactiveMeshes;
+    const baseClusterId = this.getBaseClusterId();
+    const meshes: THREE.Object3D[] = [];
+    for (const [cid, group] of this.clusterMeshes.entries()) {
+      const isFixed = this.isSolidRigidMode || (this.isDualLocked && cid === baseClusterId);
+      if (!isFixed) {
+        group.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) {
+            meshes.push(obj);
+          }
+        });
+      }
+    }
+    return meshes;
   }
 
   public applyUserDrag(groundTarget: THREE.Vector3): void {

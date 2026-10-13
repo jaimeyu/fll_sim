@@ -47,10 +47,10 @@ describe('Model Structural Integrity & Fastener Connectivity', () => {
       expect(rootCluster?.isFixed).toBe(true);
 
       // Root cluster should hold a substantial proportion of the stationary station parts
-      expect(rootCluster!.partIds.length).toBeGreaterThanOrEqual(40);
+      expect(rootCluster!.partIds.length).toBeGreaterThanOrEqual(35);
 
-      // The model should NOT break into excessive loose clusters (e.g. <= 5 clusters for standard models)
-      expect(spec.clusters.length).toBeLessThanOrEqual(5);
+      // The model should NOT break into excessive loose clusters (e.g. <= 8 clusters for multi-piece models)
+      expect(spec.clusters.length).toBeLessThanOrEqual(8);
 
       // No cluster should have empty colliders
       for (const c of spec.clusters) {

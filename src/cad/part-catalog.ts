@@ -157,14 +157,14 @@ export function isChainPart(partNumber: string, submodel?: string): boolean {
 }
 
 /**
- * Checks whether a part is any LEGO Technic pin, axle, bush, or connector.
+ * Checks whether a part is any LEGO Technic pin, axle, bush, or pivot connector.
  */
 export function isFastenerPart(partNumber: string): boolean {
   const clean = partNumber.replace(/\.dat$/i, '').replace(/^bl_/, '').trim().toLowerCase();
   return (
-    /^(2780|3673|6558|32054|32556|32556b|43093|11214|3749|4274|32002|4304|6562|18651|18654|3713|32123|32123a|32123b|4265|4265c|2736|3704|3705|3706|3707|3708|32062|4519|32073|44294|23948|50450|15462|87083|55013|59443|6538|6538c|32013|32014|32015|32016|32034|32039|41678|6536|32184|32291)$/i.test(
+    /^(2780|3673|6558|32054|32556|32556b|43093|11214|3749|4274|32002|4304|6562|18651|18654|3713|32123|32123a|32123b|4265|4265c|2736|3704|3705|3706|3707|3708|32062|4519|32073|44294|23948|50450|15462|87083|55013|59443|6538|6538c)$/i.test(
       clean
-    ) || /pin|axle|bush|connector/i.test(clean)
+    ) || /^(pin|axle|bush)/i.test(clean)
   );
 }
 

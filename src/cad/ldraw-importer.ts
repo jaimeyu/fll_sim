@@ -91,10 +91,11 @@ function matrixToQuaternion(M: Mat3): [number, number, number, number] {
  */
 function getPinAxis(q: [number, number, number, number]): [number, number, number] {
   const [qx, qy, qz, qw] = q;
-  // Rotate local pin cylinder vector [0, 1, 0] by quaternion q
-  const vx = 2 * (qx * qy - qw * qz);
-  const vy = 1 - 2 * (qx * qx + qz * qz);
-  const vz = 2 * (qy * qz + qw * qx);
+  // In LDraw Technic pins and axles, the cylinder length axis is defined along [1, 0, 0].
+  // Rotate local [1, 0, 0] by quaternion q: v = q * [1, 0, 0] * q*
+  const vx = 1 - 2 * (qy * qy + qz * qz);
+  const vy = 2 * (qx * qy + qw * qz);
+  const vz = 2 * (qx * qz - qw * qy);
   const ax = Math.abs(vx), ay = Math.abs(vy), az = Math.abs(vz);
   if (ax >= ay && ax >= az) return [Math.sign(vx) || 1, 0, 0];
   if (ay >= ax && ay >= az) return [0, Math.sign(vy) || 1, 0];
@@ -350,9 +351,9 @@ export class LDrawImporter {
         if (hasWheelLink) continue;
 
         // 3. Fasteners & Concentric Pin Holes / Coincident Mounts
-        const connPoints: { pos: [number, number, number]; pa: PlacedPart; pb: PlacedPart; pivotPart: PlacedPart | null }[] = [];
-        let bestPair: { pa: PlacedPart; pb: PlacedPart; d: number } | null = null;
+        const fastenerHits: { pa: PlacedPart; pb: PlacedPart; dist: number; isPivot: boolean; pivotPart: PlacedPart | null }[] = [];
         let minD = Infinity;
+        let closestPair: { pa: PlacedPart; pb: PlacedPart } | null = null;
 
         for (const pa of partsA) {
           for (const pb of partsB) {
@@ -362,65 +363,74 @@ export class LDrawImporter {
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d < minD) {
               minD = d;
-              bestPair = { pa, pb, d };
+              closestPair = { pa, pb };
             }
 
-            const isFastener = isFastenerPart(pa.partNumber) || isFastenerPart(pb.partNumber);
+            const aFastener = isFastenerPart(pa.partNumber);
+            const bFastener = isFastenerPart(pb.partNumber);
 
-            // Either engaged pin/axle fastener (within 24mm) or concentric / abutting contact (within 16mm)
-            if ((isFastener && d <= 24.0) || d <= 16.0) {
-              const ptPos: [number, number, number] = [
-                (pa.position[0] + pb.position[0]) / 2,
-                (pa.position[1] + pb.position[1]) / 2,
-                (pa.position[2] + pb.position[2]) / 2,
-              ];
-              // Avoid duplicate connection points within 12mm of each other
-              const exists = connPoints.some((cp) => {
-                const cdx = cp.pos[0] - ptPos[0];
-                const cdy = cp.pos[1] - ptPos[1];
-                const cdz = cp.pos[2] - ptPos[2];
-                return Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz) <= 12.0;
-              });
-              if (!exists) {
-                const pivotPart = isPivotFastener(pa.partNumber) ? pa :
-                                  isPivotFastener(pb.partNumber) ? pb : null;
-                connPoints.push({ pos: ptPos, pa, pb, pivotPart });
+            if (aFastener || bFastener) {
+              if (d <= 20.0) {
+                const pivotPart = (aFastener && isPivotFastener(pa.partNumber)) ? pa :
+                                  (bFastener && isPivotFastener(pb.partNumber)) ? pb : null;
+                fastenerHits.push({ pa, pb, dist: d, isPivot: !!pivotPart, pivotPart });
               }
             }
           }
         }
 
-        if (connPoints.length >= 2 && bestPair) {
-          // Rigidly fastened across 2 or more points (prevents rotation)
+        if (fastenerHits.length > 0) {
+          fastenerHits.sort((a, b) => a.dist - b.dist);
+
+          const distinct: typeof fastenerHits = [];
+          for (const hit of fastenerHits) {
+            const hX = (hit.pa.position[0] + hit.pb.position[0]) / 2;
+            const hY = (hit.pa.position[1] + hit.pb.position[1]) / 2;
+            const hZ = (hit.pa.position[2] + hit.pb.position[2]) / 2;
+            const exists = distinct.some((d) => {
+              const dX = (d.pa.position[0] + d.pb.position[0]) / 2 - hX;
+              const dY = (d.pa.position[1] + d.pb.position[1]) / 2 - hY;
+              const dZ = (d.pa.position[2] + d.pb.position[2]) / 2 - hZ;
+              return Math.sqrt(dX * dX + dY * dY + dZ * dZ) < 8.0;
+            });
+            if (!exists) distinct.push(hit);
+          }
+
+          const pivots = distinct.filter((d) => d.isPivot);
+          if (pivots.length > 0) {
+            const firstAxis = getPinAxis(pivots[0].pivotPart!.rotation);
+            const allSameAxis = pivots.every((p) => {
+              const ax = getPinAxis(p.pivotPart!.rotation);
+              return (ax[0] === firstAxis[0] && ax[1] === firstAxis[1] && ax[2] === firstAxis[2]) ||
+                     (ax[0] === -firstAxis[0] && ax[1] === -firstAxis[1] && ax[2] === -firstAxis[2]);
+            });
+            const rigidFasteners = distinct.filter((d) => !d.isPivot);
+
+            // If all pivot pins share the collinear rotation axis and no rigid fasteners conflict,
+            // extract a functional 1-DOF Revolute Joint (e.g. co-axial hinge pins on clevis arms)
+            if (allSameAxis && rigidFasteners.length === 0) {
+              const rep = pivots[0];
+              links.push({
+                fromPartId: rep.pa.id,
+                toPartId: rep.pb.id,
+                connectionType: 'REVOLUTE_AXLE',
+                jointAxis: firstAxis,
+                anchor: [rep.pa.position[0] / 1000, rep.pa.position[1] / 1000, rep.pa.position[2] / 1000],
+              });
+              continue;
+            }
+          }
+
           links.push({
-            fromPartId: bestPair.pa.id,
-            toPartId: bestPair.pb.id,
+            fromPartId: distinct[0].pa.id,
+            toPartId: distinct[0].pb.id,
             connectionType: 'RIGID_PIN',
           });
-        } else if (connPoints.length === 1 && connPoints[0].pivotPart) {
-          // Exactly 1 axle or frictionless pivot pin: 1-DOF Revolute Joint
-          const cp = connPoints[0];
-          const pivotPart = cp.pivotPart!;
-          const axis: [number, number, number] = getPinAxis(pivotPart.rotation);
+        } else if (minD <= 8.5 && closestPair) {
+          // Direct brick clutch / abutting stud contact within 8.5mm (standard LEGO 8.0mm pitch)
           links.push({
-            fromPartId: cp.pa.id,
-            toPartId: cp.pb.id,
-            connectionType: 'REVOLUTE_AXLE',
-            jointAxis: axis,
-            anchor: [cp.pos[0] / 1000, cp.pos[1] / 1000, cp.pos[2] / 1000],
-          });
-        } else if (connPoints.length === 1 && bestPair) {
-          // Single friction pin or single stud connection: rigid connection (does not rotate freely)
-          links.push({
-            fromPartId: bestPair.pa.id,
-            toPartId: bestPair.pb.id,
-            connectionType: 'RIGID_PIN',
-          });
-        } else if (minD <= 16.0 && bestPair) {
-          // Abutting bricks / plates / structural contact within 16mm (standard stud pitch / brick wall contact)
-          links.push({
-            fromPartId: bestPair.pa.id,
-            toPartId: bestPair.pb.id,
+            fromPartId: closestPair.pa.id,
+            toPartId: closestPair.pb.id,
             connectionType: 'RIGID_PIN',
           });
         }
