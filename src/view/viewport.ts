@@ -572,7 +572,7 @@ export class Viewport3D {
     const elem = this.missionManager.getElement(id);
     if (elem) {
       this.selectedElement = elem;
-      const pos = elem.getPosition();
+      const pos = elem.getDualLockPosition?.() || elem.getPosition();
       const yaw = elem.getYawDegrees ? elem.getYawDegrees() : 0;
       this.elementReticle.position.set(pos.x, 0.003, pos.z);
       this.elementReticle.rotation.y = (yaw * Math.PI) / 180;
@@ -590,7 +590,8 @@ export class Viewport3D {
     if (elem) {
       elem.setPosition(pos, yawDegrees);
       if (this.selectedElement === elem) {
-        this.elementReticle.position.set(pos.x, 0.003, pos.z);
+        const reticlePos = elem.getDualLockPosition?.() || pos;
+        this.elementReticle.position.set(reticlePos.x, 0.003, reticlePos.z);
         if (yawDegrees !== undefined) {
           this.elementReticle.rotation.y = (yawDegrees * Math.PI) / 180;
         }
@@ -849,13 +850,16 @@ export class Viewport3D {
         if (newYaw > 180) newYaw -= 360;
         if (newYaw < -180) newYaw += 360;
         this.elementReticle.rotation.y = (newYaw * Math.PI) / 180;
-        const curPos = this.selectedElement.getPosition();
         if (this.selectedElement.setRotation) {
           this.selectedElement.setRotation(newYaw);
         } else {
+          const curPos = this.selectedElement.getPosition();
           this.selectedElement.setPosition(curPos, newYaw);
         }
-        this.onElementDragMove?.(this.selectedElement.id, curPos.x, curPos.z, newYaw);
+        const updatedPos = this.selectedElement.getPosition();
+        const reticlePos = this.selectedElement.getDualLockPosition?.() || updatedPos;
+        this.elementReticle.position.set(reticlePos.x, 0.003, reticlePos.z);
+        this.onElementDragMove?.(this.selectedElement.id, updatedPos.x, updatedPos.z, newYaw);
         return;
       }
     }, { passive: false });
@@ -885,13 +889,16 @@ export class Viewport3D {
           if (newYaw > 180) newYaw -= 360;
           if (newYaw < -180) newYaw += 360;
           this.elementReticle.rotation.y = (newYaw * Math.PI) / 180;
-          const curPos = this.selectedElement.getPosition();
           if (this.selectedElement.setRotation) {
             this.selectedElement.setRotation(newYaw);
           } else {
+            const curPos = this.selectedElement.getPosition();
             this.selectedElement.setPosition(curPos, newYaw);
           }
-          this.onElementDragMove?.(this.selectedElement.id, curPos.x, curPos.z, newYaw);
+          const updatedPos = this.selectedElement.getPosition();
+          const reticlePos = this.selectedElement.getDualLockPosition?.() || updatedPos;
+          this.elementReticle.position.set(reticlePos.x, 0.003, reticlePos.z);
+          this.onElementDragMove?.(this.selectedElement.id, updatedPos.x, updatedPos.z, newYaw);
         }
       } else if (e.key === 'Escape') {
         if (this.selectedElement) {
@@ -997,8 +1004,9 @@ export class Viewport3D {
         this.container.style.cursor = 'grabbing';
 
         const elemPos = entireElemHit.getPosition();
+        const reticlePos = entireElemHit.getDualLockPosition?.() || elemPos;
         const elemYaw = entireElemHit.getYawDegrees ? entireElemHit.getYawDegrees() : 0;
-        this.elementReticle.position.set(elemPos.x, 0.003, elemPos.z);
+        this.elementReticle.position.set(reticlePos.x, 0.003, reticlePos.z);
         this.elementReticle.rotation.y = (elemYaw * Math.PI) / 180;
         this.elementReticle.visible = true;
 
@@ -1069,9 +1077,10 @@ export class Viewport3D {
             isArena ? -0.52 : -0.45,
             isArena ? 0.52 : 0.45
           );
-          this.elementReticle.position.set(targetX, 0.003, targetZ);
           const yaw = this.selectedElement.getYawDegrees ? this.selectedElement.getYawDegrees() : 0;
           this.selectedElement.setPosition({ x: targetX, y: 0.002, z: targetZ }, yaw);
+          const reticlePos = this.selectedElement.getDualLockPosition?.() || { x: targetX, z: targetZ };
+          this.elementReticle.position.set(reticlePos.x, 0.003, reticlePos.z);
           this.onElementDragMove?.(this.selectedElement.id, targetX, targetZ, yaw);
         }
       } else {

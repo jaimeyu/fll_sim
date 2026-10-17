@@ -588,21 +588,23 @@ body, html {
   justify-content: space-between;
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .word-blocks-stack-header .stack-title {
   font-size: 12px;
-  font-weight: 700;
-  color: #e2e8f0;
+  font-weight: 800;
+  color: #1e293b;
 }
 
 .word-blocks-stack-header .stack-count {
   font-size: 10px;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.06);
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   padding: 2px 6px;
   border-radius: 10px;
+  font-weight: 700;
 }
 
 /* Authentic LEGO SPIKE Block Cards */
@@ -610,37 +612,60 @@ body, html {
   display: flex;
   flex-direction: column;
   border-radius: 8px;
-  background: var(--block-color, #0284c7);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  background: var(--block-color, #0094f7);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   user-select: none;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
   width: fit-content;
   max-width: 100%;
+  position: relative;
+  margin-bottom: 2px;
 }
 
 .word-block:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Jigsaw Top Notch cutout on regular blocks */
+.word-block:not(.word-block-hat)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  width: 16px;
+  height: 4px;
+  background: #fafbfc;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+  z-index: 2;
+}
+
+/* Jigsaw Bottom Tab bump on regular blocks */
+.word-block:not(.word-block-control-clamp)::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 16px;
+  width: 16px;
+  height: 4px;
+  background: var(--block-color, #0094f7);
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+  z-index: 3;
 }
 
 /* Curved Hat Block (When Program Starts) */
 .word-block-hat {
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
   position: relative;
   margin-bottom: 3px;
 }
 
-.word-block-hat::before {
-  content: '';
-  position: absolute;
-  top: -6px;
-  left: 18px;
-  width: 48px;
-  height: 8px;
-  background: var(--block-color, #eab308);
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
+.word-block-hat .word-block-body {
+  padding-top: 10px;
+  padding-bottom: 8px;
 }
 
 .word-block-body {
@@ -651,9 +676,8 @@ body, html {
   padding: 6px 12px;
   color: #ffffff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   position: relative;
 }
 
@@ -702,23 +726,63 @@ body, html {
 
 /* Block Parameter Badges (Pills) */
 .word-block-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   background: #ffffff;
   color: #0f172a;
-  padding: 1px 8px;
-  border-radius: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
   font-size: 11px;
-  font-weight: 700;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  font-weight: 800;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
   margin: 0 2px;
   white-space: nowrap;
   text-shadow: none;
+  line-height: 1.2;
 }
 
 .word-block-pill.pill-condition {
-  background: rgba(0, 0, 0, 0.35);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: #40bf4a;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  clip-path: polygon(7px 0%, calc(100% - 7px) 0%, 100% 50%, calc(100% - 7px) 100%, 7px 100%, 0% 50%);
+  padding: 3px 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.word-block-input-capsule {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+  margin: 0 2px;
+  white-space: nowrap;
+  text-shadow: none;
+  line-height: 1.2;
+}
+
+.word-block-var-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #ff661a;
+  color: #ffffff;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin: 0 2px;
+  white-space: nowrap;
+  text-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  line-height: 1.2;
 }
 
 /* Control C-Clamps (Loops, If/Else) */
@@ -728,20 +792,22 @@ body, html {
 }
 
 .word-block-c-top {
-  background: var(--block-color, #f97316);
+  background: var(--block-color, #ffab19);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  position: relative;
 }
 
 .word-block-children {
   margin-left: 14px;
-  padding: 6px 0 6px 10px;
-  border-left: 6px solid var(--block-color, #f97316);
+  padding: 6px 0 6px 12px;
+  border-left: 12px solid var(--block-color, #ffab19);
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-height: 20px;
+  min-height: 24px;
+  position: relative;
 }
 
 .word-block-empty-slot {
@@ -751,19 +817,32 @@ body, html {
 }
 
 .word-block-else-divider {
-  background: var(--block-color, #f97316);
+  background: var(--block-color, #ffab19);
   border-radius: 4px;
   margin-top: 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .word-block-c-bottom {
-  height: 8px;
-  background: var(--block-color, #f97316);
+  height: 14px;
+  background: var(--block-color, #ffab19);
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  width: 50px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  width: auto;
+  min-width: 60px;
+}
+
+.c-bottom-loop-icon {
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1;
 }
 
 /* Empty Word Blocks View */
@@ -3841,7 +3920,9 @@ body, html {
   position: relative;
   cursor: grab;
   user-select: none;
-  background: radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.25) 0%, rgba(9, 13, 22, 0.95) 100%);
+  background-color: #fafbfc;
+  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
 }
 
 .scratch-zoom-viewport.is-dragging {
@@ -4468,6 +4549,9 @@ body, html {
 /* ==========================================================================
    LEGO SPIKE Prime Blocks Workspace, Palette Drawer & Canvas
    ========================================================================== */
+/* ==========================================================================
+   LEGO SPIKE Prime Blocks Workspace, Palette Drawer & Canvas
+   ========================================================================== */
 .spike-blocks-workspace {
   display: flex;
   flex: 1;
@@ -4476,23 +4560,23 @@ body, html {
   min-height: 0;
   position: relative;
   overflow: hidden;
-  background: #090d16;
+  background: #ffffff;
 }
 
 /* 1. Category Sidebar (far left vertical strip) */
 .spike-category-sidebar {
-  width: 68px;
-  min-width: 68px;
-  max-width: 68px;
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   height: 100%;
   min-height: 0;
-  background: #0b1120;
-  border-right: 1px solid rgba(56, 189, 248, 0.2);
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 10px 0;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   user-select: none;
   z-index: 5;
@@ -4505,61 +4589,95 @@ body, html {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 58px;
+  width: 64px;
   padding: 6px 2px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #94a3b8;
+  color: #64748b;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .spike-cat-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #f1f5f9;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .spike-cat-btn.active {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 
 .cat-dot {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-.cat-dot.dot-motors { background: #0090f5; }
-.cat-dot.dot-movement { background: #d83b9c; }
-.cat-dot.dot-events { background: #eab308; }
-.cat-dot.dot-control { background: #f97316; }
-.cat-dot.dot-sensors { background: #00a2e8; }
-.cat-dot.dot-operators { background: #22c55e; }
+.cat-dot.dot-motors { background: #0094f7; }
+.cat-dot.dot-movement { background: #ed1587; }
+.cat-dot.dot-light { background: #9966ff; }
+.cat-dot.dot-sound { background: #d15fee; }
+.cat-dot.dot-events { background: #ffbb00; }
+.cat-dot.dot-control { background: #ffab19; }
+.cat-dot.dot-sensors { background: #29b6f6; }
+.cat-dot.dot-operators { background: #40bf4a; }
+.cat-dot.dot-variables { background: #ff661a; }
+.cat-dot.dot-myblocks { background: #ff4d6a; }
 
 .cat-label {
   font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
+  text-align: center;
+}
+
+.spike-cat-ext-divider {
+  width: 48px;
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px 0;
+}
+
+.spike-cat-extension-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #0094f7;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 148, 247, 0.3);
+  font-size: 18px;
+  margin-top: auto;
+  margin-bottom: 8px;
+  transition: transform 0.1s ease;
+}
+
+.spike-cat-extension-btn:hover {
+  transform: scale(1.05);
 }
 
 /* 2. Block Palette Drawer (scrollable list of blocks) */
 .spike-palette-drawer {
-  width: 320px;
-  min-width: 320px;
-  max-width: 320px;
+  width: 340px;
+  min-width: 340px;
+  max-width: 340px;
   height: 100%;
   min-height: 0;
-  background: #0f172a;
-  border-right: 1px solid rgba(56, 189, 248, 0.2);
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: 14px 16px;
   gap: 16px;
   flex-shrink: 0;
   user-select: none;
@@ -4569,12 +4687,13 @@ body, html {
 .palette-category-header {
   font-size: 13px;
   font-weight: 800;
-  color: #e2e8f0;
-  margin-bottom: 8px;
+  color: #1e293b;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  text-transform: capitalize;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .palette-blocks-list {
@@ -4588,50 +4707,105 @@ body, html {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
   color: #ffffff;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
   position: relative;
   line-height: 1.3;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .spike-palette-block:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.5);
-  filter: brightness(1.08);
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  filter: brightness(1.05);
 }
 
 .spike-palette-block:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.99);
 }
 
 .spike-palette-block .block-pill {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  background: rgba(255, 255, 255, 0.95);
+  background: #ffffff;
   color: #0f172a;
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 800;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .spike-palette-block .block-select {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.22);
   color: #ffffff;
   border-radius: 6px;
   padding: 2px 7px;
   font-size: 11px;
   font-weight: 800;
+}
+
+.spike-make-var-btn {
+  display: block;
+  width: 100%;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  margin-bottom: 8px;
+}
+
+.spike-make-var-btn:hover {
+  border-color: #ff661a;
+  color: #ff661a;
+  background: #fff7ed;
+  box-shadow: 0 2px 6px rgba(255, 102, 26, 0.15);
+}
+
+.spike-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.spike-var-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spike-var-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff661a;
+  cursor: pointer;
+}
+
+.spike-var-reporter-pill {
+  border-radius: 999px !important;
+  padding: 3px 12px !important;
+  font-size: 11px !important;
+  background: #ff661a !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(255, 102, 26, 0.3) !important;
 }
 
 /* 3. Canvas Viewport with Dotted Grid Background */
@@ -4643,13 +4817,44 @@ body, html {
   position: relative;
   overflow: hidden;
   cursor: grab;
-  background-color: #080d1a;
-  background-image: radial-gradient(rgba(56, 189, 248, 0.22) 1.5px, transparent 1.5px);
-  background-size: 24px 24px;
+  background-color: #fafbfc;
+  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
 }
 
 .spike-canvas-viewport.is-dragging {
   cursor: grabbing;
+}
+
+.spike-hub-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffbb00;
+  color: #000000;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  user-select: none;
+  cursor: default;
+}
+
+.spike-hub-badge .hub-icon-dot {
+  font-size: 12px;
+}
+
+.spike-hub-badge .hub-title {
+  letter-spacing: 0.3px;
+}
+
+.spike-hub-badge .hub-status-dot {
+  font-size: 9px;
 }
 
 .spike-canvas-content {
@@ -4671,12 +4876,11 @@ body, html {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
   padding: 4px 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   z-index: 10;
   user-select: none;
 }
@@ -4684,7 +4888,7 @@ body, html {
 .zoom-icon-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: #475569;
   font-size: 12px;
   cursor: pointer;
   padding: 2px 6px;
@@ -4696,17 +4900,18 @@ body, html {
 }
 
 .zoom-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #38bdf8;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .zoom-level-badge {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  color: #38bdf8;
+  color: #475569;
   font-weight: 700;
   min-width: 38px;
   text-align: center;
+  padding: 0 4px;
 }
 
 /* --- Editor Autosave Indicator & Project Zip / Script Export --- */
@@ -4998,3 +5203,363 @@ body, html {
 .spike-palette-drawer.palette-disabled .spike-palette-block {
   cursor: not-allowed;
 }
+
+/* ==========================================================================
+   Instruction Stepper Debugger, Click Highlighting & Coding Pane Overhaul
+   ========================================================================== */
+
+/* Step Button */
+.btn-step {
+  border-color: rgba(14, 165, 233, 0.6) !important;
+  color: #38bdf8 !important;
+  background: rgba(14, 165, 233, 0.12) !important;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.btn-step:hover:not(:disabled) {
+  background: rgba(14, 165, 233, 0.28) !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.btn-step:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Python Code View Container */
+.python-code-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 220px;
+  position: relative;
+  border-radius: 6px;
+  background: #090d16;
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  overflow: hidden;
+}
+
+.python-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  flex-shrink: 0;
+}
+
+.py-tab-btn,
+.popout-py-tab-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.py-tab-btn:hover,
+.popout-py-tab-btn:hover {
+  color: #f1f5f9;
+  border-color: #64748b;
+}
+
+.py-tab-btn.active,
+.popout-py-tab-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+/* Interactive Line View */
+.python-interactive-lines {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 6px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  background: #090d16;
+}
+
+.code-line-row {
+  display: flex;
+  align-items: center;
+  padding: 1px 6px;
+  cursor: pointer;
+  user-select: text;
+  transition: background 0.12s ease;
+  min-height: 22px;
+}
+
+.code-line-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.line-gutter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 48px;
+  min-width: 48px;
+  margin-right: 12px;
+  color: #64748b;
+  font-size: 11px;
+  user-select: none;
+}
+
+.line-ptr {
+  width: 14px;
+  color: #22c55e;
+  font-weight: 900;
+  font-size: 11px;
+  text-align: center;
+}
+
+.line-num {
+  width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.line-code {
+  flex: 1;
+  white-space: pre;
+  color: #f8fafc;
+  font-family: inherit;
+}
+
+/* Executing Line Highlight */
+.code-line-row.line-executing {
+  background: rgba(34, 197, 94, 0.24) !important;
+  border-left: 3px solid #22c55e;
+  box-shadow: inset 0 0 12px rgba(34, 197, 94, 0.15);
+}
+
+.code-line-row.line-executing .line-gutter {
+  color: #22c55e !important;
+  font-weight: 700;
+}
+
+.code-line-row.line-executing .line-ptr {
+  color: #22c55e;
+  animation: pulse-line-ptr 0.8s infinite alternate;
+}
+
+@keyframes pulse-line-ptr {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  100% { transform: scale(1.25); opacity: 1; }
+}
+
+/* Selected Line Highlight */
+.code-line-row.line-selected {
+  background: rgba(56, 189, 248, 0.18) !important;
+  border-left: 3px solid #38bdf8;
+}
+
+.code-line-row.line-selected .line-gutter {
+  color: #38bdf8 !important;
+  font-weight: 700;
+}
+
+/* Word Blocks Executing and Selected Highlights */
+.word-block.word-block-executing {
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.7), 0 0 4px #22c55e !important;
+  outline: 2px solid #22c55e !important;
+  transform: scale(1.02);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  z-index: 10;
+}
+
+.word-block.word-block-selected {
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.6) !important;
+  outline: 2px solid #38bdf8 !important;
+}
+
+.word-block-exec-badge {
+  background: #22c55e;
+  color: #022c22;
+  font-weight: 800;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+  animation: pulse-exec-badge 1s infinite alternate;
+}
+
+@keyframes pulse-exec-badge {
+  0% { transform: scale(0.95); opacity: 0.85; }
+  100% { transform: scale(1.05); opacity: 1; }
+}
+
+/* Log Category Badges */
+.badge-app {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+}
+
+.badge-program {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.badge-sensors {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+}
+
+/* ==========================================================================
+   Word Blocks Drag-and-Drop & Interactive Variable / Parameter Editing
+   ========================================================================== */
+
+/* Draggable Palette Blocks */
+.spike-palette-block {
+  cursor: grab !important;
+  user-select: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+
+.spike-palette-block:active {
+  cursor: grabbing !important;
+}
+
+.spike-palette-block.block-dragging {
+  opacity: 0.45 !important;
+  transform: scale(0.96) !important;
+}
+
+/* Canvas Drag-Over Stack Cue */
+.word-blocks-stack.drag-over {
+  background: rgba(0, 148, 247, 0.05);
+  outline: 2px dashed #0094f7;
+  border-radius: 8px;
+}
+
+/* Drop Line Indicator between Blocks */
+.word-block-drop-line {
+  height: 4px;
+  background: #0094f7;
+  border-radius: 2px;
+  margin: 3px 0;
+  box-shadow: 0 0 10px rgba(0, 148, 247, 0.7);
+  pointer-events: none;
+  animation: drop-line-glow 0.8s infinite alternate;
+}
+
+@keyframes drop-line-glow {
+  0% { opacity: 0.7; transform: scaleY(0.9); }
+  100% { opacity: 1; transform: scaleY(1.2); }
+}
+
+/* C-Clamp Slot Drop Highlight */
+.word-block-children.slot-drop-active {
+  background: rgba(0, 148, 247, 0.08) !important;
+  outline: 2px dashed #0094f7 !important;
+  border-radius: 4px;
+}
+
+/* Interactive Pills Hover & Focus Effects */
+.word-block-input-capsule,
+.word-block-var-pill,
+.word-block-pill:not(.pill-condition) {
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  user-select: none;
+}
+
+.word-block-input-capsule:hover,
+.word-block-pill:not(.pill-condition):hover {
+  filter: brightness(0.93);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8), inset 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  transform: scale(1.05);
+}
+
+.word-block-var-pill:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 2px 5px rgba(0, 0, 0, 0.3) !important;
+  transform: scale(1.05);
+}
+
+/* Inline Input Edit Box */
+.word-block-inline-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 2px solid #0094f7 !important;
+  border-radius: 12px !important;
+  padding: 1px 6px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(0, 148, 247, 0.25) !important;
+  font-family: inherit !important;
+  box-sizing: border-box !important;
+}
+
+/* Floating Popover Dropdown Menu */
+.word-block-popover-menu {
+  position: absolute;
+  z-index: 10000;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  padding: 5px;
+  min-width: 140px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #1f2328;
+  animation: popoverFadeIn 0.12s ease-out;
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.word-block-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.word-block-popover-item:hover {
+  background: #f0f3f6;
+  color: #0969da;
+}
+
+.word-block-popover-item.selected {
+  font-weight: 600;
+  color: #0969da;
+  background: #e6f0fb;
+}
+
+.word-block-popover-item .item-check {
+  margin-left: auto;
+  font-weight: 800;
+  color: #0969da;
+}
+
+.word-block-popover-divider {
+  height: 1px;
+  background: #e1e4e8;
+  margin: 4px 0;
+}
+

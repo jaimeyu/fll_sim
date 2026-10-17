@@ -3,7 +3,7 @@ import JSZip from 'jszip';
 export interface VisualBlock {
   id: string;
   opcode: string;
-  category: 'event' | 'movement' | 'motor' | 'control' | 'sensor' | 'operator' | 'variable';
+  category: 'event' | 'movement' | 'motor' | 'control' | 'sensor' | 'operator' | 'variable' | 'light' | 'sound' | 'myblock';
   icon: string;
   label: string;
   params: Record<string, string>;

@@ -91,27 +91,83 @@ async function bootstrapSimulator() {
     onRunScript: async (code: string) => {
       hud.stopAllManualDriving();
       hud.logConsole('Executing SPIKE Python script...');
+      runner.stepDelayMs = 40;
       try {
-        await runner.execute(code, (msg) => hud.logConsole(msg));
+        await runner.execute(
+          code,
+          (msg) => {
+            hud.logConsole(msg);
+            hud.logCommand('PROGRAM', 'print()', msg);
+          },
+          (lineNum) => {
+            hud.setExecutingLine(lineNum);
+          },
+          false
+        );
         hud.setExecutionState('IDLE');
+        hud.clearExecutingLine();
         hud.logConsole('Script completed successfully.');
       } catch (err: any) {
         hud.setExecutionState('ERROR');
+        hud.clearExecutingLine();
         hud.logConsole(`Runtime Error: ${err.message || err}`);
       } finally {
         engine.robot.stopAllMotors();
+      }
+    },
+    onPauseScript: () => {
+      runner.pause();
+      hud.setExecutionState('PAUSED');
+      hud.logConsole('⏸ Script execution paused.');
+    },
+    onResumeScript: () => {
+      runner.resume();
+      hud.setExecutionState('RUNNING');
+      hud.logConsole('▶ Script execution resumed.');
+    },
+    onStepScript: async (code?: string) => {
+      if (runner.isPaused) {
+        runner.step();
+      } else {
+        hud.stopAllManualDriving();
+        const codeToRun = code || hud.getActiveCode();
+        runner.stepDelayMs = 0;
+        try {
+          await runner.execute(
+            codeToRun,
+            (msg) => {
+              hud.logConsole(msg);
+              hud.logCommand('PROGRAM', 'print()', msg);
+            },
+            (lineNum) => {
+              hud.setExecutingLine(lineNum);
+            },
+            true
+          );
+          hud.setExecutionState('IDLE');
+          hud.clearExecutingLine();
+          hud.logConsole('Script completed successfully.');
+        } catch (err: any) {
+          hud.setExecutionState('ERROR');
+          hud.clearExecutingLine();
+          hud.logConsole(`Runtime Error: ${err.message || err}`);
+        } finally {
+          engine.robot.stopAllMotors();
+        }
       }
     },
     onStopScript: () => {
       runner.abort();
       engine.robot.stopAllMotors();
       hud.stopAllManualDriving();
+      hud.clearExecutingLine();
       hud.setExecutionState('IDLE');
     },
     onResetRobot: () => {
       runner.abort();
       engine.robot.stopAllMotors();
       hud.stopAllManualDriving();
+      hud.clearExecutingLine();
       const spawnPose = hud.getSpawnPose();
       engine.resetRobot(spawnPose);
       viewport.setRobotYaw(spawnPose.yawDegrees);
@@ -121,6 +177,7 @@ async function bootstrapSimulator() {
       const left = isPort(mappings.driveLeft) ? mappings.driveLeft : 'A';
       const right = isPort(mappings.driveRight) ? mappings.driveRight : 'B';
       engine.robot.setDrivePorts?.(left, right);
+      missionManager.resetAll();
       hud.setExecutionState('IDLE');
     },
     onSpawnPoseChange: (pose) => {

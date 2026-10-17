@@ -32,7 +32,7 @@ export class GearDialMission implements MissionElement {
   public isPlacedOnField: boolean = true;
   public isDualLocked: boolean = true;
   private dualLockMarker: DualLockMarker | null = null;
-  private dualLockAnchorOffset: { x: number; z: number } = { x: 0, z: 0 };
+  private dualLockLocalOffset: { x: number; z: number } | null = null;
   private pedestalBody!: RAPIER.RigidBody;
   private rotorBody!: RAPIER.RigidBody;
 
@@ -310,11 +310,22 @@ export class GearDialMission implements MissionElement {
 
   public setDualLocked(locked: boolean, anchorPoint?: { x: number; z: number }): void {
     this.isDualLocked = locked;
-    if (anchorPoint) {
-      this.dualLockAnchorOffset = {
-        x: anchorPoint.x - this.basePos.x,
-        z: anchorPoint.z - this.basePos.z,
-      };
+    if (locked) {
+      if (anchorPoint) {
+        const radYaw = (this.yawDegrees * Math.PI) / 180;
+        const cosY = Math.cos(radYaw);
+        const sinY = Math.sin(radYaw);
+        const dx = anchorPoint.x - this.basePos.x;
+        const dz = anchorPoint.z - this.basePos.z;
+        this.dualLockLocalOffset = {
+          x: dx * cosY - dz * sinY,
+          z: dx * sinY + dz * cosY,
+        };
+      } else if (!this.dualLockLocalOffset) {
+        this.dualLockLocalOffset = { x: 0, z: 0 };
+      }
+    } else {
+      this.dualLockLocalOffset = null;
     }
     if (this.pedestalBody) {
       this.pedestalBody.setBodyType(
@@ -332,9 +343,13 @@ export class GearDialMission implements MissionElement {
 
   public getDualLockPosition(): { x: number; z: number } | null {
     if (!this.isDualLocked) return null;
+    const offset = this.dualLockLocalOffset || { x: 0, z: 0 };
+    const radYaw = (this.yawDegrees * Math.PI) / 180;
+    const cosY = Math.cos(radYaw);
+    const sinY = Math.sin(radYaw);
     return {
-      x: this.basePos.x + this.dualLockAnchorOffset.x,
-      z: this.basePos.z + this.dualLockAnchorOffset.z,
+      x: this.basePos.x + (offset.x * cosY + offset.z * sinY),
+      z: this.basePos.z + (-offset.x * sinY + offset.z * cosY),
     };
   }
 
@@ -345,9 +360,8 @@ export class GearDialMission implements MissionElement {
     }
     this.dualLockMarker.setVisible(this.isDualLocked);
     if (this.isDualLocked) {
-      const posX = this.basePos.x + this.dualLockAnchorOffset.x;
-      const posZ = this.basePos.z + this.dualLockAnchorOffset.z;
-      this.dualLockMarker.setPosition(posX, 0.002, posZ);
+      const pos = this.getDualLockPosition() || this.basePos;
+      this.dualLockMarker.setPosition(pos.x, 0.002, pos.z);
     }
   }
 
@@ -360,6 +374,17 @@ export class GearDialMission implements MissionElement {
   }
 
   public setRotation(yawDegrees: number): void {
+    if (this.isDualLocked) {
+      const fixedPoint = this.getDualLockPosition();
+      if (fixedPoint) {
+        const offset = this.dualLockLocalOffset || { x: 0, z: 0 };
+        const radNew = (yawDegrees * Math.PI) / 180;
+        const cosN = Math.cos(radNew);
+        const sinN = Math.sin(radNew);
+        this.basePos.x = fixedPoint.x - (offset.x * cosN + offset.z * sinN);
+        this.basePos.z = fixedPoint.z - (-offset.x * sinN + offset.z * cosN);
+      }
+    }
     this.yawDegrees = yawDegrees;
     this.reset();
     this.updateDualLockVisualMesh();

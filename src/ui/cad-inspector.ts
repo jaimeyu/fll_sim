@@ -14,6 +14,7 @@ import {
 } from '../missions/season-config';
 import { resolveAssetUrl } from '../utils/asset-path';
 import { getFllAdvanceDrivingBaseSpec, getFllCompactDrivingBaseSpec } from '../cad/models/advance-driving-base';
+import { DualLockMarker } from '../missions/dual-lock-marker';
 
 export interface CadInspectorCallbacks {
   onDeployToField?: (missionId: string, customSpec?: RobotAssemblySpec) => void;
@@ -73,8 +74,11 @@ export class CadModelInspector {
   private initialMeshPoses: Map<string, { pos: THREE.Vector3; quat: THREE.Quaternion }> = new Map();
   private selectedClusterId: string | null = null;
 
-  // Virtual Mouse Hand Tool & Technic Bar Probe
-  private toolMode: 'grab' | 'technic_bar' = 'grab';
+  private dualLockMarkersGroup: THREE.Group = new THREE.Group();
+  private dualLockMarkers: Map<string, DualLockMarker> = new Map();
+
+  // Virtual Mouse Hand Tool, Technic Bar Probe & Fasteners Anchor Tool
+  private toolMode: 'grab' | 'technic_bar' | 'fastener' = 'grab';
   private handMesh: THREE.Mesh | null = null;
   private handLine: THREE.Line | null = null;
   private reticleMesh: THREE.Mesh | null = null;
@@ -175,6 +179,7 @@ export class CadModelInspector {
                 <div class="inspector-tool-mode-group" id="inspector-tool-mode-group" style="display: none; display: inline-flex; gap: 2px;">
                   <button class="btn btn-xs btn-primary active" id="btn-tool-grab" title="✋ Grab & Drag: Click and pull parts with spring force">✋ Grab</button>
                   <button class="btn btn-xs btn-outline" id="btn-tool-technic-bar" title="🥢 Technic Bar: LEGO beam probe to physically push and poke mechanisms">🥢 Technic Bar</button>
+                  <button class="btn btn-xs btn-outline" id="btn-tool-fastener" title="🔒 Fasteners: Click parts/clusters to toggle 3M Dual Lock field anchoring (Fixed vs Dynamic)">🔒 Fastener</button>
                 </div>
                 <button class="btn btn-xs btn-outline" id="btn-reset-physics" style="display: none;" title="Reset parts back to initial CAD positions">🔄 Reset Poses</button>
                 <button class="btn btn-xs btn-outline" id="btn-reset-view">🎯 Reset Camera</button>
@@ -443,8 +448,10 @@ export class CadModelInspector {
 
     const btnToolGrab = this.overlay.querySelector('#btn-tool-grab') as HTMLButtonElement | null;
     const btnToolBar = this.overlay.querySelector('#btn-tool-technic-bar') as HTMLButtonElement | null;
+    const btnToolFastener = this.overlay.querySelector('#btn-tool-fastener') as HTMLButtonElement | null;
     btnToolGrab?.addEventListener('click', () => this.setToolMode('grab'));
     btnToolBar?.addEventListener('click', () => this.setToolMode('technic_bar'));
+    btnToolFastener?.addEventListener('click', () => this.setToolMode('fastener'));
 
     // Mission selector
     const missionSelect = this.overlay.querySelector('#inspector-mission-select') as HTMLSelectElement;
@@ -696,6 +703,7 @@ export class CadModelInspector {
     // Groups
     this.scene.add(this.modelGroup);
     this.scene.add(this.colliderGroup);
+    this.scene.add(this.dualLockMarkersGroup);
     this.colliderGroup.visible = false;
 
     // Build Virtual Hand & Reticle 3D indicators
@@ -770,6 +778,53 @@ export class CadModelInspector {
     this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
+    if (this.toolMode === 'fastener') {
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const hits = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      let foundClusterId: string | null = null;
+      let hitPoint: THREE.Vector3 | null = null;
+      let hitNormal: THREE.Vector3 | null = null;
+      if (hits.length > 0) {
+        foundClusterId = this.findClusterIdFromObject(hits[0].object);
+        hitPoint = hits[0].point;
+        if (hits[0].face?.normal) {
+          hitNormal = hits[0].face.normal.clone().transformDirection(hits[0].object.matrixWorld);
+        }
+      }
+      if (!foundClusterId && this.dualLockMarkersGroup) {
+        const markerHits = this.mouseRay.intersectObjects(this.dualLockMarkersGroup.children, true);
+        if (markerHits.length > 0) {
+          let curr: THREE.Object3D | null = markerHits[0].object;
+          while (curr && curr !== this.dualLockMarkersGroup) {
+            if (curr.userData?.elementId) {
+              foundClusterId = curr.userData.elementId;
+              hitPoint = markerHits[0].point;
+              break;
+            }
+            curr = curr.parent;
+          }
+        }
+      }
+
+      if (foundClusterId && hitPoint) {
+        canvas.style.cursor = 'pointer';
+        if (this.reticleMesh) {
+          this.reticleMesh.position.copy(hitPoint);
+          if (hitNormal) {
+            this.reticleMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), hitNormal);
+            this.reticleMesh.position.addScaledVector(hitNormal, 0.001);
+          } else {
+            this.reticleMesh.quaternion.set(0, 0, 0, 1);
+          }
+          this.reticleMesh.visible = true;
+        }
+      } else {
+        if (this.reticleMesh) this.reticleMesh.visible = false;
+        canvas.style.cursor = 'default';
+      }
+      return;
+    }
+
     if (!this.isPhysicsRunning) return;
 
     if (this.toolMode === 'technic_bar') {
@@ -831,7 +886,42 @@ export class CadModelInspector {
   }
 
   private onPointerDown(e: PointerEvent, canvas: HTMLCanvasElement): void {
-    if (e.button !== 0 || !this.isPhysicsRunning) return;
+    if (e.button !== 0) return;
+
+    if (this.toolMode === 'fastener') {
+      const rect = canvas.getBoundingClientRect();
+      this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+
+      let targetClusterId: string | null = null;
+      const hits = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      if (hits.length > 0) {
+        targetClusterId = this.findClusterIdFromObject(hits[0].object);
+      }
+      if (!targetClusterId && this.dualLockMarkersGroup) {
+        const markerHits = this.mouseRay.intersectObjects(this.dualLockMarkersGroup.children, true);
+        if (markerHits.length > 0) {
+          let curr: THREE.Object3D | null = markerHits[0].object;
+          while (curr && curr !== this.dualLockMarkersGroup) {
+            if (curr.userData?.elementId) {
+              targetClusterId = curr.userData.elementId;
+              break;
+            }
+            curr = curr.parent;
+          }
+        }
+      }
+
+      if (targetClusterId) {
+        this.toggleClusterAnchor(targetClusterId);
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (!this.isPhysicsRunning) return;
 
     if (this.toolMode === 'technic_bar') {
       this.controls.enabled = false;
@@ -1006,6 +1096,7 @@ export class CadModelInspector {
     this.stopStepPlay();
     this.stopPhysicsSandbox();
     this.stopLoop();
+    this.clearDualLockMarkers();
   }
 
   public inspectSpec(spec: RobotAssemblySpec, name: string = 'Custom Model', id: string = 'custom'): void {
@@ -1092,7 +1183,8 @@ export class CadModelInspector {
   }
 
   private updateThumbnailDom(url: string | null): void {
-    const img = this.overlay.querySelector('#inspector-thumbnail-img') as HTMLImageElement;
+    const img = this.overlay.querySelector('#inspector-thumbnail-img') as HTMLImageElement | null;
+    if (!img) return;
     if (url) {
       img.src = url;
       img.style.display = 'block';
@@ -1246,6 +1338,7 @@ export class CadModelInspector {
     if (this.isPhysicsRunning) {
       await this.buildPhysicsWorld();
     }
+    this.updateDualLockMarkers();
   }
 
   /**
@@ -1440,33 +1533,35 @@ export class CadModelInspector {
     }
   }
 
-  public getToolMode(): 'grab' | 'technic_bar' {
+  public getToolMode(): 'grab' | 'technic_bar' | 'fastener' {
     return this.toolMode;
   }
 
-  public setToolMode(mode: 'grab' | 'technic_bar'): void {
+  public setToolMode(mode: 'grab' | 'technic_bar' | 'fastener'): void {
     this.toolMode = mode;
     const btnToolGrab = this.overlay.querySelector('#btn-tool-grab') as HTMLButtonElement | null;
     const btnToolBar = this.overlay.querySelector('#btn-tool-technic-bar') as HTMLButtonElement | null;
+    const btnToolFastener = this.overlay.querySelector('#btn-tool-fastener') as HTMLButtonElement | null;
     const heightBadge = this.overlay.querySelector('#technic-bar-height-badge') as HTMLElement | null;
+
+    btnToolGrab?.classList.remove('btn-primary', 'active');
+    btnToolGrab?.classList.add('btn-outline');
+    btnToolBar?.classList.remove('btn-primary', 'active');
+    btnToolBar?.classList.add('btn-outline');
+    btnToolFastener?.classList.remove('btn-primary', 'active');
+    btnToolFastener?.classList.add('btn-outline');
 
     if (mode === 'grab') {
       btnToolGrab?.classList.add('btn-primary', 'active');
       btnToolGrab?.classList.remove('btn-outline');
-      btnToolBar?.classList.remove('btn-primary', 'active');
-      btnToolBar?.classList.add('btn-outline');
-
       if (heightBadge) heightBadge.style.display = 'none';
       if (this.technicBarMesh) this.technicBarMesh.visible = false;
       if (this.technicBarBody) {
         this.technicBarBody.setNextKinematicTranslation({ x: 0, y: -100, z: 0 });
       }
-    } else {
+    } else if (mode === 'technic_bar') {
       btnToolBar?.classList.add('btn-primary', 'active');
       btnToolBar?.classList.remove('btn-outline');
-      btnToolGrab?.classList.remove('btn-primary', 'active');
-      btnToolGrab?.classList.add('btn-outline');
-
       if (heightBadge) {
         heightBadge.style.display = this.isPhysicsRunning ? 'block' : 'none';
         heightBadge.textContent = `🥢 Technic Bar: ${(this.technicBarHeight * 1000).toFixed(0)}mm (Scroll wheel to adjust height)`;
@@ -1479,6 +1574,14 @@ export class CadModelInspector {
           y: this.technicBarHeight,
           z: this.technicBarTarget.z,
         });
+      }
+    } else if (mode === 'fastener') {
+      btnToolFastener?.classList.add('btn-primary', 'active');
+      btnToolFastener?.classList.remove('btn-outline');
+      if (heightBadge) heightBadge.style.display = 'none';
+      if (this.technicBarMesh) this.technicBarMesh.visible = false;
+      if (this.technicBarBody) {
+        this.technicBarBody.setNextKinematicTranslation({ x: 0, y: -100, z: 0 });
       }
     }
   }
@@ -1494,6 +1597,81 @@ export class CadModelInspector {
     if (this.isPhysicsRunning) {
       this.buildPhysicsWorld();
     }
+    this.updateDualLockMarkers();
+  }
+
+  public updateDualLockMarkers(): void {
+    if (!this.currentSpec) {
+      this.clearDualLockMarkers();
+      return;
+    }
+
+    const activeFixedIds = new Set<string>();
+
+    for (const cluster of this.currentSpec.clusters) {
+      const isFixed = this.isSolidMode || (cluster.isFixed !== undefined
+        ? cluster.isFixed
+        : (this.currentSpec.joints.length === 0 || cluster.isRootChassis));
+
+      if (isFixed) {
+        activeFixedIds.add(cluster.clusterId);
+        let marker = this.dualLockMarkers.get(cluster.clusterId);
+        if (!marker) {
+          marker = new DualLockMarker(cluster.clusterId);
+          this.dualLockMarkers.set(cluster.clusterId, marker);
+          this.dualLockMarkersGroup.add(marker.group);
+        }
+        marker.setVisible(true);
+
+        // Position marker at ground contact of this cluster
+        const grp = this.clusterMeshGroups.get(cluster.clusterId);
+        if (grp) {
+          const box = new THREE.Box3().setFromObject(grp);
+          if (!box.isEmpty()) {
+            const posX = (box.min.x + box.max.x) / 2;
+            const posZ = (box.min.z + box.max.z) / 2;
+            marker.setPosition(posX, 0.002, posZ);
+          }
+        } else {
+          let avgX = 0;
+          let avgZ = 0;
+          let count = 0;
+          if (cluster.parts && cluster.parts.length > 0) {
+            for (const p of cluster.parts) {
+              avgX += p.position[0] / 1000;
+              avgZ += p.position[2] / 1000;
+              count++;
+            }
+          } else if (cluster.colliders && cluster.colliders.length > 0) {
+            for (const c of cluster.colliders) {
+              avgX += c.offset[0];
+              avgZ += c.offset[2];
+              count++;
+            }
+          }
+          const posX = count > 0 ? avgX / count : 0;
+          const posZ = count > 0 ? avgZ / count : 0;
+          marker.setPosition(posX, 0.002, posZ);
+        }
+      }
+    }
+
+    // Remove markers that are no longer fixed
+    for (const [cid, marker] of this.dualLockMarkers.entries()) {
+      if (!activeFixedIds.has(cid)) {
+        marker.destroy();
+        this.dualLockMarkersGroup.remove(marker.group);
+        this.dualLockMarkers.delete(cid);
+      }
+    }
+  }
+
+  public clearDualLockMarkers(): void {
+    for (const marker of this.dualLockMarkers.values()) {
+      marker.destroy();
+    }
+    this.dualLockMarkers.clear();
+    this.dualLockMarkersGroup.clear();
   }
 
   private toggleClusterAnchor(clusterId: string): void {
@@ -1520,6 +1698,7 @@ export class CadModelInspector {
       }
     }
 
+    this.updateDualLockMarkers();
     this.renderClusterList();
   }
 
@@ -1697,10 +1876,14 @@ export class CadModelInspector {
     }
     const submodelCount = Math.max(1, submodelNames.size);
 
-    (this.overlay.querySelector('#metric-parts-count') as HTMLElement).textContent = `${totalParts}`;
-    (this.overlay.querySelector('#metric-submodels-count') as HTMLElement).textContent = `${submodelCount}`;
-    (this.overlay.querySelector('#metric-clusters-count') as HTMLElement).textContent = `${spec.clusters.length}`;
-    (this.overlay.querySelector('#metric-mass') as HTMLElement).textContent = `${totalMass} g`;
+    const elParts = this.overlay.querySelector('#metric-parts-count');
+    if (elParts) elParts.textContent = `${totalParts}`;
+    const elSubmodels = this.overlay.querySelector('#metric-submodels-count');
+    if (elSubmodels) elSubmodels.textContent = `${submodelCount}`;
+    const elClusters = this.overlay.querySelector('#metric-clusters-count');
+    if (elClusters) elClusters.textContent = `${spec.clusters.length}`;
+    const elMass = this.overlay.querySelector('#metric-mass');
+    if (elMass) elMass.textContent = `${totalMass} g`;
 
     // Calculate dimensions in mm
     let minX = Infinity, maxX = -Infinity;
@@ -1731,9 +1914,12 @@ export class CadModelInspector {
     const studsZ = (sizeZ / 8).toFixed(1);
     const platesY = (sizeY / 3.2).toFixed(1);
 
-    (this.overlay.querySelector('#dim-x') as HTMLElement).textContent = `${sizeX.toFixed(1)} mm (${studsX} studs)`;
-    (this.overlay.querySelector('#dim-z') as HTMLElement).textContent = `${sizeZ.toFixed(1)} mm (${studsZ} studs)`;
-    (this.overlay.querySelector('#dim-y') as HTMLElement).textContent = `${sizeY.toFixed(1)} mm (${platesY} plates)`;
+    const elDimX = this.overlay.querySelector('#dim-x');
+    if (elDimX) elDimX.textContent = `${sizeX.toFixed(1)} mm (${studsX} studs)`;
+    const elDimZ = this.overlay.querySelector('#dim-z');
+    if (elDimZ) elDimZ.textContent = `${sizeZ.toFixed(1)} mm (${studsZ} studs)`;
+    const elDimY = this.overlay.querySelector('#dim-y');
+    if (elDimY) elDimY.textContent = `${sizeY.toFixed(1)} mm (${platesY} plates)`;
 
     // Render cluster list with interactive anchor toggles
     this.renderClusterList();

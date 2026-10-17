@@ -5,6 +5,12 @@ export class PythonScriptRunner {
   private abortController: AbortController | null = null;
   private isRunning = false;
 
+  public isPaused: boolean = false;
+  public currentLine: number = 0;
+  public stepDelayMs: number = 0;
+
+  private pausePromiseResolve: (() => void) | null = null;
+
   constructor(api: VirtualSpikeApi) {
     this.api = api;
   }
@@ -13,11 +19,59 @@ export class PythonScriptRunner {
     return this.isRunning;
   }
 
+  public pause(): void {
+    this.isPaused = true;
+  }
+
+  public resume(): void {
+    if (!this.isRunning) return;
+    this.isPaused = false;
+    if (this.pausePromiseResolve) {
+      const resolve = this.pausePromiseResolve;
+      this.pausePromiseResolve = null;
+      resolve();
+    }
+  }
+
+  public get isWaitingForStep(): boolean {
+    return this.pausePromiseResolve !== null;
+  }
+
+  public waitForPause(): Promise<number> {
+    if (this.isPaused && this.pausePromiseResolve) {
+      return Promise.resolve(this.currentLine);
+    }
+    return new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (!this.isRunning || (this.isPaused && this.pausePromiseResolve)) {
+          clearInterval(check);
+          resolve(this.currentLine);
+        }
+      }, 5);
+    });
+  }
+
+  public step(): void {
+    if (!this.isRunning) return;
+    this.isPaused = true;
+    if (this.pausePromiseResolve) {
+      const resolve = this.pausePromiseResolve;
+      this.pausePromiseResolve = null;
+      resolve();
+    }
+  }
+
   public abort(): void {
     if (this.abortController) {
       this.abortController.abort();
     }
     this.isRunning = false;
+    this.isPaused = false;
+    if (this.pausePromiseResolve) {
+      const resolve = this.pausePromiseResolve;
+      this.pausePromiseResolve = null;
+      resolve();
+    }
     this.api.stopAllMotors();
   }
 
@@ -74,6 +128,8 @@ export class PythonScriptRunner {
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const rawLine = lines[lineIndex];
+      const lineNumber = lineIndex + 1;
+
       // Skip empty lines or pure comments
       if (!rawLine.trim() || rawLine.trim().startsWith('#')) {
         continue;
@@ -121,7 +177,8 @@ export class PythonScriptRunner {
       if (transformed.startsWith('while ') && transformed.endsWith(':')) {
         let condition = transformed.slice(6, -1).trim();
         condition = condition.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
-        outputLines.push(' '.repeat(indent) + `while (${condition}) { await __yield();`);
+        outputLines.push(' '.repeat(indent) + `await __traceLine(${lineNumber});`);
+        outputLines.push(' '.repeat(indent) + `while (${condition}) { await __traceLine(${lineNumber}); await __yield();`);
         indentStack.push(indent + 2);
         continue;
       }
@@ -142,7 +199,8 @@ export class PythonScriptRunner {
           end = rangeArgs[1];
           step = rangeArgs[2];
         }
-        outputLines.push(' '.repeat(indent) + `for (let ${varName} = ${init}; ${varName} < ${end}; ${varName} += ${step}) { await __yield();`);
+        outputLines.push(' '.repeat(indent) + `await __traceLine(${lineNumber});`);
+        outputLines.push(' '.repeat(indent) + `for (let ${varName} = ${init}; ${varName} < ${end}; ${varName} += ${step}) { await __traceLine(${lineNumber}); await __yield();`);
         indentStack.push(indent + 2);
         continue;
       }
@@ -151,6 +209,7 @@ export class PythonScriptRunner {
       if (transformed.startsWith('if ') && transformed.endsWith(':')) {
         let condition = transformed.slice(3, -1).trim();
         condition = condition.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
+        outputLines.push(' '.repeat(indent) + `await __traceLine(${lineNumber});`);
         outputLines.push(' '.repeat(indent) + `if (${condition}) {`);
         indentStack.push(indent + 2);
         continue;
@@ -160,7 +219,7 @@ export class PythonScriptRunner {
         condition = condition.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
         // Close previous block if on same indent
         if (indentStack.length > 1) indentStack.pop();
-        outputLines.push(' '.repeat(indent) + `} else if (${condition}) {`);
+        outputLines.push(' '.repeat(indent) + `} else if (await __traceLine(${lineNumber}), (${condition})) {`);
         indentStack.push(indent + 2);
         continue;
       }
@@ -229,6 +288,7 @@ export class PythonScriptRunner {
       // Handle simple print
       transformed = transformed.replace(/\bprint\((.*?)\)/g, 'console.log($1)');
 
+      outputLines.push(' '.repeat(indent) + `await __traceLine(${lineNumber});`);
       outputLines.push(' '.repeat(indent) + transformed + ';');
     }
 
@@ -244,9 +304,17 @@ export class PythonScriptRunner {
   /**
    * Run a SPIKE Python script asynchronously
    */
-  public async execute(pyCode: string, onLog?: (msg: string) => void): Promise<void> {
+  public async execute(
+    pyCode: string,
+    onLog?: (msg: string) => void,
+    onLine?: (line: number) => void,
+    startPaused: boolean = false
+  ): Promise<void> {
     this.abortController = new AbortController();
     this.isRunning = true;
+    this.isPaused = startPaused;
+    this.currentLine = 0;
+    this.pausePromiseResolve = null;
 
     const signal = this.abortController.signal;
 
@@ -299,7 +367,51 @@ export class PythonScriptRunner {
 
     const __yield = async () => {
       if (signal.aborted) throw new Error('Aborted');
-      await new Promise((r) => setTimeout(r, 10)); // Cooperative yield to UI
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 0);
+        const abortHandler = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        if (signal.aborted) {
+          abortHandler();
+        } else {
+          signal.addEventListener('abort', abortHandler, { once: true });
+        }
+      });
+      if (signal.aborted) throw new Error('Aborted');
+    };
+
+    const __traceLine = async (lineNum: number) => {
+      if (signal.aborted) throw new Error('Aborted');
+      this.currentLine = lineNum;
+      onLine?.(lineNum);
+
+      if (this.isPaused) {
+        await new Promise<void>((resolve) => {
+          this.pausePromiseResolve = resolve;
+        });
+        this.pausePromiseResolve = null;
+        if (signal.aborted) throw new Error('Aborted');
+      } else {
+        if (this.stepDelayMs > 0) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, this.stepDelayMs);
+            const abortHandler = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+            if (signal.aborted) {
+              abortHandler();
+            } else {
+              signal.addEventListener('abort', abortHandler, { once: true });
+            }
+          });
+          if (signal.aborted) throw new Error('Aborted');
+        } else {
+          await __yield();
+        }
+      }
     };
 
     const consoleLog = (...args: any[]) => {
@@ -332,6 +444,7 @@ export class PythonScriptRunner {
         'len',
         'str',
         '__yield',
+        '__traceLine',
         'console',
         `return (async () => {\n${jsCode}\n})();`
       );
@@ -356,6 +469,7 @@ export class PythonScriptRunner {
         len,
         str,
         __yield,
+        __traceLine,
         { log: consoleLog }
       );
     } catch (err: any) {
@@ -365,6 +479,9 @@ export class PythonScriptRunner {
     } finally {
       this.api.stopAllMotors();
       this.isRunning = false;
+      this.isPaused = false;
+      this.currentLine = 0;
+      this.pausePromiseResolve = null;
       this.abortController = null;
     }
   }

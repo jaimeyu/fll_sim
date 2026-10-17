@@ -157,8 +157,8 @@ export class CustomImportedMissionElement implements MissionElement {
 
     if (anchorPoint && locked) {
       const radYaw = (this.yawDegrees * Math.PI) / 180;
-      const cosY = Math.cos(-radYaw);
-      const sinY = Math.sin(-radYaw);
+      const cosY = Math.cos(radYaw);
+      const sinY = Math.sin(radYaw);
       const dx = anchorPoint.x - this.basePos.x;
       const dz = anchorPoint.z - this.basePos.z;
       this.dualLockLocalOffset = {
@@ -166,7 +166,33 @@ export class CustomImportedMissionElement implements MissionElement {
         z: dx * sinY + dz * cosY,
       };
     } else if (locked && !this.dualLockLocalOffset) {
-      this.dualLockLocalOffset = { x: 0, z: 0 };
+      if (targetClusterId) {
+        const targetCluster = this.spec.clusters.find((c) => c.clusterId === targetClusterId);
+        if (targetCluster) {
+          let avgX = 0;
+          let avgZ = 0;
+          let count = 0;
+          if (targetCluster.parts && targetCluster.parts.length > 0) {
+            for (const p of targetCluster.parts) {
+              avgX += p.position[0] / 1000;
+              avgZ += p.position[2] / 1000;
+              count++;
+            }
+          } else if (targetCluster.colliders && targetCluster.colliders.length > 0) {
+            for (const col of targetCluster.colliders) {
+              avgX += col.offset[0];
+              avgZ += col.offset[2];
+              count++;
+            }
+          }
+          if (count > 0) {
+            this.dualLockLocalOffset = { x: avgX / count, z: avgZ / count };
+          }
+        }
+      }
+      if (!this.dualLockLocalOffset) {
+        this.dualLockLocalOffset = { x: 0, z: 0 };
+      }
     }
 
     // Clean up any existing physical Dual Lock joint
@@ -224,8 +250,8 @@ export class CustomImportedMissionElement implements MissionElement {
     const cosY = Math.cos(radYaw);
     const sinY = Math.sin(radYaw);
     return {
-      x: this.basePos.x + (offset.x * cosY - offset.z * sinY),
-      z: this.basePos.z + (offset.x * sinY + offset.z * cosY),
+      x: this.basePos.x + (offset.x * cosY + offset.z * sinY),
+      z: this.basePos.z + (-offset.x * sinY + offset.z * cosY),
     };
   }
 
@@ -548,8 +574,20 @@ export class CustomImportedMissionElement implements MissionElement {
   }
 
   public setRotation(yawDegrees: number): void {
+    if (this.isDualLocked) {
+      const fixedPoint = this.getDualLockPosition();
+      if (fixedPoint) {
+        const offset = this.dualLockLocalOffset || { x: 0, z: 0 };
+        const radNew = (yawDegrees * Math.PI) / 180;
+        const cosN = Math.cos(radNew);
+        const sinN = Math.sin(radNew);
+        this.basePos.x = fixedPoint.x - (offset.x * cosN + offset.z * sinN);
+        this.basePos.z = fixedPoint.z - (-offset.x * sinN + offset.z * cosN);
+      }
+    }
     this.yawDegrees = yawDegrees;
     this.reset();
+    this.updateDualLockVisualMesh();
   }
 
   public getYawDegrees(): number {

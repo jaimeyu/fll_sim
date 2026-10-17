@@ -147,4 +147,96 @@ describe('Dual Lock & Dynamic Mechanism Movement', () => {
       expect(isInsideBase).toBe(false);
     }
   });
+
+  it('rotates assembly around the fastener anchor point when dual-locked on a farther cluster', async () => {
+    const ioPath = path.resolve(__dirname, '../public/missions/M01.io');
+    const buf = fs.readFileSync(ioPath);
+    const zip = await JSZip.loadAsync(buf);
+    const ldrText = await zip.file('model.ldr')!.async('text');
+
+    const raw = LDrawImporter.parseLDrawText(ldrText, 'M01');
+    const spec = CadClusteringPreSolver.solve({ name: 'M01', parts: raw.parts, links: raw.links });
+    const decomposed = decomposeMissionAssembly(spec, 'M01', { x: 0.5, y: 0.002, z: 0.5 }, 0);
+    const mainObj = decomposed[0];
+
+    const elem = new CustomImportedMissionElement(mainObj.spec, {
+      id: mainObj.id,
+      name: mainObj.name,
+      isBaseFixed: true,
+    });
+
+    elem.init(world, { x: 0.5, y: 0.002, z: 0.5 }, 0);
+
+    // Fasten at an anchor point 15cm along X, 5cm along Z from center
+    const anchorTarget = { x: 0.65, z: 0.55 };
+    elem.setDualLocked(true, anchorTarget);
+
+    const initialFastenerPos = elem.getDualLockPosition();
+    expect(initialFastenerPos).not.toBeNull();
+    expect(initialFastenerPos!.x).toBeCloseTo(0.65, 3);
+    expect(initialFastenerPos!.z).toBeCloseTo(0.55, 3);
+
+    // Rotate through 45, 90, 180, 270, 360 degrees
+    const testAngles = [45, 90, 135, 180, 270, 360];
+    for (const yaw of testAngles) {
+      elem.setRotation(yaw);
+
+      // Fastener position MUST remain pinned to exact field coordinates!
+      const rotatedFastenerPos = elem.getDualLockPosition();
+      expect(rotatedFastenerPos).not.toBeNull();
+      expect(rotatedFastenerPos!.x).toBeCloseTo(0.65, 3);
+      expect(rotatedFastenerPos!.z).toBeCloseTo(0.55, 3);
+
+      // Meanwhile, the assembly center basePos has orbited around the fastener
+      if (yaw !== 360 && yaw !== 0) {
+        const curBasePos = elem.getPosition();
+        const distFromCenter = Math.hypot(curBasePos.x - 0.5, curBasePos.z - 0.5);
+        expect(distFromCenter).toBeGreaterThan(0.01);
+      }
+    }
+  });
+
+  it('supports Fastener tool mode and toggling cluster Dual-Lock anchors in CAD Model Inspector', async () => {
+    const { CadModelInspector } = await import('../src/ui/cad-inspector');
+    const inspector = new CadModelInspector();
+
+    // Verify initial tool mode and switching to fastener tool
+    expect(inspector.getToolMode()).toBe('grab');
+    inspector.setToolMode('fastener');
+    expect(inspector.getToolMode()).toBe('fastener');
+
+    const ioPath = path.resolve(__dirname, '../public/missions/M01.io');
+    const buf = fs.readFileSync(ioPath);
+    const zip = await JSZip.loadAsync(buf);
+    const ldrText = await zip.file('model.ldr')!.async('text');
+
+    const raw = LDrawImporter.parseLDrawText(ldrText, 'M01');
+    const spec = CadClusteringPreSolver.solve({ name: 'M01', parts: raw.parts, links: raw.links });
+
+    inspector.inspectSpec(spec, 'M01 Coral Reef', 'M01');
+    inspector.updateDualLockMarkers();
+
+    // @ts-ignore
+    const markers = inspector['dualLockMarkers'] as Map<string, any>;
+    // Root cluster is fixed by default and should have a DualLockMarker
+    expect(markers.has('chassis_root')).toBe(true);
+
+    // Dynamic arm cluster should not be fixed initially
+    const armCluster = spec.clusters.find((c) => c.clusterId === 'cluster_4')!;
+    expect(armCluster.isFixed).toBe(false);
+    expect(markers.has('cluster_4')).toBe(false);
+
+    // Toggle anchor on cluster_4 via inspector fastener tool
+    // @ts-ignore
+    inspector['toggleClusterAnchor']('cluster_4');
+    expect(armCluster.isFixed).toBe(true);
+    expect(markers.has('cluster_4')).toBe(true);
+
+    // Toggle back off
+    // @ts-ignore
+    inspector['toggleClusterAnchor']('cluster_4');
+    expect(armCluster.isFixed).toBe(false);
+    expect(markers.has('cluster_4')).toBe(false);
+  });
 });
+
