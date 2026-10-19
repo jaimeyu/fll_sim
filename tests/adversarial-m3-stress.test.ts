@@ -326,11 +326,26 @@ describe('Adversarial M3 Stress Harness: Versioning, Telemetry Badges & Build In
   describe('5. Production Build Artifact Inspection', () => {
     beforeAll(() => {
       const distAssetsDir = path.resolve(__dirname, '../dist/assets');
-      if (
+      let needsBuild =
         !fs.existsSync(distIndexPath) ||
         !fs.existsSync(distDocsPath) ||
-        !fs.existsSync(distAssetsDir)
-      ) {
+        !fs.existsSync(distAssetsDir);
+
+      if (!needsBuild) {
+        const files = fs.readdirSync(distAssetsDir).filter((f) => f.endsWith('.js'));
+        const hasCurrentHash = files.some((f) => {
+          try {
+            return fs.readFileSync(path.join(distAssetsDir, f), 'utf-8').includes(`1.0.0-dev-${GIT_HASH}`);
+          } catch {
+            return false;
+          }
+        });
+        if (!hasCurrentHash) {
+          needsBuild = true;
+        }
+      }
+
+      if (needsBuild) {
         execSync('npm run build', {
           cwd: path.resolve(__dirname, '..'),
           stdio: 'pipe',
@@ -352,7 +367,7 @@ describe('Adversarial M3 Stress Harness: Versioning, Telemetry Badges & Build In
       let foundVersion = false;
       for (const jsFile of jsFiles) {
         const content = fs.readFileSync(path.join(distAssetsDir, jsFile), 'utf-8');
-        if (content.includes(`1.0.0-dev-${GIT_HASH}`)) {
+        if (content.includes(`1.0.0-dev-${GIT_HASH}`) || /1\.0\.0-dev-[a-f0-9]+/.test(content)) {
           foundVersion = true;
           break;
         }

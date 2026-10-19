@@ -1,12 +1,24 @@
 # 🤖 FLL Robot Simulator (`fll-sim`)
 
+[![Deploy Simulator to GitHub Pages](https://github.com/jaimeyu/fll_sim/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/jaimeyu/fll_sim/actions/workflows/deploy-pages.yml)
+[![Tests: 580 Passing](https://img.shields.io/badge/Tests-580%20passing-brightgreen?style=flat&logo=vitest&logoColor=white)](https://github.com/jaimeyu/fll_sim/actions)
+[![Code Coverage](https://img.shields.io/endpoint?url=https://jaimeyu.github.io/fll_sim/coverage/badge.json)](https://jaimeyu.github.io/fll_sim/coverage/)
+[![Live Simulator](https://img.shields.io/badge/Live%20Simulator-Launch%20in%20Browser-2ea043?style=flat&logo=googlechrome&logoColor=white)](https://jaimeyu.github.io/fll_sim/)
+[![Documentation](https://img.shields.io/badge/Documentation-MkDocs%20Portal-526cfe?style=flat&logo=materialformkdocs&logoColor=white)](https://jaimeyu.github.io/fll_sim/docs/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Physics: Rapier3D](https://img.shields.io/badge/Physics-Rapier3D%20(Wasm)-orange.svg?logo=webassembly&logoColor=white)](https://rapier.rs/)
+[![Rendering: Three.js](https://img.shields.io/badge/Rendering-Three.js%20(WebGL)-black.svg?logo=threedotjs&logoColor=white)](https://threejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-339933.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![Physics: Rapier3D](https://img.shields.io/badge/Physics-Rapier3D%20(Wasm)-orange.svg)](https://rapier.rs/)
-[![Rendering: Three.js](https://img.shields.io/badge/Rendering-Three.js%20(WebGL)-green.svg)](https://threejs.org/)
-[![Tests: Vitest](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)](https://vitest.dev/)
+[![FLL Season](https://img.shields.io/badge/FLL%20Season-2026%20BIOGLOW-388bfd?style=flat)](https://www.firstlegoleague.org/)
 
-An open-source, web-first **3D robotics simulation platform** for **FIRST LEGO League (FLL)** teams, mentors, and students.
+> 🎮 **Live Web Simulator & Online Resources (GitHub Pages):**  
+> ### 👉 **[Launch FLL Robot Simulator Live](https://jaimeyu.github.io/fll_sim/)** 👈  
+> *Zero-install, browser-based 3D physics simulation platform with full LEGO SPIKE Prime Python & Word Blocks programming!*  
+>  
+> * 📖 **[Simulator Documentation & Student Tutorials](https://jaimeyu.github.io/fll_sim/docs/)**  
+> * 📊 **[Interactive Code Coverage Report](https://jaimeyu.github.io/fll_sim/coverage/)**  
+> * 🌐 **[FLL Team 76265 "Lego Legends" Engineering Notebook](https://jaimeyu.github.io/FLL_76265_2026_BIOGLOW/)**
 
 Unlike 2D grid visualizers or discontinued proprietary desktop simulators, `fll-sim` combines **real CAD model ingestion** (BrickLink Studio `.io` / LDraw `.ldr`), **intelligent topological pin clustering**, **deterministic WebAssembly 3D physics** (Rapier3D), and an **asynchronous SPIKE Prime Python runtime** capable of running in standard web browsers.
 

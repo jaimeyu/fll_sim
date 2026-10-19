@@ -37,5 +37,16 @@ export default defineConfig({
   },
   test: {
     testTimeout: 20000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.ts'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/types/**',
+        'src/vite-env.d.ts',
+      ],
+    },
   },
 });

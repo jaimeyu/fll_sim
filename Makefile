@@ -30,6 +30,10 @@ build:
 test:
 	npm run test
 
+coverage:
+	npm run test:coverage
+	npm run coverage:badge
+
 docs-serve:
 	uv run --with mkdocs-material mkdocs serve
 
