@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { GIT_HASH, GIT_COMMIT_HASH, APP_VERSION, DISPLAY_VERSION } from '../src/config/version';
 
 const hudTsPath = path.resolve(__dirname, '../src/ui/hud.ts');
@@ -323,6 +324,20 @@ describe('Adversarial M3 Stress Harness: Versioning, Telemetry Badges & Build In
   // 5. Production Build Bundle Invariants
   // -------------------------------------------------------------------------
   describe('5. Production Build Artifact Inspection', () => {
+    beforeAll(() => {
+      const distAssetsDir = path.resolve(__dirname, '../dist/assets');
+      if (
+        !fs.existsSync(distIndexPath) ||
+        !fs.existsSync(distDocsPath) ||
+        !fs.existsSync(distAssetsDir)
+      ) {
+        execSync('npm run build', {
+          cwd: path.resolve(__dirname, '..'),
+          stdio: 'pipe',
+        });
+      }
+    }, 60000);
+
     it('dist/index.html and dist/docs/index.html exist after production build', () => {
       expect(fs.existsSync(distIndexPath)).toBe(true);
       expect(fs.existsSync(distDocsPath)).toBe(true);
@@ -330,7 +345,7 @@ describe('Adversarial M3 Stress Harness: Versioning, Telemetry Badges & Build In
 
     it('dist/ assets contain the short git hash version string', () => {
       const distAssetsDir = path.resolve(__dirname, '../dist/assets');
-      const files = fs.readdirSync(distAssetsDir);
+      const files = fs.existsSync(distAssetsDir) ? fs.readdirSync(distAssetsDir) : [];
       const jsFiles = files.filter((f) => f.endsWith('.js'));
       expect(jsFiles.length).toBeGreaterThan(0);
 
