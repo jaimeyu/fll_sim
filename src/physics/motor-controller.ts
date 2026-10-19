@@ -10,6 +10,38 @@ export interface MotorTarget {
   onComplete?: () => void;
 }
 
+export function resolveMotorSpeedInput(speedPercent: any, defaultSpeed: number = 50): number {
+  if (typeof speedPercent === 'number' && Number.isFinite(speedPercent)) {
+    return Math.max(-100, Math.min(100, speedPercent));
+  }
+  if (typeof speedPercent === 'string') {
+    const s = speedPercent.trim().toLowerCase();
+    if (s === 'counterclockwise' || s === 'ccw' || s === 'anticlockwise' || s === 'reverse' || s === 'backward') {
+      return -Math.abs(defaultSpeed);
+    }
+    if (s === 'clockwise' || s === 'cw' || s === 'forward') {
+      return Math.abs(defaultSpeed);
+    }
+    const parsed = parseFloat(s);
+    if (Number.isFinite(parsed)) {
+      return Math.max(-100, Math.min(100, parsed));
+    }
+  }
+  if (typeof speedPercent === 'object' && speedPercent !== null) {
+    let sign = 1;
+    if (speedPercent.direction) {
+      const d = String(speedPercent.direction).toLowerCase();
+      if (d === 'counterclockwise' || d === 'ccw' || d === 'anticlockwise' || d === 'reverse' || d === 'backward') {
+        sign = -1;
+      }
+    }
+    const spd = speedPercent.speed !== undefined ? Number(speedPercent.speed) : defaultSpeed;
+    const val = Number.isFinite(spd) ? spd : defaultSpeed;
+    return Math.max(-100, Math.min(100, Math.abs(val) * sign));
+  }
+  return defaultSpeed;
+}
+
 export class VirtualMotor {
   public port: MotorPort;
   public degrees: number = 0; // Accumulated encoder angle
@@ -39,8 +71,8 @@ export class VirtualMotor {
   /**
    * Set continuous speed (-100% to 100% or absolute deg/s)
    */
-  public start(speedPercent: number = 50): void {
-    const clamped = Math.max(-100, Math.min(100, isNaN(speedPercent) ? 0 : speedPercent));
+  public start(speedPercent: any = 50): void {
+    const clamped = resolveMotorSpeedInput(speedPercent, 50);
     const degPerSec = (clamped / 100) * this.maxSpeedDegPerSec;
     this.targetSpeedDegPerSec = degPerSec;
     this.activeTarget = {
@@ -54,13 +86,13 @@ export class VirtualMotor {
    * Run for specified degrees with callback on finish.
    * Preserves speed direction: negative speed produces reverse rotation.
    */
-  public runForDegrees(degrees: number, speedPercent: number = 50, onComplete?: () => void): void {
+  public runForDegrees(degrees: number, speedPercent: any = 50, onComplete?: () => void): void {
+    const clampedSpeed = resolveMotorSpeedInput(speedPercent, 50);
     // Check for near-zero or non-finite degrees / speed to prevent hanging
     if (
       !Number.isFinite(degrees) ||
       Math.abs(degrees) < 1e-4 ||
-      !Number.isFinite(speedPercent) ||
-      Math.abs(speedPercent) < 1e-4
+      Math.abs(clampedSpeed) < 1e-4
     ) {
       this.targetSpeedDegPerSec = 0;
       this.activeTarget = null;
@@ -68,11 +100,11 @@ export class VirtualMotor {
       return;
     }
 
-    const clampedSpeed = Math.max(-100, Math.min(100, speedPercent));
     const totalDir = (degrees >= 0 ? 1 : -1) * (clampedSpeed >= 0 ? 1 : -1);
     const absDeg = Math.abs(degrees);
     const speed = Math.abs((clampedSpeed / 100) * this.maxSpeedDegPerSec) * totalDir;
 
+    this.targetSpeedDegPerSec = speed;
     this.activeTarget = {
       type: 'DEGREES',
       targetSpeedDegPerSec: speed,
@@ -85,8 +117,8 @@ export class VirtualMotor {
   /**
    * Run for duration in seconds
    */
-  public runForTime(seconds: number, speedPercent: number = 50, onComplete?: () => void): void {
-    const clampedSpeed = Math.max(-100, Math.min(100, isNaN(speedPercent) ? 0 : speedPercent));
+  public runForTime(seconds: number, speedPercent: any = 50, onComplete?: () => void): void {
+    const clampedSpeed = resolveMotorSpeedInput(speedPercent, 50);
     const speed = (clampedSpeed / 100) * this.maxSpeedDegPerSec;
     const safeSeconds = Math.max(0, isNaN(seconds) || !Number.isFinite(seconds) ? 0 : seconds);
 
@@ -97,6 +129,7 @@ export class VirtualMotor {
       return;
     }
 
+    this.targetSpeedDegPerSec = speed;
     this.activeTarget = {
       type: 'TIME',
       targetSpeedDegPerSec: speed,

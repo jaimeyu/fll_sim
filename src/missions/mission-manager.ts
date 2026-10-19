@@ -10,6 +10,7 @@ import { LDrawImporter } from '../cad/ldraw-importer';
 import { RobotAssemblySpec } from '../cad/types';
 import { decomposeMissionAssembly } from './mission-decomposer';
 import { resolveAssetUrl } from '../utils/asset-path';
+import { isValidPhysicsSpec } from '../cad/physics-spec';
 import {
   SEASON_MISSIONS_CONFIG,
   SeasonMissionSpec,
@@ -132,6 +133,20 @@ export class MissionManager {
         }
         const buffer = await res.arrayBuffer();
         parsedSpec = await LDrawImporter.parseStudioIo(buffer);
+        if (!parsedSpec.physicsSpec && spec.id) {
+          try {
+            const sidecarUrl = resolveAssetUrl(`missions/${spec.id}.physics.json`);
+            const sidecarRes = await fetch(sidecarUrl);
+            if (sidecarRes.ok) {
+              const sidecarJson = await sidecarRes.json();
+              if (isValidPhysicsSpec(sidecarJson)) {
+                parsedSpec.physicsSpec = sidecarJson;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
 
       // Restore custom cluster fixed/dynamic overrides from localStorage

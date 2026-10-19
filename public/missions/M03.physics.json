@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.1.0",
+  "modelId": "M03",
+  "name": "M03 - Flip the Rock",
+  "author": "FLL Coach / Cad Inspector",
+  "dualLockAnchors": [
+    {
+      "id": "dl_m03_base_left",
+      "clusterId": "chassis_root",
+      "localStudCoordinates": [44.0, 20.6, 40.0],
+      "dimensionsMm": [25.4, 25.4]
+    },
+    {
+      "id": "dl_m03_base_right",
+      "clusterId": "chassis_root",
+      "localStudCoordinates": [140.0, 20.6, 40.0],
+      "dimensionsMm": [25.4, 25.4]
+    },
+    {
+      "id": "dl_m03_base_back",
+      "clusterId": "chassis_root",
+      "localStudCoordinates": [92.0, 20.6, 68.0],
+      "dimensionsMm": [25.4, 25.4]
+    }
+  ],
+  "joints": [
+    {
+      "id": "joint_lever_left",
+      "name": "Left Red Lever (6629 Liftarm)",
+      "type": "revolute",
+      "parentClusterId": "chassis_root",
+      "childClusterId": "cluster_2",
+      "anchor": [0.048, 0.0485, 0.0454],
+      "axis": [1, 0, 0],
+      "limits": {
+        "minDegrees": 0,
+        "maxDegrees": 85
+      },
+      "dynamics": {
+        "preset": "tight_friction_pin",
+        "holdingTorqueNm": 0.065,
+        "viscousDamping": 0.60
+      }
+    },
+    {
+      "id": "joint_lever_right",
+      "name": "Right Red Lever (6629 Liftarm)",
+      "type": "revolute",
+      "parentClusterId": "chassis_root",
+      "childClusterId": "cluster_3",
+      "anchor": [0.136, 0.0485, 0.0454],
+      "axis": [1, 0, 0],
+      "limits": {
+        "minDegrees": 0,
+        "maxDegrees": 85
+      },
+      "dynamics": {
+        "preset": "tight_friction_pin",
+        "holdingTorqueNm": 0.065,
+        "viscousDamping": 0.60
+      }
+    },
+    {
+      "id": "joint_rock_flipper",
+      "name": "Rock Flipper Pivot Cradle",
+      "type": "revolute",
+      "parentClusterId": "chassis_root",
+      "childClusterId": "cluster_1",
+      "anchor": [0.092, 0.0465, 0.0215],
+      "axis": [1, 0, 0],
+      "limits": {
+        "minDegrees": 0,
+        "maxDegrees": 90
+      },
+      "dynamics": {
+        "preset": "medium_bush",
+        "holdingTorqueNm": 0.035,
+        "viscousDamping": 0.35
+      }
+    }
+  ],
+  "states": {
+    "initialPose": {
+      "description": "Starting position with red levers down and rock resting in cradle",
+      "jointPositions": {
+        "joint_lever_left": 0,
+        "joint_lever_right": 0,
+        "joint_rock_flipper": 0
+      }
+    },
+    "scoredPoses": [
+      {
+        "id": "rock_flipped_scored",
+        "label": "Rock Flipped Completely (20 pts)",
+        "points": 20,
+        "evaluator": {
+          "type": "joint_threshold",
+          "jointId": "joint_rock_flipper",
+          "targetAngleMin": 65,
+          "targetAngleMax": 90
+        }
+      }
+    ]
+  }
+}

@@ -21,10 +21,10 @@
 }
 
 .cad-inspector-window {
-  width: 1080px;
-  max-width: 95vw;
-  height: 720px;
-  max-height: 92vh;
+  width: 96vw;
+  max-width: 1800px;
+  height: 94vh;
+  max-height: 96vh;
   background: #0f172a;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 14px;
@@ -32,6 +32,20 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: width 0.2s ease, height 0.2s ease, max-width 0.2s ease, max-height 0.2s ease;
+}
+
+.cad-inspector-window.inspector-fullscreen {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
+.cad-inspector-overlay:has(.inspector-fullscreen) {
+  padding: 0;
 }
 
 /* Header */
@@ -83,7 +97,9 @@
 
 /* Left Column: Viewport & Render */
 .inspector-left-col {
-  flex: 3;
+  flex: 65;
+  width: 65%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-color);
@@ -141,6 +157,20 @@
   display: flex;
   gap: 6px;
   z-index: 10;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+
+#btn-toggle-presolver.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+#btn-snap-pivot-part.active {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #fca5a5;
 }
 
 .inspector-studio-render-container {
@@ -177,13 +207,12 @@
 
 /* Right Column: Validation & Kinematics Report */
 .inspector-right-col {
-  flex: 2;
-  min-width: 380px;
-  padding: 16px;
+  flex: 35;
+  width: 35%;
+  min-width: 420px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   background: rgba(15, 23, 42, 0.95);
 }
 
@@ -587,6 +616,297 @@
   gap: 4px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+}
+
+/* =========================================================================
+   4-Tab Tuning & Calibration Studio Styles (Phase 3)
+   ========================================================================= */
+
+.inspector-tuning-tabs {
+  display: flex;
+  background: rgba(30, 41, 59, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px 8px 0 8px;
+  gap: 4px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tuning-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.tuning-tab-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tuning-tab-btn.active {
+  color: #38bdf8;
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.15);
+  border-bottom: 2px solid #38bdf8;
+}
+
+.inspector-tab-panes-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tuning-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tuning-tab-pane.hidden {
+  display: none !important;
+}
+
+/* Tab 1: Joint & Friction Controls */
+.joint-header-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.joint-header-box select {
+  width: 100%;
+}
+
+.pin-presets-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pin-preset-pill {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pin-preset-pill:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.pin-preset-pill.active {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+.slider-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.slider-value-badge {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 11px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.inspector-slider {
+  width: 100%;
+  accent-color: #38bdf8;
+  height: 6px;
+  border-radius: 3px;
+  background: #1e293b;
+  cursor: pointer;
+}
+
+.axis-preset-group {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.axis-btn {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.axis-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.axis-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+/* Tab 2: 3M Dual-Lock */
+.stability-meter-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stability-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stability-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stability-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease, background 0.3s ease;
+  border-radius: 4px;
+}
+
+.stability-desc {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.duallock-pad-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.duallock-pad-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.btn-place-tape-active {
+  background: rgba(16, 185, 129, 0.25) !important;
+  border-color: #10b981 !important;
+  color: #34d399 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+}
+
+/* Tab 3: Motion & Poses */
+.motion-capture-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.motion-playback-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.motion-scrubber-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.motion-scrubber-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+/* Responsive queries */
+@media (max-width: 1024px) {
+  .cad-inspector-window {
+    width: 98vw;
+    height: 96vh;
+  }
+  .inspector-body {
+    flex-direction: column;
+  }
+  .inspector-left-col {
+    flex: 1;
+    width: 100%;
+    height: 48vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .inspector-right-col {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 

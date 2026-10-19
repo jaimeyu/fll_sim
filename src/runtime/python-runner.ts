@@ -257,16 +257,21 @@ export class PythonScriptRunner {
       transformed = transformed.replace(/\bwait_for_seconds\(/g, 'await wait_for_seconds(');
       transformed = transformed.replace(/\btime\.sleep\(/g, 'await wait_for_seconds(');
 
-      // Transform .start(...) with keyword arguments (e.g. steering=int(steering), speed=BASE_SPEED)
-      const startCallIdx = transformed.indexOf('.start(');
-      if (startCallIdx !== -1) {
-        const parenOpen = startCallIdx + 6; // index of '('
+      // Transform method calls with keyword arguments into options objects
+      // e.g. .start(steering=int(steering), speed=BASE_SPEED) -> .start({ steering: int(steering), speed: BASE_SPEED })
+      // e.g. .run_for_seconds(5, speed=50) -> .run_for_seconds(5, { speed: 50 })
+      // e.g. .move(10, 'cm', steering=20, speed=50) -> .move(10, 'cm', { steering: 20, speed: 50 })
+      const methodCallRegex = /\.([a-zA-Z_]\w*)\(/g;
+      let match: RegExpExecArray | null;
+      while ((match = methodCallRegex.exec(transformed)) !== null) {
+        const parenOpen = match.index + match[0].length - 1;
         const parenClose = PythonScriptRunner.findMatchingParen(transformed, parenOpen);
         if (parenClose !== -1) {
           const argsStr = transformed.substring(parenOpen + 1, parenClose);
           const args = PythonScriptRunner.splitArguments(argsStr);
           const hasKwargs = args.some((a) => /^[a-zA-Z_]\w*\s*=/.test(a));
           if (hasKwargs) {
+            const positional: string[] = [];
             const props: string[] = [];
             for (const arg of args) {
               const eqIdx = arg.indexOf('=');
@@ -275,12 +280,14 @@ export class PythonScriptRunner {
                 const v = arg.substring(eqIdx + 1).trim();
                 props.push(`${k}: ${v}`);
               } else {
-                props.push(arg);
+                positional.push(arg);
               }
             }
+            const newArgs = [...positional, `{ ${props.join(', ')} }`].join(', ');
             const before = transformed.substring(0, parenOpen + 1);
             const after = transformed.substring(parenClose);
-            transformed = `${before}{ ${props.join(', ')} }${after}`;
+            transformed = `${before}${newArgs}${after}`;
+            methodCallRegex.lastIndex = parenOpen + 1 + newArgs.length + 1;
           }
         }
       }
@@ -351,6 +358,16 @@ export class PythonScriptRunner {
       Timer: () => this.api.createTimer(),
       control,
     };
+
+    // Pre-instantiated default hardware instances for beginner and Word Block scripts
+    const hub = PrimeHub();
+    const motors = MotorPair('A', 'B');
+    const motor_a = Motor('A');
+    const motor_b = Motor('B');
+    const motor_c = Motor('C');
+    const motor_d = Motor('D');
+    const motor_e = Motor('E');
+    const motor_f = Motor('F');
 
     // Python built-in functions
     const int = (v: any) => Math.trunc(Number(v)) || 0;
@@ -435,6 +452,14 @@ export class PythonScriptRunner {
         'time',
         'spike',
         'control',
+        'hub',
+        'motors',
+        'motor_a',
+        'motor_b',
+        'motor_c',
+        'motor_d',
+        'motor_e',
+        'motor_f',
         'int',
         'float',
         'round',
@@ -460,6 +485,14 @@ export class PythonScriptRunner {
         time,
         spike,
         control,
+        hub,
+        motors,
+        motor_a,
+        motor_b,
+        motor_c,
+        motor_d,
+        motor_e,
+        motor_f,
         int,
         float,
         round,

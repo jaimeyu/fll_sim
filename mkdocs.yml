@@ -74,6 +74,9 @@ nav:
       - 3. Authentic SPIKE Python: tutorials/03_python_programming.md
       - 4. Robot Architecture & Port Mapping: tutorials/04_robot_design_and_ports.md
       - 5. 3D CAD Inspector & Digital Twins: tutorials/05_cad_inspector_digital_twins.md
+  - Worksheets:
+      - Overview & Hub: worksheets/index.md
+      - 4-Bar Linkage Simulator: worksheets/four_bar_linkage.md
   - Guides:
       - Advance Driving Base: guides/advance_driving_base.md
       - SPIKE Python API: guides/spike_python.md

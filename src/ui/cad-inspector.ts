@@ -15,6 +15,7 @@ import {
 import { resolveAssetUrl } from '../utils/asset-path';
 import { getFllAdvanceDrivingBaseSpec, getFllCompactDrivingBaseSpec } from '../cad/models/advance-driving-base';
 import { DualLockMarker } from '../missions/dual-lock-marker';
+import { isValidPhysicsSpec, type FllPhysicsSpec, type FllJointDef, type FllDualLockAnchor } from '../cad/physics-spec';
 
 export interface CadInspectorCallbacks {
   onDeployToField?: (missionId: string, customSpec?: RobotAssemblySpec) => void;
@@ -97,6 +98,33 @@ export class CadModelInspector {
   private technicBarTarget: THREE.Vector3 = new THREE.Vector3(0, 0.035, 0);
   private isTechnicBarPushing: boolean = false;
 
+  // Phase 3: Interactive Calibration, Visual Gizmo & Motion Studio
+  public currentPhysicsSpec: FllPhysicsSpec | null = null;
+  public currentIoBuffer: ArrayBuffer | null = null;
+  public activeJointId: string | null = null;
+  public jointGizmoGroup: THREE.Group = new THREE.Group();
+  public isFullscreen: boolean = false;
+  public isPlacingTape: boolean = false;
+  public isPreSolverDisabled: boolean = false;
+  public modelOffset: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  public isSnappingPivot: boolean = false;
+
+  // Motion Demo & Pose Playback State
+  public startPoseDegrees: number = 0;
+  public endPoseDegrees: number = 85;
+  public isMotionPlaying: boolean = false;
+  public isMotionLooping: boolean = true;
+  public motionPlaybackSpeed: number = 1.0;
+  public motionProgress: number = 0.0;
+  public motionDurationSeconds: number = 2.0;
+  public motionLastTimestamp: number = 0;
+
+  // Active Tuning Tab
+  public activeTuningTab: 'joints' | 'duallock' | 'motion' | 'metrics' = 'joints';
+
+  // Live Rapier Joints
+  public rapierJoints: Map<string, RAPIER.ImpulseJoint> = new Map();
+
   private callbacks: CadInspectorCallbacks;
 
   public getCurrentSpec(): RobotAssemblySpec | null {
@@ -121,6 +149,7 @@ export class CadModelInspector {
 
       this.renderDom();
       this.setupEvents();
+      this.setupPhase3Events();
     } else {
       this.overlay = {
         querySelector: () => null,
@@ -156,6 +185,9 @@ export class CadModelInspector {
               📂 Upload .io
               <input type="file" id="inspector-file-input" accept=".io,.ldr,.mpd,.dat" style="display: none;">
             </label>
+            <button class="btn btn-sm btn-outline" id="btn-save-io" title="Embed physics and save .io archive">💾 Save .io</button>
+            <button class="btn btn-sm btn-outline" id="btn-export-json" title="Export physics JSON sidecar">📤 Export JSON</button>
+            <button class="btn btn-sm btn-outline" id="btn-toggle-fullscreen" title="Toggle Fullscreen">⛶</button>
             <button class="btn btn-sm btn-outline" id="btn-close-inspector" title="Close Inspector">✖</button>
           </div>
         </div>
@@ -173,6 +205,7 @@ export class CadModelInspector {
               <canvas id="inspector-canvas"></canvas>
               <!-- 3D Overlays / Toolbar -->
               <div class="inspector-canvas-toolbar">
+                <button class="btn btn-xs btn-outline" id="btn-toggle-presolver" title="Toggle automatic heuristic welding vs preserving raw Studio submodels as independent dynamic bodies">⚙️ Pre-Solver: ON</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-wireframe">🕸️ Wireframe: OFF</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-colliders">🔲 Colliders: OFF</button>
                 <button class="btn btn-xs btn-outline" id="btn-toggle-physics" title="Run live Rapier physics in inspector">▶ Live Physics: OFF</button>
@@ -182,6 +215,8 @@ export class CadModelInspector {
                   <button class="btn btn-xs btn-outline" id="btn-tool-fastener" title="🔒 Fasteners: Click parts/clusters to toggle 3M Dual Lock field anchoring (Fixed vs Dynamic)">🔒 Fastener</button>
                 </div>
                 <button class="btn btn-xs btn-outline" id="btn-reset-physics" style="display: none;" title="Reset parts back to initial CAD positions">🔄 Reset Poses</button>
+                <button class="btn btn-xs btn-outline" id="btn-reset-model" title="Reset all parts and physics bodies back to initial CAD positions">🔄 Reset Model</button>
+                <button class="btn btn-xs btn-outline" id="btn-reset-start-pose" title="Reset joints to configured starting pose">📍 Reset to Start</button>
                 <button class="btn btn-xs btn-outline" id="btn-reset-view">🎯 Reset Camera</button>
               </div>
               <div class="technic-bar-badge" id="technic-bar-height-badge" style="display: none; position: absolute; bottom: 8px; right: 8px; background: rgba(15,23,42,0.85); border: 1px solid #38bdf8; border-radius: 4px; padding: 3px 8px; font-size: 11px; color: #38bdf8; pointer-events: none; z-index: 10;">
@@ -221,162 +256,341 @@ export class CadModelInspector {
             </div>
           </div>
 
-          <!-- Right Column: Validation & Kinematics Report -->
-          <div class="inspector-right-col" style="overflow-y: auto;">
-            <div class="inspector-panel-title">📊 Validation & Kinematics Report</div>
-            
-            <div class="status-banner status-pass" id="inspector-status-banner">
-              <span class="status-icon">✅</span>
-              <div class="status-details">
-                <div class="status-head">MODEL GEOMETRY VALID</div>
-                <div class="status-sub">All submodels linked without loose or unanchored parts</div>
-              </div>
+          <!-- Right Column: Interactive Calibration & Visual Studio (4-Tab Layout) -->
+          <div class="inspector-right-col">
+            <!-- 4-Tab Navigation Header -->
+            <div class="inspector-tuning-tabs">
+              <button class="tuning-tab-btn active" id="tab-btn-joints" data-tab="joints">📐 Joints & Friction</button>
+              <button class="tuning-tab-btn" id="tab-btn-duallock" data-tab="duallock">🩹 3M Dual-Lock</button>
+              <button class="tuning-tab-btn" id="tab-btn-motion" data-tab="motion">🎬 Motion & Poses</button>
+              <button class="tuning-tab-btn" id="tab-btn-metrics" data-tab="metrics">📊 Metrics & Info</button>
             </div>
 
-            <!-- Active Step Inspection Card -->
-            <div class="inspector-section-card" id="inspector-active-step-card" style="display: none;">
-              <div class="section-card-title">🔍 Step Inspector: Active LEGO Element</div>
-              <div class="active-step-details" id="active-step-details">
-                <!-- Dynamically populated -->
-              </div>
-            </div>
+            <div class="inspector-tab-panes-wrapper">
+              <!-- Tab 1: Joints & Friction -->
+              <div class="tuning-tab-pane" id="pane-joints">
+                <div class="inspector-section-card">
+                  <div class="section-card-title">🔗 Active Mechanical Joint</div>
+                  <div class="joint-header-box" style="display: flex; gap: 4px; align-items: center;">
+                    <select id="joint-select-dropdown" class="hud-select hud-select-sm" style="flex: 1;"></select>
+                    <button class="btn btn-xs btn-outline" id="btn-add-joint" title="Create a new kinematic joint">➕ Add</button>
+                    <button class="btn btn-xs btn-outline" id="btn-delete-joint" title="Delete current joint">🗑️</button>
+                  </div>
+                </div>
 
-            <!-- Metrics Grid -->
-            <div class="inspector-metrics-grid">
-              <div class="metric-card">
-                <span class="metric-label">TOTAL LEGO PARTS</span>
-                <span class="metric-val" id="metric-parts-count">--</span>
-              </div>
-              <div class="metric-card">
-                <span class="metric-label">SUBMODELS</span>
-                <span class="metric-val" id="metric-submodels-count">--</span>
-              </div>
-              <div class="metric-card">
-                <span class="metric-label">KINEMATIC BODIES</span>
-                <span class="metric-val" id="metric-clusters-count">--</span>
-              </div>
-              <div class="metric-card">
-                <span class="metric-label">ESTIMATED MASS</span>
-                <span class="metric-val" id="metric-mass">-- g</span>
-              </div>
-            </div>
+                <div class="inspector-section-card" id="card-joint-config">
+                  <div class="section-card-title">🧭 Rotation Axis & Pivot Center</div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-bottom: 2px;">Primary Axis:</div>
+                  <div class="axis-preset-group">
+                    <button class="axis-btn active" id="btn-axis-x" data-axis="x">X [1,0,0]</button>
+                    <button class="axis-btn" id="btn-axis-y" data-axis="y">Y [0,1,0]</button>
+                    <button class="axis-btn" id="btn-axis-z" data-axis="z">Z [0,0,1]</button>
+                    <button class="axis-btn" id="btn-axis-custom" data-axis="custom">Custom</button>
+                  </div>
+                  <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
+                    <label style="font-size: 10px; color: #94a3b8;">Axis X:
+                      <input type="number" step="0.1" class="hud-input hud-input-sm w-100" id="input-joint-axis-x" value="1.0">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Axis Y:
+                      <input type="number" step="0.1" class="hud-input hud-input-sm w-100" id="input-joint-axis-y" value="0.0">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Axis Z:
+                      <input type="number" step="0.1" class="hud-input hud-input-sm w-100" id="input-joint-axis-z" value="0.0">
+                    </label>
+                  </div>
 
-            <!-- Dimensions Card -->
-            <div class="inspector-section-card">
-              <div class="section-card-title">📐 Bounding Dimensions</div>
-              <div class="dim-row">
-                <span class="dim-label">Width (X):</span>
-                <span class="dim-val" id="dim-x">-- mm (-- studs)</span>
-              </div>
-              <div class="dim-row">
-                <span class="dim-label">Depth (Z):</span>
-                <span class="dim-val" id="dim-z">-- mm (-- studs)</span>
-              </div>
-              <div class="dim-row">
-                <span class="dim-label">Height (Y):</span>
-                <span class="dim-val" id="dim-y">-- mm (-- plates)</span>
-              </div>
-              <div class="dim-row">
-                <span class="dim-label">Ground Alignment:</span>
-                <span class="dim-val highlight-green" id="dim-ground">Flush with mat (+0.0 mm)</span>
-              </div>
-            </div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-top: 8px; margin-bottom: 2px;">Pivot Center Offset (mm):</div>
+                  <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                    <label style="font-size: 10px; color: #94a3b8;">Pivot X:
+                      <input type="number" step="1.0" class="hud-input hud-input-sm w-100" id="input-joint-pivot-x" value="0.0">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Pivot Y:
+                      <input type="number" step="1.0" class="hud-input hud-input-sm w-100" id="input-joint-pivot-y" value="0.0">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Pivot Z:
+                      <input type="number" step="1.0" class="hud-input hud-input-sm w-100" id="input-joint-pivot-z" value="0.0">
+                    </label>
+                  </div>
+                  <button class="btn btn-xs btn-outline w-100" id="btn-snap-pivot-part" style="margin-top: 6px;" title="Click any brick or pin in 3D viewport to snap the joint pivot center directly to it">📍 Snap Pivot to Part</button>
+                </div>
 
-            <!-- Clusters Breakdown & Parts BOM Tabs -->
-            <div class="inspector-section-card">
-              <div class="inspector-tab-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
-                <button class="btn btn-xs btn-outline active" id="btn-tab-clusters">🧩 Clusters</button>
-                <button class="btn btn-xs btn-outline" id="btn-tab-bom">📋 Parts List / BOM</button>
-              </div>
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📐 Travel Limits & Interactive Test Sweep</div>
+                  <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                    <label style="font-size: 10px; color: #94a3b8;">Min Angle (°):
+                      <input type="number" step="5" class="hud-input hud-input-sm w-100" id="input-joint-min-angle" value="0">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Max Angle (°):
+                      <input type="number" step="5" class="hud-input hud-input-sm w-100" id="input-joint-max-angle" value="85">
+                    </label>
+                  </div>
 
-              <!-- Quick Presets -->
-              <div class="cluster-quick-presets" id="cluster-quick-presets">
-                <button class="btn btn-xs btn-ghost" id="btn-preset-fix-base" title="Anchor base plate, make mechanisms dynamic">📌 Fix Base Only</button>
-                <button class="btn btn-xs btn-ghost" id="btn-preset-all-dynamic" title="Make all pieces free and movable">🔓 All Movable</button>
-                <button class="btn btn-xs btn-ghost" id="btn-preset-lock-all" title="Freeze entire model as solid immovable base">🔒 Lock All</button>
-              </div>
+                  <div class="slider-control-group" style="margin-top: 8px;">
+                    <div class="slider-label-row">
+                      <span style="color: #cbd5e1; font-weight: 600;">Manual Sweep Tester:</span>
+                      <span class="slider-value-badge" id="sweep-angle-badge">0.0°</span>
+                    </div>
+                    <input type="range" id="slider-joint-sweep" class="inspector-slider" min="0" max="85" step="0.5" value="0">
+                  </div>
+                </div>
 
-              <!-- Selected Cluster Nudge & Position Adjuster -->
-              <div class="cluster-nudge-box" id="cluster-nudge-card" style="display: none;">
-                <span class="nudge-title" id="cluster-nudge-title">Adjust Selected Element Position:</span>
-                <div class="nudge-btn-row">
-                  <span>X:</span>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="-8">-8mm</button>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="8">+8mm</button>
-                  <span>Y:</span>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="-3.2">-3.2mm</button>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="3.2">+3.2mm</button>
-                  <span>Z:</span>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="-8">-8mm</button>
-                  <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="8">+8mm</button>
+                <div class="inspector-section-card">
+                  <div class="section-card-title">⚙️ LEGO Pin Friction & Viscous Damping</div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-bottom: 4px;">Friction Presets:</div>
+                  <div class="pin-presets-row">
+                    <button class="pin-preset-pill" data-preset="free" title="Frictionless Pin (Part 3673)">Free</button>
+                    <button class="pin-preset-pill" data-preset="medium_bush" title="Standard Bushing (Part 3713)">Medium Bush</button>
+                    <button class="pin-preset-pill active" data-preset="tight_friction_pin" title="Tight Friction Pin (Part 2780/6558)">Tight Friction Pin</button>
+                    <button class="pin-preset-pill" data-preset="heavy_clutch" title="Heavy Drag / Clutch (Part 60c01)">Heavy Drag</button>
+                  </div>
+
+                  <div class="slider-control-group" style="margin-top: 10px;">
+                    <div class="slider-label-row">
+                      <span style="color: #cbd5e1;">Static Holding Torque:</span>
+                      <span class="slider-value-badge" id="holding-torque-badge">0.065 N·m</span>
+                    </div>
+                    <input type="range" id="slider-holding-torque" class="inspector-slider" min="0.0" max="0.20" step="0.005" value="0.065">
+                    <div style="font-size: 9px; color: #64748b;">Prevents mechanism sag under gravity without motor power</div>
+                  </div>
+
+                  <div class="slider-control-group" style="margin-top: 8px;">
+                    <div class="slider-label-row">
+                      <span style="color: #cbd5e1;">Viscous Damping:</span>
+                      <span class="slider-value-badge" id="damping-badge">0.60 N·m·s/rad</span>
+                    </div>
+                    <input type="range" id="slider-viscous-damping" class="inspector-slider" min="0.0" max="2.0" step="0.05" value="0.60">
+                    <div style="font-size: 9px; color: #64748b;">Suppresses oscillation and flutter on impact</div>
+                  </div>
                 </div>
               </div>
 
-              <div class="clusters-list" id="inspector-clusters-list">
-                <!-- Dynamically populated -->
-              </div>
-              <div class="bom-table-container" id="inspector-bom-container" style="display: none; max-height: 240px; overflow-y: auto;">
-                <table class="bom-table" style="width: 100%; font-size: 11px; border-collapse: collapse;">
-                  <thead>
-                    <tr style="text-align: left; border-bottom: 1px solid #334155; color: #94a3b8;">
-                      <th style="padding: 4px;">Part #</th>
-                      <th style="padding: 4px;">Qty</th>
-                      <th style="padding: 4px;">Description</th>
-                      <th style="padding: 4px;">3D Mesh</th>
-                    </tr>
-                  </thead>
-                  <tbody id="inspector-bom-tbody"></tbody>
-                </table>
-              </div>
-            </div>
+              <!-- Tab 2: 3M Dual-Lock -->
+              <div class="tuning-tab-pane hidden" id="pane-duallock">
+                <div class="inspector-section-card">
+                  <div class="section-card-title">🩹 3M Dual-Lock Fasteners & Field Anchors</div>
+                  <button class="btn btn-sm btn-outline w-100" id="btn-place-tape-tool" title="Click bottom brick faces in 3D viewport to place tape">
+                    ➕ Place Tape on Mat
+                  </button>
+                  <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
+                    Simulates official 1"x1" Dual-Lock fastener pads adhering model base to the competition mat.
+                  </div>
+                </div>
 
-            <!-- Competition Mat Position Settings -->
-            <div class="inspector-section-card">
-              <div class="section-card-title">📍 Competition Field Placement</div>
-              <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
-                <label style="font-size: 10px; color: #94a3b8;">X (m):
-                  <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-x" value="0.00">
-                </label>
-                <label style="font-size: 10px; color: #94a3b8;">Z (m):
-                  <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-z" value="0.00">
-                </label>
-                <label style="font-size: 10px; color: #94a3b8;">Yaw (°):
-                  <input type="number" step="15" class="hud-input hud-input-sm w-100" id="input-field-yaw" value="0">
-                </label>
-              </div>
-              <button class="btn btn-xs btn-outline w-100" style="margin-top: 8px;" id="btn-save-field-pos">💾 Save Mat Coordinates</button>
-            </div>
+                <div class="stability-meter-card">
+                  <div class="stability-header">
+                    <span style="color: #cbd5e1;">Anti-Tip Stability Score:</span>
+                    <span id="stability-score-val" style="color: #10b981; font-family: monospace;">95%</span>
+                  </div>
+                  <div class="stability-bar-track">
+                    <div class="stability-bar-fill" id="stability-bar-fill" style="width: 95%; background: #10b981;"></div>
+                  </div>
+                  <div class="stability-desc" id="stability-desc-text">Optimal Perimeter Anchor: Zero wobble during high-speed robot ramming.</div>
+                </div>
 
-            <!-- 3D Mesh Engine Mode (Draco GLB vs Native Procedural) -->
-            <div class="inspector-section-card">
-              <div class="section-card-title">🎨 3D Mesh Engine Mode</div>
-              <div class="engine-mode-row" style="display: flex; gap: 8px; margin-top: 6px;">
-                <button class="btn btn-xs btn-outline" id="btn-engine-draco" title="High-fidelity Draco compressed 3D GLB models">⚡ Draco GLB</button>
-                <button class="btn btn-xs btn-outline" id="btn-engine-procedural" title="Fast built-in procedural LEGO geometry">🧱 Native Procedural</button>
-              </div>
-              <div class="engine-status-desc" id="engine-status-desc" style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
-                Active: ⚡ Draco GLB (High fidelity, authentic geometry)
-              </div>
-            </div>
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📌 Attached Dual-Lock Pads</div>
+                  <div class="duallock-pad-list" id="duallock-pad-list">
+                    <!-- Dynamically populated -->
+                  </div>
+                </div>
 
-            <!-- Physics Mode Controls -->
-            <div class="inspector-section-card">
-              <div class="section-card-title">⚙️ Physics Engine Mode</div>
-              <div class="physics-mode-row">
-                <label class="mode-radio-label">
-                  <input type="radio" name="inspector-physics-mode" value="articulated" checked id="radio-mode-articulated">
-                  <span><strong>Articulated Physics:</strong> Solves mechanisms, slides & hinges</span>
-                </label>
-                <label class="mode-radio-label">
-                  <input type="radio" name="inspector-physics-mode" value="solid" id="radio-mode-solid">
-                  <span><strong>Solid Anchor:</strong> 100% immovable rigid body on mat (zero wobble)</span>
-                </label>
-              </div>
-            </div>
+                <!-- Preserved Cluster Anchor / Dynamic Toggling -->
+                <div class="inspector-section-card">
+                  <div class="section-card-title">🧩 Kinematic Cluster Anchors (Fixed vs Dynamic)</div>
+                  <!-- Quick Presets -->
+                  <div class="cluster-quick-presets" id="cluster-quick-presets">
+                    <button class="btn btn-xs btn-ghost" id="btn-preset-fix-base" title="Anchor base plate, make mechanisms dynamic">📌 Fix Base Only</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-preset-all-dynamic" title="Make all pieces free and movable">🔓 All Movable</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-preset-lock-all" title="Freeze entire model as solid immovable base">🔒 Lock All</button>
+                  </div>
 
-            <!-- Action Buttons -->
-            <div class="inspector-actions" style="margin-top: 12px;">
-              <button class="btn btn-sm btn-primary w-100" id="btn-deploy-inspected">🚀 Deploy Model to Mat</button>
+                  <!-- Selected Cluster Nudge & Position Adjuster -->
+                  <div class="cluster-nudge-box" id="cluster-nudge-card" style="display: none;">
+                    <span class="nudge-title" id="cluster-nudge-title">Adjust Selected Element Position:</span>
+                    <div class="nudge-btn-row">
+                      <span>X:</span>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="-8">-8mm</button>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="x" data-delta="8">+8mm</button>
+                      <span>Y:</span>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="-3.2">-3.2mm</button>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="y" data-delta="3.2">+3.2mm</button>
+                      <span>Z:</span>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="-8">-8mm</button>
+                      <button class="btn btn-xs btn-ghost btn-nudge" data-axis="z" data-delta="8">+8mm</button>
+                    </div>
+                  </div>
+
+                  <div class="clusters-list" id="inspector-clusters-list">
+                    <!-- Dynamically populated -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 3: Motion & Poses -->
+              <div class="tuning-tab-pane hidden" id="pane-motion">
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📍 Match Setup & Scored Goal Poses</div>
+                  <div class="motion-capture-row">
+                    <button class="btn btn-xs btn-outline" id="btn-capture-start-pose">📍 Capture Start Pose</button>
+                    <button class="btn btn-xs btn-outline" id="btn-capture-end-pose">🏆 Capture Scored End Pose</button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 6px;">
+                    <span id="motion-start-pose-label">Start: 0.0°</span>
+                    <span id="motion-end-pose-label">End: 85.0°</span>
+                  </div>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">🎬 Motion Demonstration Playback</div>
+                  <div class="motion-playback-toolbar">
+                    <button class="btn btn-xs btn-primary" id="btn-motion-play">▶ Play Motion</button>
+                    <button class="btn btn-xs btn-outline" id="btn-motion-pause" style="display: none;">⏸ Pause</button>
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: #cbd5e1; cursor: pointer; margin-left: 6px;">
+                      <input type="checkbox" id="check-motion-loop" checked accent-color="#38bdf8">
+                      <span>🔁 Loop</span>
+                    </label>
+                    <div style="margin-left: auto; display: flex; align-items: center; gap: 4px;">
+                      <span style="font-size: 10px; color: #94a3b8;">Speed:</span>
+                      <select id="motion-speed-select" class="hud-select hud-select-sm" style="padding: 2px 6px;">
+                        <option value="0.5">0.5x</option>
+                        <option value="1.0" selected>1x</option>
+                        <option value="2.0">2x</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="motion-scrubber-box">
+                    <div class="motion-scrubber-time">
+                      <span>Timeline Scrubber (OBS/Screencast Sync):</span>
+                      <span id="motion-time-display">0.00s / 2.00s (0%)</span>
+                    </div>
+                    <input type="range" id="slider-motion-timeline" class="inspector-slider" min="0" max="100" step="1" value="0">
+                  </div>
+                  <div style="font-size: 9px; color: #64748b; margin-top: 4px;">
+                    Uses smooth cubic interpolation between initial match setup pose and scored achievement pose.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 4: Metrics & Info -->
+              <div class="tuning-tab-pane hidden" id="pane-metrics">
+                <div class="status-banner status-pass" id="inspector-status-banner">
+                  <span class="status-icon">✅</span>
+                  <div class="status-details">
+                    <div class="status-head">MODEL GEOMETRY VALID</div>
+                    <div class="status-sub">All submodels linked without loose or unanchored parts</div>
+                  </div>
+                </div>
+
+                <!-- Active Step Inspection Card -->
+                <div class="inspector-section-card" id="inspector-active-step-card" style="display: none;">
+                  <div class="section-card-title">🔍 Step Inspector: Active LEGO Element</div>
+                  <div class="active-step-details" id="active-step-details">
+                    <!-- Dynamically populated -->
+                  </div>
+                </div>
+
+                <div class="inspector-metrics-grid">
+                  <div class="metric-card">
+                    <span class="metric-label">TOTAL LEGO PARTS</span>
+                    <span class="metric-val" id="metric-parts-count">--</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-label">SUBMODELS</span>
+                    <span class="metric-val" id="metric-submodels-count">--</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-label">KINEMATIC BODIES</span>
+                    <span class="metric-val" id="metric-clusters-count">--</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-label">ESTIMATED MASS</span>
+                    <span class="metric-val" id="metric-mass">-- g</span>
+                  </div>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📐 Bounding Dimensions</div>
+                  <div class="dim-row">
+                    <span class="dim-label">Width (X):</span>
+                    <span class="dim-val" id="dim-x">-- mm (-- studs)</span>
+                  </div>
+                  <div class="dim-row">
+                    <span class="dim-label">Depth (Z):</span>
+                    <span class="dim-val" id="dim-z">-- mm (-- studs)</span>
+                  </div>
+                  <div class="dim-row">
+                    <span class="dim-label">Height (Y):</span>
+                    <span class="dim-val" id="dim-y">-- mm (-- plates)</span>
+                  </div>
+                  <div class="dim-row">
+                    <span class="dim-label">Ground Alignment:</span>
+                    <span class="dim-val highlight-green" id="dim-ground">Flush with mat (+0.0 mm)</span>
+                  </div>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📋 Bill of Materials (B.O.M.)</div>
+                  <div class="bom-table-container" id="inspector-bom-container" style="max-height: 200px; overflow-y: auto;">
+                    <table class="bom-table" style="width: 100%; font-size: 11px; border-collapse: collapse;">
+                      <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid #334155; color: #94a3b8;">
+                          <th style="padding: 4px;">Part #</th>
+                          <th style="padding: 4px;">Qty</th>
+                          <th style="padding: 4px;">Description</th>
+                          <th style="padding: 4px;">3D Mesh</th>
+                        </tr>
+                      </thead>
+                      <tbody id="inspector-bom-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">📍 Competition Field Placement</div>
+                  <div class="field-pos-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
+                    <label style="font-size: 10px; color: #94a3b8;">X (m):
+                      <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-x" value="0.00">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Z (m):
+                      <input type="number" step="0.02" class="hud-input hud-input-sm w-100" id="input-field-z" value="0.00">
+                    </label>
+                    <label style="font-size: 10px; color: #94a3b8;">Yaw (°):
+                      <input type="number" step="15" class="hud-input hud-input-sm w-100" id="input-field-yaw" value="0">
+                    </label>
+                  </div>
+                  <button class="btn btn-xs btn-outline w-100" style="margin-top: 8px;" id="btn-save-field-pos">💾 Save Mat Coordinates</button>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">🎨 3D Mesh Engine Mode</div>
+                  <div class="engine-mode-row" style="display: flex; gap: 8px; margin-top: 6px;">
+                    <button class="btn btn-xs btn-outline" id="btn-engine-draco" title="High-fidelity Draco compressed 3D GLB models">⚡ Draco GLB</button>
+                    <button class="btn btn-xs btn-outline" id="btn-engine-procedural" title="Fast built-in procedural LEGO geometry">🧱 Native Procedural</button>
+                  </div>
+                  <div class="engine-status-desc" id="engine-status-desc" style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
+                    Active: ⚡ Draco GLB (High fidelity, authentic geometry)
+                  </div>
+                </div>
+
+                <div class="inspector-section-card">
+                  <div class="section-card-title">⚙️ Physics Engine Mode</div>
+                  <div class="physics-mode-row">
+                    <label class="mode-radio-label">
+                      <input type="radio" name="inspector-physics-mode" value="articulated" checked id="radio-mode-articulated">
+                      <span><strong>Articulated Physics:</strong> Solves mechanisms, slides & hinges</span>
+                    </label>
+                    <label class="mode-radio-label">
+                      <input type="radio" name="inspector-physics-mode" value="solid" id="radio-mode-solid">
+                      <span><strong>Solid Anchor:</strong> 100% immovable rigid body on mat (zero wobble)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="inspector-actions" style="margin-top: 12px;">
+                  <button class="btn btn-sm btn-primary w-100" id="btn-deploy-inspected">🚀 Deploy Model to Mat</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -435,16 +649,46 @@ export class CadModelInspector {
       this.colliderGroup.visible = this.showColliders;
     });
 
+    // Pre-Solver Toggle
+    const btnTogglePreSolver = this.overlay.querySelector('#btn-toggle-presolver') as HTMLButtonElement | null;
+    btnTogglePreSolver?.addEventListener('click', async () => {
+      this.isPreSolverDisabled = !this.isPreSolverDisabled;
+      if (btnTogglePreSolver) {
+        btnTogglePreSolver.textContent = this.isPreSolverDisabled ? '⚙️ Pre-Solver: OFF (SubModels)' : '⚙️ Pre-Solver: ON';
+        btnTogglePreSolver.classList.toggle('active', this.isPreSolverDisabled);
+      }
+      if (this.currentIoBuffer && this.currentSpec) {
+        await this.inspectBinaryArchive(this.currentIoBuffer, this.currentSpec.name, this.currentMissionId || 'custom');
+      }
+    });
+
     // Reset camera
     const btnResetCam = this.overlay.querySelector('#btn-reset-view')!;
     btnResetCam.addEventListener('click', () => this.resetCamera());
+
+    // Reset model poses
+    const btnResetModel = this.overlay.querySelector('#btn-reset-model') as HTMLButtonElement | null;
+    btnResetModel?.addEventListener('click', () => {
+      this.resetPhysicsPoses();
+      const sweepSlider = this.overlay.querySelector('#slider-joint-sweep') as HTMLInputElement | null;
+      const sweepBadge = this.overlay.querySelector('#sweep-angle-badge');
+      if (sweepSlider) sweepSlider.value = '0';
+      if (sweepBadge) sweepBadge.textContent = '0.0°';
+      this.applyJointSweep(0);
+    });
+
+    // Reset to starting pose
+    const btnResetStart = this.overlay.querySelector('#btn-reset-start-pose') as HTMLButtonElement | null;
+    btnResetStart?.addEventListener('click', () => {
+      this.resetToStartPose();
+    });
 
     // Live Rapier Physics Sandbox Toggle
     const btnTogglePhysics = this.overlay.querySelector('#btn-toggle-physics') as HTMLButtonElement;
     btnTogglePhysics.addEventListener('click', () => this.toggleLivePhysics());
 
-    const btnResetPhysics = this.overlay.querySelector('#btn-reset-physics') as HTMLButtonElement;
-    btnResetPhysics.addEventListener('click', () => this.resetPhysicsPoses());
+    const btnResetPhysics = this.overlay.querySelector('#btn-reset-physics') as HTMLButtonElement | null;
+    btnResetPhysics?.addEventListener('click', () => this.resetPhysicsPoses());
 
     const btnToolGrab = this.overlay.querySelector('#btn-tool-grab') as HTMLButtonElement | null;
     const btnToolBar = this.overlay.querySelector('#btn-tool-technic-bar') as HTMLButtonElement | null;
@@ -704,6 +948,7 @@ export class CadModelInspector {
     this.scene.add(this.modelGroup);
     this.scene.add(this.colliderGroup);
     this.scene.add(this.dualLockMarkersGroup);
+    this.scene.add(this.jointGizmoGroup);
     this.colliderGroup.visible = false;
 
     // Build Virtual Hand & Reticle 3D indicators
@@ -777,6 +1022,23 @@ export class CadModelInspector {
     const rect = canvas.getBoundingClientRect();
     this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (this.isPlacingTape) {
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const hits = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      if (hits.length > 0) {
+        canvas.style.cursor = 'crosshair';
+        if (this.reticleMesh) {
+          this.reticleMesh.position.copy(hits[0].point);
+          this.reticleMesh.quaternion.set(0, 0, 0, 1);
+          this.reticleMesh.visible = true;
+        }
+      } else {
+        if (this.reticleMesh) this.reticleMesh.visible = false;
+        canvas.style.cursor = 'default';
+      }
+      return;
+    }
 
     if (this.toolMode === 'fastener') {
       this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
@@ -887,6 +1149,93 @@ export class CadModelInspector {
 
   private onPointerDown(e: PointerEvent, canvas: HTMLCanvasElement): void {
     if (e.button !== 0) return;
+
+    if (this.isSnappingPivot) {
+      const rect = canvas.getBoundingClientRect();
+      this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const intersects = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        let cadPos = hit.point.clone().sub(this.modelOffset);
+        let curr: THREE.Object3D | null = hit.object;
+        while (curr && !curr.userData.partId && curr.parent) {
+          curr = curr.parent;
+        }
+        if (curr && curr.userData.partId && this.currentSpec?.parts) {
+          const p = this.currentSpec.parts.find((part) => part.id === curr!.userData.partId);
+          if (p) {
+            cadPos = new THREE.Vector3(p.position[0] / 1000, p.position[1] / 1000, p.position[2] / 1000);
+          }
+        }
+        if (this.activeJointId && this.currentPhysicsSpec?.joints) {
+          const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+          if (joint) {
+            joint.anchor = [cadPos.x, cadPos.y, cadPos.z];
+            const inpX = this.overlay.querySelector('#input-joint-pivot-x') as HTMLInputElement | null;
+            const inpY = this.overlay.querySelector('#input-joint-pivot-y') as HTMLInputElement | null;
+            const inpZ = this.overlay.querySelector('#input-joint-pivot-z') as HTMLInputElement | null;
+            if (inpX) inpX.value = `${(cadPos.x * 1000).toFixed(1)}`;
+            if (inpY) inpY.value = `${(cadPos.y * 1000).toFixed(1)}`;
+            if (inpZ) inpZ.value = `${(cadPos.z * 1000).toFixed(1)}`;
+            this.updateJointGizmo();
+            this.rebuildPhysicsIfRunning();
+          }
+        }
+        this.isSnappingPivot = false;
+        const btnSnap = this.overlay.querySelector('#btn-snap-pivot-part');
+        if (btnSnap) {
+          btnSnap.textContent = '📍 Snap Pivot to Part';
+          btnSnap.classList.remove('active');
+        }
+        return;
+      }
+    }
+
+    if (this.isPlacingTape) {
+      const rect = canvas.getBoundingClientRect();
+      this.mouseCoords.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouseCoords.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.mouseRay.setFromCamera(this.mouseCoords, this.camera);
+      const intersects = this.mouseRay.intersectObjects(this.modelGroup.children, true);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        let targetClusterId: string | null = this.findClusterIdFromObject(hit.object);
+        if (!targetClusterId && this.currentSpec?.clusters.length) {
+          targetClusterId = this.currentSpec.clusters[0].clusterId;
+        }
+        if (targetClusterId) {
+          const localMm: [number, number, number] = [
+            Math.round(hit.point.x * 1000),
+            Math.round(hit.point.y * 1000),
+            Math.round(hit.point.z * 1000),
+          ];
+          if (!this.currentPhysicsSpec) this.initDefaultPhysicsSpec();
+          if (!this.currentPhysicsSpec!.dualLockAnchors) this.currentPhysicsSpec!.dualLockAnchors = [];
+          this.currentPhysicsSpec!.dualLockAnchors.push({
+            id: `dl_pad_${Date.now()}`,
+            clusterId: targetClusterId,
+            localStudCoordinates: localMm,
+            dimensionsMm: [25.4, 25.4],
+          });
+          const cluster = this.currentSpec?.clusters.find((c) => c.clusterId === targetClusterId);
+          if (cluster) cluster.isFixed = true;
+          this.updateDualLockMarkers();
+          this.updateStabilityDom();
+          this.renderClusterList();
+          this.rebuildPhysicsIfRunning();
+
+          this.isPlacingTape = false;
+          const btnPlace = this.overlay.querySelector('#btn-place-tape-tool') as HTMLElement | null;
+          if (btnPlace) {
+            btnPlace.classList.remove('btn-place-tape-active');
+            btnPlace.textContent = '➕ Place Tape on Mat';
+          }
+          return;
+        }
+      }
+    }
 
     if (this.toolMode === 'fastener') {
       const rect = canvas.getBoundingClientRect();
@@ -1068,6 +1417,26 @@ export class CadModelInspector {
         }
       }
 
+      // Motion demo playback interpolation
+      if (this.isMotionPlaying) {
+        const now = performance.now();
+        if (this.motionLastTimestamp > 0) {
+          const dt = (now - this.motionLastTimestamp) / 1000;
+          this.motionProgress += (dt / this.motionDurationSeconds) * this.motionPlaybackSpeed;
+          if (this.motionProgress >= 1.0) {
+            if (this.isMotionLooping) {
+              this.motionProgress = 0.0;
+            } else {
+              this.motionProgress = 1.0;
+              this.pauseMotion();
+            }
+          }
+          this.applyMotionInterpolation(this.motionProgress);
+          this.updateMotionScrubberDom();
+        }
+        this.motionLastTimestamp = now;
+      }
+
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     };
@@ -1103,6 +1472,11 @@ export class CadModelInspector {
     this.currentMissionId = id;
     this.currentSpec = spec;
     this.currentThumbnailUrl = null;
+    if (spec.physicsSpec) {
+      this.currentPhysicsSpec = spec.physicsSpec;
+    } else {
+      this.initDefaultPhysicsSpec();
+    }
     this.updateThumbnailDom(null);
     this.build3DRepresentation(spec);
     this.updateReportDom(spec, name, id);
@@ -1153,6 +1527,7 @@ export class CadModelInspector {
   }
 
   private async inspectBinaryArchive(buffer: ArrayBuffer, name: string, id: string): Promise<void> {
+    this.currentIoBuffer = buffer;
     const zip = new JSZip();
     let thumbUrl: string | null = null;
     let spec: RobotAssemblySpec;
@@ -1164,17 +1539,38 @@ export class CadModelInspector {
         const b64 = await thumbFile.async('base64');
         thumbUrl = `data:image/png;base64,${b64}`;
       }
-      spec = await LDrawImporter.parseStudioIo(buffer);
+      spec = await LDrawImporter.parseStudioIo(buffer, { disablePreSolver: this.isPreSolverDisabled });
     } catch {
       const dec = new TextDecoder();
       const text = dec.decode(buffer);
       const parsed = LDrawImporter.parseLDrawText(text, name);
       const { CadClusteringPreSolver } = await import('../cad/clustering-solver');
-      spec = CadClusteringPreSolver.solve(parsed);
+      spec = CadClusteringPreSolver.solve(parsed, { disablePreSolver: this.isPreSolverDisabled });
+    }
+
+    // Check for sidecar .physics.json if not embedded
+    if (!spec.physicsSpec && id) {
+      try {
+        const sidecarUrl = resolveAssetUrl(`missions/${id}.physics.json`);
+        const sidecarRes = await fetch(sidecarUrl);
+        if (sidecarRes.ok) {
+          const sidecarJson = await sidecarRes.json();
+          if (isValidPhysicsSpec(sidecarJson)) {
+            spec.physicsSpec = sidecarJson;
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
 
     this.currentSpec = spec;
     this.currentThumbnailUrl = thumbUrl;
+    if (spec.physicsSpec) {
+      this.currentPhysicsSpec = spec.physicsSpec;
+    } else {
+      this.initDefaultPhysicsSpec();
+    }
 
     this.updateThumbnailDom(thumbUrl);
     await this.build3DRepresentation(spec);
@@ -1264,6 +1660,7 @@ export class CadModelInspector {
     const offsetX = minX !== Infinity ? -(minX + maxX) / 2 : 0;
     const offsetY = minColliderBottom !== Infinity ? -minColliderBottom : 0;
     const offsetZ = minZ !== Infinity ? -(minZ + maxZ) / 2 : 0;
+    this.modelOffset.set(offsetX, offsetY, offsetZ);
 
     for (const cluster of spec.clusters) {
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
@@ -1374,6 +1771,7 @@ export class CadModelInspector {
   public stopPhysicsSandbox(): void {
     this.isPhysicsRunning = false;
     this.onPointerUp();
+    this.rapierJoints.clear();
 
     const btnTogglePhysics = this.overlay.querySelector('#btn-toggle-physics') as HTMLButtonElement | null;
     if (btnTogglePhysics) {
@@ -1400,6 +1798,7 @@ export class CadModelInspector {
       this.physicsWorld = null;
     }
     this.physicsBodies.clear();
+    this.rapierJoints.clear();
 
     this.physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
@@ -1464,22 +1863,61 @@ export class CadModelInspector {
     }
 
     // Connect kinematic joints
-    for (const joint of this.currentSpec.joints) {
-      const parentBody = this.physicsBodies.get(joint.parentClusterId);
-      const childBody = this.physicsBodies.get(joint.childClusterId);
-      if (parentBody && childBody) {
-        const jointData = joint.type === 'SPHERICAL'
-          ? RAPIER.JointData.spherical(
-              { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
-              { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] }
-            )
-          : RAPIER.JointData.revolute(
-              { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
-              { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
-              { x: joint.axis[0], y: joint.axis[1], z: joint.axis[2] }
-            );
-        const j = this.physicsWorld.createImpulseJoint(jointData, parentBody, childBody, true);
-        j.setContactsEnabled(false);
+    if (this.currentPhysicsSpec?.joints && this.currentPhysicsSpec.joints.length > 0) {
+      for (const jointDef of this.currentPhysicsSpec.joints) {
+        const parentBody = this.physicsBodies.get(jointDef.parentClusterId);
+        const childBody = this.physicsBodies.get(jointDef.childClusterId);
+        if (parentBody && childBody) {
+          const anchor = { x: jointDef.anchor[0], y: jointDef.anchor[1], z: jointDef.anchor[2] };
+          const axis = { x: jointDef.axis[0], y: jointDef.axis[1], z: jointDef.axis[2] };
+          const jointData = jointDef.type === 'spherical'
+            ? RAPIER.JointData.spherical(anchor, anchor)
+            : RAPIER.JointData.revolute(anchor, anchor, axis);
+          const j = this.physicsWorld.createImpulseJoint(jointData, parentBody, childBody, true);
+          j.setContactsEnabled(false);
+
+          if (jointDef.type === 'revolute') {
+            const revJoint = j as RAPIER.RevoluteImpulseJoint;
+            if (jointDef.limits) {
+              const minRad = jointDef.limits.minDegrees !== undefined
+                ? (jointDef.limits.minDegrees * Math.PI) / 180
+                : -Math.PI;
+              const maxRad = jointDef.limits.maxDegrees !== undefined
+                ? (jointDef.limits.maxDegrees * Math.PI) / 180
+                : Math.PI;
+              revJoint.setLimits(minRad, maxRad);
+            }
+            const damping = jointDef.dynamics?.viscousDamping ?? 0.60;
+            const holdingTorque = jointDef.dynamics?.holdingTorqueNm ?? 0.065;
+            revJoint.configureMotorVelocity(0.0, damping);
+            revJoint.setMotorMaxForce(holdingTorque);
+          }
+          this.rapierJoints.set(jointDef.id, j);
+        }
+      }
+    } else {
+      for (const joint of this.currentSpec.joints) {
+        const parentBody = this.physicsBodies.get(joint.parentClusterId);
+        const childBody = this.physicsBodies.get(joint.childClusterId);
+        if (parentBody && childBody) {
+          const jointData = joint.type === 'SPHERICAL'
+            ? RAPIER.JointData.spherical(
+                { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
+                { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] }
+              )
+            : RAPIER.JointData.revolute(
+                { x: joint.anchorParent[0], y: joint.anchorParent[1], z: joint.anchorParent[2] },
+                { x: joint.anchorChild[0], y: joint.anchorChild[1], z: joint.anchorChild[2] },
+                { x: joint.axis[0], y: joint.axis[1], z: joint.axis[2] }
+              );
+          const j = this.physicsWorld.createImpulseJoint(jointData, parentBody, childBody, true);
+          j.setContactsEnabled(false);
+          if (joint.type === 'REVOLUTE') {
+            (j as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 0.60);
+            (j as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.065);
+          }
+          this.rapierJoints.set(`joint_${this.rapierJoints.size}`, j);
+        }
       }
     }
 
@@ -1684,6 +2122,28 @@ export class CadModelInspector {
       : (this.currentSpec.joints.length === 0 || cluster.isRootChassis);
     cluster.isFixed = !currentFixed;
 
+    // Sync with currentPhysicsSpec
+    if (this.currentPhysicsSpec) {
+      if (!this.currentPhysicsSpec.dualLockAnchors) {
+        this.currentPhysicsSpec.dualLockAnchors = [];
+      }
+      const existingIdx = this.currentPhysicsSpec.dualLockAnchors.findIndex((a) => a.clusterId === clusterId);
+      if (cluster.isFixed) {
+        if (existingIdx === -1) {
+          this.currentPhysicsSpec.dualLockAnchors.push({
+            id: `dl_pad_${clusterId}`,
+            clusterId: clusterId,
+            localStudCoordinates: [0, 0, 0],
+            dimensionsMm: [25.4, 25.4],
+          });
+        }
+      } else {
+        if (existingIdx !== -1) {
+          this.currentPhysicsSpec.dualLockAnchors.splice(existingIdx, 1);
+        }
+      }
+    }
+
     this.saveClusterOverrides();
 
     // If physics is running, update the body immediately
@@ -1699,6 +2159,8 @@ export class CadModelInspector {
     }
 
     this.updateDualLockMarkers();
+    this.updateStabilityDom();
+    this.renderDualLockPadList();
     this.renderClusterList();
   }
 
@@ -1960,6 +2422,10 @@ export class CadModelInspector {
         })
         .join('');
     }
+
+    this.populateJointDropdown();
+    this.updateStabilityDom();
+    this.renderDualLockPadList();
   }
 
   private setWireframe(wireframe: boolean): void {
@@ -2102,5 +2568,858 @@ export class CadModelInspector {
     }
     const btnPlay = this.overlay.querySelector('#btn-step-play');
     if (btnPlay) btnPlay.textContent = '▶ Play';
+  }
+
+  private setupPhase3Events(): void {
+    // 1. Right Tuning Tabs Switching
+    const tabBtns = this.overlay.querySelectorAll('.tuning-tab-btn');
+    const panes: Record<string, HTMLElement | null> = {
+      joints: this.overlay.querySelector('#pane-joints'),
+      duallock: this.overlay.querySelector('#pane-duallock'),
+      motion: this.overlay.querySelector('#pane-motion'),
+      metrics: this.overlay.querySelector('#pane-metrics'),
+    };
+
+    tabBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = (btn.getAttribute('data-tab') || 'joints') as 'joints' | 'duallock' | 'motion' | 'metrics';
+        this.activeTuningTab = tab;
+
+        Object.entries(panes).forEach(([k, p]) => {
+          if (p) p.classList.toggle('hidden', k !== tab);
+        });
+
+        if (tab === 'joints' || tab === 'motion') {
+          this.jointGizmoGroup.visible = true;
+          this.updateJointGizmo();
+        } else {
+          this.jointGizmoGroup.visible = false;
+        }
+
+        if (tab === 'duallock') {
+          this.updateStabilityDom();
+          this.renderDualLockPadList();
+        }
+      });
+    });
+
+    // 2. Header Actions: Fullscreen, Save .io, Export JSON
+    const btnFullscreen = this.overlay.querySelector('#btn-toggle-fullscreen');
+    const win = this.overlay.querySelector('.cad-inspector-window');
+    btnFullscreen?.addEventListener('click', () => {
+      this.isFullscreen = !this.isFullscreen;
+      win?.classList.toggle('inspector-fullscreen', this.isFullscreen);
+      if (btnFullscreen) {
+        btnFullscreen.textContent = this.isFullscreen ? '🗗 Windowed' : '⛶ Fullscreen';
+      }
+      this.onResize();
+    });
+
+    const btnSaveIo = this.overlay.querySelector('#btn-save-io');
+    btnSaveIo?.addEventListener('click', async () => {
+      if (!this.currentPhysicsSpec) this.initDefaultPhysicsSpec();
+      const blob = await LDrawImporter.exportStudioIoWithPhysics(
+        this.currentIoBuffer,
+        this.currentPhysicsSpec!
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${this.currentMissionId || 'model'}_with_physics.io`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    const btnExportJson = this.overlay.querySelector('#btn-export-json');
+    btnExportJson?.addEventListener('click', () => {
+      if (!this.currentPhysicsSpec) this.initDefaultPhysicsSpec();
+      const jsonStr = JSON.stringify(this.currentPhysicsSpec, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${this.currentMissionId || 'model'}_fll_physics.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // 3. Tab 1: Joint Selector
+    const jointSelect = this.overlay.querySelector('#joint-select-dropdown') as HTMLSelectElement | null;
+    jointSelect?.addEventListener('change', () => {
+      if (jointSelect.value) {
+        this.selectJoint(jointSelect.value);
+      }
+    });
+
+    const btnAddJoint = this.overlay.querySelector('#btn-add-joint');
+    btnAddJoint?.addEventListener('click', () => {
+      this.addNewJoint();
+    });
+
+    const btnDeleteJoint = this.overlay.querySelector('#btn-delete-joint');
+    btnDeleteJoint?.addEventListener('click', () => {
+      this.deleteActiveJoint();
+    });
+
+    const btnSnapPivot = this.overlay.querySelector('#btn-snap-pivot-part');
+    btnSnapPivot?.addEventListener('click', () => {
+      this.isSnappingPivot = !this.isSnappingPivot;
+      if (this.isSnappingPivot) {
+        btnSnapPivot.textContent = '🎯 Click brick or pin in 3D...';
+        btnSnapPivot.classList.add('active');
+      } else {
+        btnSnapPivot.textContent = '📍 Snap Pivot to Part';
+        btnSnapPivot.classList.remove('active');
+      }
+    });
+
+    // Axis Buttons
+    const btnAxisX = this.overlay.querySelector('#btn-axis-x');
+    const btnAxisY = this.overlay.querySelector('#btn-axis-y');
+    const btnAxisZ = this.overlay.querySelector('#btn-axis-z');
+    const setAxis = (axisArr: [number, number, number]) => {
+      if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+      const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+      if (joint) {
+        joint.axis = axisArr;
+        this.updateJointGizmo();
+      }
+      [btnAxisX, btnAxisY, btnAxisZ].forEach((b) => b?.classList.remove('active'));
+    };
+    btnAxisX?.addEventListener('click', () => { setAxis([1, 0, 0]); btnAxisX?.classList.add('active'); });
+    btnAxisY?.addEventListener('click', () => { setAxis([0, 1, 0]); btnAxisY?.classList.add('active'); });
+    btnAxisZ?.addEventListener('click', () => { setAxis([0, 0, 1]); btnAxisZ?.classList.add('active'); });
+
+    // Pivot Inputs
+    const inpPivotX = this.overlay.querySelector('#input-joint-pivot-x') as HTMLInputElement | null;
+    const inpPivotY = this.overlay.querySelector('#input-joint-pivot-y') as HTMLInputElement | null;
+    const inpPivotZ = this.overlay.querySelector('#input-joint-pivot-z') as HTMLInputElement | null;
+    const onPivotChange = () => {
+      if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+      const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+      if (joint) {
+        const x = (parseFloat(inpPivotX?.value || '0') || 0) / 1000;
+        const y = (parseFloat(inpPivotY?.value || '0') || 0) / 1000;
+        const z = (parseFloat(inpPivotZ?.value || '0') || 0) / 1000;
+        joint.anchor = [x, y, z];
+        this.updateJointGizmo();
+      }
+    };
+    inpPivotX?.addEventListener('change', onPivotChange);
+    inpPivotY?.addEventListener('change', onPivotChange);
+    inpPivotZ?.addEventListener('change', onPivotChange);
+
+    // Limit Inputs
+    const inpMinAngle = this.overlay.querySelector('#input-joint-min-angle') as HTMLInputElement | null;
+    const inpMaxAngle = this.overlay.querySelector('#input-joint-max-angle') as HTMLInputElement | null;
+    const sweepSlider = this.overlay.querySelector('#slider-joint-sweep') as HTMLInputElement | null;
+    const onLimitsChange = () => {
+      if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+      const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+      if (joint) {
+        const minDeg = parseFloat(inpMinAngle?.value || '0') || 0;
+        const maxDeg = parseFloat(inpMaxAngle?.value || '85') || 85;
+        if (!joint.limits) joint.limits = {};
+        joint.limits.minDegrees = minDeg;
+        joint.limits.maxDegrees = maxDeg;
+        if (sweepSlider) {
+          sweepSlider.min = `${minDeg}`;
+          sweepSlider.max = `${maxDeg}`;
+        }
+        this.startPoseDegrees = minDeg;
+        this.endPoseDegrees = maxDeg;
+        this.updateJointGizmo();
+      }
+    };
+    inpMinAngle?.addEventListener('change', onLimitsChange);
+    inpMaxAngle?.addEventListener('change', onLimitsChange);
+
+    // Sweep Slider
+    sweepSlider?.addEventListener('input', () => {
+      const angle = parseFloat(sweepSlider.value) || 0;
+      const badge = this.overlay.querySelector('#sweep-angle-badge');
+      if (badge) badge.textContent = `${angle.toFixed(1)}°`;
+      this.applyJointSweep(angle);
+    });
+
+    // LEGO Pin Presets
+    const presetValues: Record<string, { torque: number; damping: number }> = {
+      free: { torque: 0.001, damping: 0.05 },
+      medium_bush: { torque: 0.025, damping: 0.25 },
+      tight_friction_pin: { torque: 0.065, damping: 0.60 },
+      heavy_clutch: { torque: 0.150, damping: 1.20 },
+    };
+
+    const torqueSlider = this.overlay.querySelector('#slider-holding-torque') as HTMLInputElement | null;
+    const torqueBadge = this.overlay.querySelector('#holding-torque-badge');
+    const dampingSlider = this.overlay.querySelector('#slider-viscous-damping') as HTMLInputElement | null;
+    const dampingBadge = this.overlay.querySelector('#damping-badge');
+
+    this.overlay.querySelectorAll('.pin-preset-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        this.overlay.querySelectorAll('.pin-preset-pill').forEach((p) => p.classList.remove('active'));
+        pill.classList.add('active');
+        const presetKey = pill.getAttribute('data-preset') || 'tight_friction_pin';
+        const vals = presetValues[presetKey] || presetValues.tight_friction_pin;
+
+        if (torqueSlider) torqueSlider.value = `${vals.torque}`;
+        if (torqueBadge) torqueBadge.textContent = `${vals.torque.toFixed(3)} N·m`;
+        if (dampingSlider) dampingSlider.value = `${vals.damping}`;
+        if (dampingBadge) dampingBadge.textContent = `${vals.damping.toFixed(2)} N·m·s/rad`;
+
+        this.updateJointDynamics(this.activeJointId, vals.torque, vals.damping, presetKey);
+      });
+    });
+
+    // Torque & Damping Sliders
+    torqueSlider?.addEventListener('input', () => {
+      const torque = parseFloat(torqueSlider.value) || 0;
+      if (torqueBadge) torqueBadge.textContent = `${torque.toFixed(3)} N·m`;
+      const curDamping = parseFloat(dampingSlider?.value || '0.6') || 0.6;
+      this.updateJointDynamics(this.activeJointId, torque, curDamping, 'custom');
+    });
+
+    dampingSlider?.addEventListener('input', () => {
+      const damping = parseFloat(dampingSlider.value) || 0;
+      if (dampingBadge) dampingBadge.textContent = `${damping.toFixed(2)} N·m·s/rad`;
+      const curTorque = parseFloat(torqueSlider?.value || '0.065') || 0.065;
+      this.updateJointDynamics(this.activeJointId, curTorque, damping, 'custom');
+    });
+
+    // 4. Tab 2: Place Tape on Mat Tool
+    const btnPlaceTape = this.overlay.querySelector('#btn-place-tape-tool');
+    btnPlaceTape?.addEventListener('click', () => {
+      this.isPlacingTape = !this.isPlacingTape;
+      if (this.isPlacingTape) {
+        btnPlaceTape.classList.add('btn-place-tape-active');
+        btnPlaceTape.textContent = '❌ Cancel Tape Tool';
+      } else {
+        btnPlaceTape.classList.remove('btn-place-tape-active');
+        btnPlaceTape.textContent = '➕ Place Tape on Mat';
+        if (this.reticleMesh) this.reticleMesh.visible = false;
+      }
+    });
+
+    // 5. Tab 3: Motion & Poses Controls
+    const btnCaptureStart = this.overlay.querySelector('#btn-capture-start-pose');
+    btnCaptureStart?.addEventListener('click', () => {
+      const sweepVal = parseFloat(sweepSlider?.value || '0') || 0;
+      this.startPoseDegrees = sweepVal;
+      const lbl = this.overlay.querySelector('#motion-start-pose-label');
+      if (lbl) lbl.textContent = `Start: ${this.startPoseDegrees.toFixed(1)}°`;
+      if (this.currentPhysicsSpec && this.activeJointId) {
+        if (!this.currentPhysicsSpec.states) {
+          this.currentPhysicsSpec.states = { initialPose: { jointPositions: {} } };
+        }
+        if (!this.currentPhysicsSpec.states.initialPose) {
+          this.currentPhysicsSpec.states.initialPose = { jointPositions: {} };
+        }
+        this.currentPhysicsSpec.states.initialPose.jointPositions[this.activeJointId] = sweepVal;
+      }
+    });
+
+    const btnCaptureEnd = this.overlay.querySelector('#btn-capture-end-pose');
+    btnCaptureEnd?.addEventListener('click', () => {
+      const sweepVal = parseFloat(sweepSlider?.value || '85') || 85;
+      this.endPoseDegrees = sweepVal;
+      const lbl = this.overlay.querySelector('#motion-end-pose-label');
+      if (lbl) lbl.textContent = `End: ${this.endPoseDegrees.toFixed(1)}°`;
+      if (this.currentPhysicsSpec && this.activeJointId) {
+        if (!this.currentPhysicsSpec.states) {
+          this.currentPhysicsSpec.states = { initialPose: { jointPositions: {} } };
+        }
+        if (!this.currentPhysicsSpec.states.scoredPoses) {
+          this.currentPhysicsSpec.states.scoredPoses = [];
+        }
+        const existing = this.currentPhysicsSpec.states.scoredPoses.find(
+          (sp) => sp.evaluator?.jointId === this.activeJointId
+        );
+        if (existing) {
+          existing.evaluator.targetAngleMin = Math.min(this.startPoseDegrees, sweepVal) - 5;
+          existing.evaluator.targetAngleMax = Math.max(this.startPoseDegrees, sweepVal) + 5;
+        } else {
+          this.currentPhysicsSpec.states.scoredPoses.push({
+            id: `state_scored_${this.activeJointId}`,
+            label: `Scored Position (${this.activeJointId})`,
+            points: 20,
+            evaluator: {
+              type: 'joint_threshold',
+              jointId: this.activeJointId,
+              targetAngleMin: sweepVal - 5,
+              targetAngleMax: sweepVal + 5,
+            },
+          });
+        }
+      }
+    });
+
+    const btnMotionPlay = this.overlay.querySelector('#btn-motion-play');
+    btnMotionPlay?.addEventListener('click', () => this.playMotion());
+
+    const btnMotionPause = this.overlay.querySelector('#btn-motion-pause');
+    btnMotionPause?.addEventListener('click', () => this.pauseMotion());
+
+    const checkLoop = this.overlay.querySelector('#check-motion-loop') as HTMLInputElement | null;
+    checkLoop?.addEventListener('change', () => {
+      this.isMotionLooping = checkLoop.checked;
+    });
+
+    const speedSelect = this.overlay.querySelector('#motion-speed-select') as HTMLSelectElement | null;
+    speedSelect?.addEventListener('change', () => {
+      this.motionPlaybackSpeed = parseFloat(speedSelect.value) || 1.0;
+    });
+
+    const scrubber = this.overlay.querySelector('#slider-motion-scrubber') as HTMLInputElement | null;
+    scrubber?.addEventListener('input', () => {
+      const val = parseFloat(scrubber.value) || 0;
+      this.motionProgress = val / 100;
+      this.applyMotionInterpolation(this.motionProgress);
+      this.updateMotionScrubberDom();
+    });
+  }
+
+  public initDefaultPhysicsSpec(): FllPhysicsSpec {
+    const existing = this.currentPhysicsSpec;
+    if (existing && existing.modelId === this.currentMissionId.toLowerCase()) {
+      return existing;
+    }
+    const joints: FllJointDef[] = (this.currentSpec?.joints || []).map((j, idx) => ({
+      id: `joint_${idx}`,
+      name: `Joint ${idx + 1} (${j.parentClusterId} -> ${j.childClusterId})`,
+      type: (j.type === 'SPHERICAL' ? 'spherical' : 'revolute') as any,
+      parentClusterId: j.parentClusterId,
+      childClusterId: j.childClusterId,
+      anchor: j.anchorParent ? [j.anchorParent[0], j.anchorParent[1], j.anchorParent[2]] : [0, 0.05, 0],
+      axis: j.axis ? [j.axis[0], j.axis[1], j.axis[2]] : [0, 0, 1],
+      limits: {
+        minDegrees: 0,
+        maxDegrees: 85,
+        restitution: 0.05,
+      },
+      dynamics: {
+        preset: 'tight_friction_pin',
+        holdingTorqueNm: 0.065,
+        viscousDamping: 0.60,
+      },
+    }));
+
+    const anchors: FllDualLockAnchor[] = [];
+    if (this.currentSpec) {
+      for (const c of this.currentSpec.clusters) {
+        const isFixed = c.isFixed !== undefined
+          ? c.isFixed
+          : (this.currentSpec.joints.length === 0 || c.isRootChassis);
+        if (isFixed) {
+          anchors.push({
+            id: `dl_pad_${c.clusterId}`,
+            clusterId: c.clusterId,
+            localStudCoordinates: [0, 0, 0],
+            dimensionsMm: [25.4, 25.4],
+          });
+        }
+      }
+    }
+
+    const spec: FllPhysicsSpec = {
+      schemaVersion: '1.1.0',
+      modelId: this.currentMissionId.toLowerCase(),
+      name: this.currentSpec?.name || 'Imported Model',
+      dualLockAnchors: anchors,
+      joints,
+      states: {
+        initialPose: {
+          description: 'Default initial pose',
+          jointPositions: {},
+        },
+        scoredPoses: joints.length > 0 ? [
+          {
+            id: 'state_scored_goal',
+            label: 'Goal Target Reached (20 pts)',
+            points: 20,
+            evaluator: {
+              type: 'joint_threshold',
+              jointId: joints[0].id,
+              targetAngleMin: 80,
+              targetAngleMax: 90,
+            },
+          },
+        ] : [],
+      },
+    };
+
+    this.currentPhysicsSpec = spec;
+    if (this.currentSpec) {
+      this.currentSpec.physicsSpec = spec;
+    }
+    return spec;
+  }
+
+  public addNewJoint(): void {
+    if (!this.currentPhysicsSpec) this.initDefaultPhysicsSpec();
+    if (!this.currentPhysicsSpec!.joints) this.currentPhysicsSpec!.joints = [];
+
+    const newId = `joint_${Date.now()}`;
+    const nonRoot = this.currentSpec?.clusters.filter((c) => !c.isRootChassis) || [];
+    const rootCluster = this.currentSpec?.clusters.find((c) => c.isRootChassis)?.clusterId || 'chassis_root';
+    const childCluster = nonRoot.length > 0 ? nonRoot[0].clusterId : 'chassis_root';
+
+    const newJoint: FllJointDef = {
+      id: newId,
+      name: `Revolute Joint ${this.currentPhysicsSpec!.joints.length + 1}`,
+      type: 'revolute',
+      parentClusterId: rootCluster,
+      childClusterId: childCluster,
+      anchor: [0, 0.05, 0],
+      axis: [1, 0, 0],
+      limits: { minDegrees: 0, maxDegrees: 85 },
+      dynamics: { preset: 'tight_friction_pin', holdingTorqueNm: 0.065, viscousDamping: 0.60 },
+    };
+
+    this.currentPhysicsSpec!.joints.push(newJoint);
+    this.populateJointDropdown();
+    this.selectJoint(newId);
+    this.rebuildPhysicsIfRunning();
+  }
+
+  public deleteActiveJoint(): void {
+    if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+    const idx = this.currentPhysicsSpec.joints.findIndex((j) => j.id === this.activeJointId);
+    if (idx !== -1) {
+      this.currentPhysicsSpec.joints.splice(idx, 1);
+      const remaining = this.currentPhysicsSpec.joints;
+      if (remaining.length > 0) {
+        this.activeJointId = remaining[0].id;
+        this.populateJointDropdown();
+        this.selectJoint(this.activeJointId);
+      } else {
+        this.activeJointId = null;
+        this.populateJointDropdown();
+        this.jointGizmoGroup.clear();
+      }
+      this.rebuildPhysicsIfRunning();
+    }
+  }
+
+  public resetToStartPose(): void {
+    if (!this.currentSpec) return;
+    this.resetPhysicsPoses();
+    const startAngle = this.startPoseDegrees;
+    this.applyJointSweep(startAngle);
+    const sweepSlider = this.overlay.querySelector('#slider-joint-sweep') as HTMLInputElement | null;
+    const sweepBadge = this.overlay.querySelector('#sweep-angle-badge');
+    if (sweepSlider) sweepSlider.value = `${startAngle.toFixed(1)}`;
+    if (sweepBadge) sweepBadge.textContent = `${startAngle.toFixed(1)}°`;
+  }
+
+  public populateJointDropdown(): void {
+    const dropdown = this.overlay.querySelector('#joint-select-dropdown') as HTMLSelectElement | null;
+    if (!dropdown) return;
+
+    dropdown.innerHTML = '';
+    const joints = this.currentPhysicsSpec?.joints || [];
+    if (joints.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No kinematic joints';
+      dropdown.appendChild(opt);
+      this.activeJointId = null;
+      this.jointGizmoGroup.clear();
+      return;
+    }
+
+    for (const j of joints) {
+      const opt = document.createElement('option');
+      opt.value = j.id;
+      opt.textContent = j.name || j.id;
+      dropdown.appendChild(opt);
+    }
+
+    if (!this.activeJointId || !joints.some((j) => j.id === this.activeJointId)) {
+      this.activeJointId = joints[0].id;
+    }
+    dropdown.value = this.activeJointId;
+    this.selectJoint(this.activeJointId);
+  }
+
+  public selectJoint(jointId: string): void {
+    this.activeJointId = jointId;
+    const joint = this.currentPhysicsSpec?.joints?.find((j) => j.id === jointId);
+    if (!joint) {
+      this.jointGizmoGroup.clear();
+      return;
+    }
+
+    this.loadJointIntoUi(joint);
+    this.updateJointGizmo();
+  }
+
+  public loadJointIntoUi(joint: FllJointDef): void {
+    // Axis buttons
+    const btnAxisX = this.overlay.querySelector('#btn-axis-x');
+    const btnAxisY = this.overlay.querySelector('#btn-axis-y');
+    const btnAxisZ = this.overlay.querySelector('#btn-axis-z');
+    [btnAxisX, btnAxisY, btnAxisZ].forEach((b) => b?.classList.remove('active'));
+
+    if (joint.axis[0] === 1 || joint.axis[0] === -1) btnAxisX?.classList.add('active');
+    else if (joint.axis[1] === 1 || joint.axis[1] === -1) btnAxisY?.classList.add('active');
+    else if (joint.axis[2] === 1 || joint.axis[2] === -1) btnAxisZ?.classList.add('active');
+    else btnAxisZ?.classList.add('active');
+
+    // Pivot inputs (in mm)
+    const inpX = this.overlay.querySelector('#input-joint-pivot-x') as HTMLInputElement | null;
+    const inpY = this.overlay.querySelector('#input-joint-pivot-y') as HTMLInputElement | null;
+    const inpZ = this.overlay.querySelector('#input-joint-pivot-z') as HTMLInputElement | null;
+    if (inpX) inpX.value = `${(joint.anchor[0] * 1000).toFixed(1)}`;
+    if (inpY) inpY.value = `${(joint.anchor[1] * 1000).toFixed(1)}`;
+    if (inpZ) inpZ.value = `${(joint.anchor[2] * 1000).toFixed(1)}`;
+
+    // Limit inputs & test sweep slider
+    const minDeg = joint.limits?.minDegrees ?? 0;
+    const maxDeg = joint.limits?.maxDegrees ?? 85;
+    const inpMin = this.overlay.querySelector('#input-joint-min-angle') as HTMLInputElement | null;
+    const inpMax = this.overlay.querySelector('#input-joint-max-angle') as HTMLInputElement | null;
+    if (inpMin) inpMin.value = `${minDeg}`;
+    if (inpMax) inpMax.value = `${maxDeg}`;
+
+    const sweepSlider = this.overlay.querySelector('#slider-joint-sweep') as HTMLInputElement | null;
+    const sweepBadge = this.overlay.querySelector('#sweep-angle-badge');
+    if (sweepSlider) {
+      sweepSlider.min = `${minDeg}`;
+      sweepSlider.max = `${maxDeg}`;
+      sweepSlider.value = `${minDeg}`;
+    }
+    if (sweepBadge) sweepBadge.textContent = `${minDeg.toFixed(1)}°`;
+
+    // LEGO Pin Presets & Sliders
+    const preset = joint.dynamics?.preset || 'tight_friction_pin';
+    const torque = joint.dynamics?.holdingTorqueNm ?? 0.065;
+    const damping = joint.dynamics?.viscousDamping ?? 0.60;
+
+    this.overlay.querySelectorAll('.pin-preset-pill').forEach((pill) => {
+      pill.classList.toggle('active', pill.getAttribute('data-preset') === preset);
+    });
+
+    const torqueSlider = this.overlay.querySelector('#slider-holding-torque') as HTMLInputElement | null;
+    const torqueBadge = this.overlay.querySelector('#holding-torque-badge');
+    if (torqueSlider) torqueSlider.value = `${torque}`;
+    if (torqueBadge) torqueBadge.textContent = `${torque.toFixed(3)} N·m`;
+
+    const dampingSlider = this.overlay.querySelector('#slider-viscous-damping') as HTMLInputElement | null;
+    const dampingBadge = this.overlay.querySelector('#damping-badge');
+    if (dampingSlider) dampingSlider.value = `${damping}`;
+    if (dampingBadge) dampingBadge.textContent = `${damping.toFixed(2)} N·m·s/rad`;
+
+    // Motion poses
+    this.startPoseDegrees = minDeg;
+    this.endPoseDegrees = maxDeg;
+    const startPoseLabel = this.overlay.querySelector('#motion-start-pose-label');
+    const endPoseLabel = this.overlay.querySelector('#motion-end-pose-label');
+    if (startPoseLabel) startPoseLabel.textContent = `Start: ${this.startPoseDegrees.toFixed(1)}°`;
+    if (endPoseLabel) endPoseLabel.textContent = `End: ${this.endPoseDegrees.toFixed(1)}°`;
+  }
+
+  public updateJointGizmo(): void {
+    this.jointGizmoGroup.clear();
+    if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+    const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+    if (!joint) return;
+
+    const anchor = new THREE.Vector3(
+      joint.anchor[0] + this.modelOffset.x,
+      joint.anchor[1] + this.modelOffset.y,
+      joint.anchor[2] + this.modelOffset.z
+    );
+    const axis = new THREE.Vector3(joint.axis[0], joint.axis[1], joint.axis[2]).normalize();
+
+    // Pivot group positioned at anchor
+    const gizmoGroup = new THREE.Group();
+    gizmoGroup.position.copy(anchor);
+
+    // 1. Pivot Center Sphere
+    const sphereGeom = new THREE.SphereGeometry(0.005, 16, 16);
+    const sphereMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.8,
+      roughness: 0.2,
+      metalness: 0.3,
+    });
+    gizmoGroup.add(new THREE.Mesh(sphereGeom, sphereMat));
+
+    // 2. Colored Rotation Ring & Directional Arrow
+    // Align sub-element with axis (default normal (0, 0, 1))
+    const ringSub = new THREE.Group();
+    ringSub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+
+    const ringGeom = new THREE.TorusGeometry(0.022, 0.0012, 12, 48);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+    ringSub.add(new THREE.Mesh(ringGeom, ringMat));
+
+    // Directional Arrow
+    const arrow = new THREE.ArrowHelper(axis, new THREE.Vector3(0, 0, 0), 0.04, 0xfacc15, 0.010, 0.005);
+    gizmoGroup.add(arrow);
+
+    // 3. Semi-transparent Angular Limit Travel Arc Wedge
+    const minDeg = joint.limits?.minDegrees ?? 0;
+    const maxDeg = joint.limits?.maxDegrees ?? 85;
+    const startRad = THREE.MathUtils.degToRad(minDeg);
+    const lenRad = THREE.MathUtils.degToRad(Math.max(1, maxDeg - minDeg));
+
+    const arcGeom = new THREE.RingGeometry(0.006, 0.022, 32, 1, startRad, lenRad);
+    const arcMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+    const arcMesh = new THREE.Mesh(arcGeom, arcMat);
+    ringSub.add(arcMesh);
+
+    gizmoGroup.add(ringSub);
+    this.jointGizmoGroup.add(gizmoGroup);
+    this.jointGizmoGroup.visible = true;
+  }
+
+  public applyJointSweep(angleDegrees: number): void {
+    if (!this.activeJointId || !this.currentPhysicsSpec?.joints) return;
+    const joint = this.currentPhysicsSpec.joints.find((j) => j.id === this.activeJointId);
+    if (!joint) return;
+
+    const childClusterId = joint.childClusterId;
+    const grp = this.clusterMeshGroups.get(childClusterId);
+    const initPose = this.initialMeshPoses.get(childClusterId);
+
+    if (grp && initPose) {
+      const rad = THREE.MathUtils.degToRad(angleDegrees);
+      const axis = new THREE.Vector3(joint.axis[0], joint.axis[1], joint.axis[2]).normalize();
+      const anchor = new THREE.Vector3(
+        joint.anchor[0] + this.modelOffset.x,
+        joint.anchor[1] + this.modelOffset.y,
+        joint.anchor[2] + this.modelOffset.z
+      );
+      const rotQuat = new THREE.Quaternion().setFromAxisAngle(axis, rad);
+
+      const newQuat = rotQuat.clone().multiply(initPose.quat);
+      const newPos = initPose.pos.clone().sub(anchor).applyQuaternion(rotQuat).add(anchor);
+
+      grp.position.copy(newPos);
+      grp.quaternion.copy(newQuat);
+
+      if (this.highlightHelper) {
+        this.highlightHelper.update();
+      }
+    }
+
+    if (this.isPhysicsRunning && this.rapierJoints.has(joint.id)) {
+      const rj = this.rapierJoints.get(joint.id) as RAPIER.RevoluteImpulseJoint;
+      if (rj && typeof rj.configureMotorPosition === 'function') {
+        const rad = THREE.MathUtils.degToRad(angleDegrees);
+        rj.configureMotorPosition(rad, 15.0, 1.5);
+        const childBody = this.physicsBodies.get(childClusterId);
+        if (childBody) childBody.wakeUp();
+      }
+    }
+  }
+
+  public updateJointDynamics(
+    jointId: string | null,
+    holdingTorque: number,
+    viscousDamping: number,
+    preset?: string
+  ): void {
+    if (!jointId || !this.currentPhysicsSpec?.joints) return;
+    const joint = this.currentPhysicsSpec.joints.find((j) => j.id === jointId);
+    if (!joint) return;
+
+    if (!joint.dynamics) {
+      joint.dynamics = { preset: 'tight_friction_pin', holdingTorqueNm: 0.065, viscousDamping: 0.60 };
+    }
+    joint.dynamics.holdingTorqueNm = holdingTorque;
+    joint.dynamics.viscousDamping = viscousDamping;
+    if (preset) {
+      joint.dynamics.preset = preset as any;
+    }
+
+    if (this.isPhysicsRunning && this.rapierJoints.has(jointId)) {
+      const rj = this.rapierJoints.get(jointId) as RAPIER.RevoluteImpulseJoint;
+      if (rj && typeof rj.setMotorMaxForce === 'function') {
+        rj.setMotorMaxForce(holdingTorque);
+        rj.configureMotorVelocity(0.0, viscousDamping);
+      }
+    }
+  }
+
+  public computeStabilityScore(): { score: number; color: string; badge: string; desc: string } {
+    const pads = this.currentPhysicsSpec?.dualLockAnchors || [];
+    if (pads.length === 0) {
+      return {
+        score: 0,
+        color: '#ef4444',
+        badge: '0%',
+        desc: 'No Field Anchors: Entire model is loose and will slide or tip upon robot impact.',
+      };
+    }
+    if (pads.length === 1) {
+      return {
+        score: 55,
+        color: '#f59e0b',
+        badge: '55%',
+        desc: 'Single Point Anchor: May pivot or twist around fastener when pushed by robot.',
+      };
+    }
+    if (pads.length === 2) {
+      const p1 = pads[0].localStudCoordinates;
+      const p2 = pads[1].localStudCoordinates;
+      const distMm = Math.hypot(p1[0] - p2[0], p1[2] - p2[2]);
+      const score = distMm > 40 ? 82 : 72;
+      return {
+        score,
+        color: '#38bdf8',
+        badge: `${score}%`,
+        desc: 'Dual Point Anchor: Resists planar translation and rotation. Adequate stability.',
+      };
+    }
+
+    // 3 or more pads
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pads) {
+      const x = p.localStudCoordinates[0];
+      const z = p.localStudCoordinates[2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+    const spanX = maxX - minX;
+    const spanZ = maxZ - minZ;
+    const score = (spanX > 40 && spanZ > 40) ? 98 : 92;
+    return {
+      score,
+      color: '#10b981',
+      badge: `${score}%`,
+      desc: 'Optimal Perimeter Anchor: Multi-point footprint prevents tipping under high impact.',
+    };
+  }
+
+  public updateStabilityDom(): void {
+    const { color, badge, desc } = this.computeStabilityScore();
+    const scoreVal = this.overlay.querySelector('#stability-score-val') as HTMLElement | null;
+    const barFill = this.overlay.querySelector('#stability-bar-fill') as HTMLElement | null;
+    const descText = this.overlay.querySelector('#stability-desc-text') as HTMLElement | null;
+
+    if (scoreVal) {
+      scoreVal.textContent = badge;
+      scoreVal.style.color = color;
+    }
+    if (barFill) {
+      barFill.style.width = badge;
+      barFill.style.background = color;
+    }
+    if (descText) {
+      descText.textContent = desc;
+    }
+  }
+
+  public renderDualLockPadList(): void {
+    const list = this.overlay.querySelector('#duallock-pad-list') as HTMLElement | null;
+    if (!list) return;
+
+    const pads = this.currentPhysicsSpec?.dualLockAnchors || [];
+    if (pads.length === 0) {
+      list.innerHTML = `
+        <div style="font-size: 11px; color: #64748b; font-style: italic; padding: 6px;">
+          No 3M Dual-Lock pads attached. Click "➕ Place Tape on Mat" to anchor to field.
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = pads
+      .map((p) => {
+        const cluster = this.currentSpec?.clusters.find((c) => c.clusterId === p.clusterId);
+        const cName = cluster?.name || p.clusterId;
+        return `
+          <div class="duallock-pad-item">
+            <div class="duallock-pad-info">
+              <div class="duallock-pad-title">📌 ${p.id} (${cName})</div>
+              <div class="duallock-pad-coords">Coords: [${p.localStudCoordinates[0]}, ${p.localStudCoordinates[1]}, ${p.localStudCoordinates[2]}] mm • 1"x1" Pad</div>
+            </div>
+            <button class="btn btn-xs btn-outline btn-remove-pad" data-pad-id="${p.id}" title="Remove pad">🗑️</button>
+          </div>
+        `;
+      })
+      .join('');
+
+    list.querySelectorAll('.btn-remove-pad').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const padId = btn.getAttribute('data-pad-id');
+        if (!padId || !this.currentPhysicsSpec?.dualLockAnchors) return;
+        const idx = this.currentPhysicsSpec.dualLockAnchors.findIndex((p) => p.id === padId);
+        if (idx !== -1) {
+          const removed = this.currentPhysicsSpec.dualLockAnchors.splice(idx, 1)[0];
+          // If no more pads for that cluster, make dynamic if not root
+          const remaining = this.currentPhysicsSpec.dualLockAnchors.some((p) => p.clusterId === removed.clusterId);
+          if (!remaining) {
+            const cluster = this.currentSpec?.clusters.find((c) => c.clusterId === removed.clusterId);
+            if (cluster && !cluster.isRootChassis) {
+              cluster.isFixed = false;
+            }
+          }
+          this.updateDualLockMarkers();
+          this.updateStabilityDom();
+          this.renderDualLockPadList();
+          this.renderClusterList();
+          this.rebuildPhysicsIfRunning();
+        }
+      });
+    });
+  }
+
+  public playMotion(): void {
+    this.isMotionPlaying = true;
+    this.motionLastTimestamp = performance.now();
+    const btnPlay = this.overlay.querySelector('#btn-motion-play') as HTMLElement | null;
+    const btnPause = this.overlay.querySelector('#btn-motion-pause') as HTMLElement | null;
+    if (btnPlay) btnPlay.style.display = 'none';
+    if (btnPause) btnPause.style.display = 'inline-block';
+  }
+
+  public pauseMotion(): void {
+    this.isMotionPlaying = false;
+    const btnPlay = this.overlay.querySelector('#btn-motion-play') as HTMLElement | null;
+    const btnPause = this.overlay.querySelector('#btn-motion-pause') as HTMLElement | null;
+    if (btnPlay) btnPlay.style.display = 'inline-block';
+    if (btnPause) btnPause.style.display = 'none';
+  }
+
+  public applyMotionInterpolation(progress: number): void {
+    const t = Math.max(0, Math.min(1, progress));
+    // Smooth ease-in-out cubic
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const currentAngle = this.startPoseDegrees + (this.endPoseDegrees - this.startPoseDegrees) * eased;
+
+    this.applyJointSweep(currentAngle);
+
+    const sweepSlider = this.overlay.querySelector('#slider-joint-sweep') as HTMLInputElement | null;
+    const sweepBadge = this.overlay.querySelector('#sweep-angle-badge');
+    if (sweepSlider) sweepSlider.value = `${currentAngle.toFixed(1)}`;
+    if (sweepBadge) sweepBadge.textContent = `${currentAngle.toFixed(1)}°`;
+  }
+
+  public updateMotionScrubberDom(): void {
+    const scrubber = this.overlay.querySelector('#slider-motion-scrubber') as HTMLInputElement | null;
+    if (scrubber) scrubber.value = `${Math.round(this.motionProgress * 100)}`;
+    const timeBadge = this.overlay.querySelector('#motion-time-badge');
+    if (timeBadge) {
+      const curSec = (this.motionProgress * this.motionDurationSeconds).toFixed(1);
+      timeBadge.textContent = `${curSec}s / ${this.motionDurationSeconds.toFixed(1)}s`;
+    }
   }
 }

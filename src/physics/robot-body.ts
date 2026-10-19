@@ -381,11 +381,18 @@ export class RobotPhysicsBody {
           const joint = jointSpec ? this.joints.get(jointSpec.jointId) : undefined;
 
           if (isIdle) {
-            // Electromagnetic holding brake: locks wheel axle and prevents creeping
-            wb.setAngularDamping(50.0);
-            wb.setAngvel({ x: 0, y: 0, z: 0 }, true);
-            const curWLin = wb.linvel();
-            wb.setLinvel({ x: 0, y: curWLin.y, z: 0 }, true);
+            // Electromagnetic holding brake: remove spin along axle vector u while preserving yaw rate (w_y)
+            wb.setAngularDamping(0.5);
+            const wAng = wb.angvel();
+            const axleSpin = wAng.x * ux + wAng.y * uy + wAng.z * uz;
+            wb.setAngvel(
+              {
+                x: wAng.x - axleSpin * ux,
+                y: wAng.y - axleSpin * uy,
+                z: wAng.z - axleSpin * uz,
+              },
+              true
+            );
             if (joint) {
               try {
                 (joint as any).configureMotorVelocity(0.0, 5.0);
@@ -427,6 +434,7 @@ export class RobotPhysicsBody {
         }
       }
     }
+
 
     if (!anyDriveActive) {
       // Both drive motors idle: apply holding brake to chassis and wheels to eliminate residual coasting

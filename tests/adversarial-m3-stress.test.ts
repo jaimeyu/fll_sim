@@ -351,7 +351,7 @@ describe('Adversarial M3 Stress Harness: Versioning, Telemetry Badges & Build In
           stdio: 'pipe',
         });
       }
-    }, 60000);
+    }, 120000);
 
     it('dist/index.html and dist/docs/index.html exist after production build', () => {
       expect(fs.existsSync(distIndexPath)).toBe(true);

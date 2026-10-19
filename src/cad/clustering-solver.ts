@@ -13,13 +13,18 @@ export interface PreSolverInput {
   links: ConnectionLink[];
 }
 
+export interface PreSolverOptions {
+  disablePreSolver?: boolean;
+}
+
 export class CadClusteringPreSolver {
   /**
    * Solves an assembly graph into compound bodies and 1-DOF joints
    */
-  public static solve(input: PreSolverInput): RobotAssemblySpec {
+  public static solve(input: PreSolverInput, options?: PreSolverOptions): RobotAssemblySpec {
     const { name, parts } = input;
     const links = input.links || (input as any).connections || [];
+    const disablePreSolver = options?.disablePreSolver ?? false;
     const partMap = new Map<string, PlacedPart>();
     for (const part of parts) {
       partMap.set(part.id, part);
@@ -33,19 +38,22 @@ export class CadClusteringPreSolver {
 
     const activeLinks: ConnectionLink[] = [];
 
-    for (const link of links) {
-      if (link.connectionType === 'RIGID_PIN' || link.connectionType === 'RIGID_FRAME') {
-        adjacency.get(link.fromPartId)?.add(link.toPartId);
-        adjacency.get(link.toPartId)?.add(link.fromPartId);
-      } else if (link.connectionType === 'REVOLUTE_AXLE' || link.connectionType === 'FREE_ROTATION') {
-        activeLinks.push(link);
+    // If pre-solver is enabled, use topological connection links
+    if (!disablePreSolver) {
+      for (const link of links) {
+        if (link.connectionType === 'RIGID_PIN' || link.connectionType === 'RIGID_FRAME') {
+          adjacency.get(link.fromPartId)?.add(link.toPartId);
+          adjacency.get(link.toPartId)?.add(link.fromPartId);
+        } else if (link.connectionType === 'REVOLUTE_AXLE' || link.connectionType === 'FREE_ROTATION') {
+          activeLinks.push(link);
+        }
       }
     }
 
     // Link parts belonging to the same submodel instance (rigid subassembly)
     const bySubmodel = new Map<string, string[]>();
     for (const part of parts) {
-      const sub = part.submodelInstance || part.submodel;
+      const sub = part.submodelInstance || part.submodel || (disablePreSolver ? '__top_level_root__' : undefined);
       if (sub) {
         if (!bySubmodel.has(sub)) bySubmodel.set(sub, []);
         bySubmodel.get(sub)!.push(part.id);
@@ -92,8 +100,13 @@ export class CadClusteringPreSolver {
         const p = partMap.get(id);
         return p && (p.role === 'CHASSIS_CORE' || p.role === 'MOTOR_STATOR');
       });
+      const isRootSub = disablePreSolver && componentPartIds.some((id) => {
+        const p = partMap.get(id);
+        const sub = p?.submodelInstance || p?.submodel;
+        return sub === 'root_inst0' || sub === '__top_level_root__' || sub === 'model.ldr';
+      });
 
-      const clusterId = hasCore ? 'chassis_root' : `cluster_${clusterIndex++}`;
+      const clusterId = (hasCore || isRootSub) ? 'chassis_root' : `cluster_${clusterIndex++}`;
       for (const id of componentPartIds) {
         partToClusterId.set(id, clusterId);
       }
@@ -113,10 +126,16 @@ export class CadClusteringPreSolver {
         const p = partMap.get(id);
         return p && (p.role === 'CHAIN_LINK' || isChainPart(p.partNumber, p.submodel));
       });
+      const firstPart = partMap.get(componentPartIds[0]);
+      const subName = firstPart?.submodelInstance || firstPart?.submodel;
+      const cleanSubName = (subName && subName !== '__top_level_root__') ? subName : 'Base Frame / Root';
+
       const clusterName = isRoot
-        ? 'Chassis Main Assembly'
+        ? (disablePreSolver ? cleanSubName : 'Chassis Main Assembly')
         : isChain
         ? 'Dynamic Chain Link'
+        : (disablePreSolver && subName)
+        ? subName
         : componentPartIds.some((id) => partMap.get(id)?.role === 'WHEEL_RIM')
         ? 'Drive Wheel'
         : componentPartIds.some((id) => partMap.get(id)?.role === 'CASTER_SKID')
@@ -464,6 +483,7 @@ export class CadClusteringPreSolver {
       clusters,
       joints: mergedJoints,
       sensors,
+      isPreSolverDisabled: disablePreSolver,
     };
   }
 }

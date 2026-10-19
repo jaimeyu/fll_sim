@@ -99,8 +99,8 @@ describe('Adversarial Verification Suite: Milestone 1 Physics & Port Mapping', (
       // Left wheel should be actively driven and spinning much faster than right wheel
       expect(leftSpin).toBeGreaterThan(0.2);
       expect(leftWb!.angularDamping()).toBeCloseTo(0.2, 1);
-      // Right wheel is stopped at 0, should have holding brake damping
-      expect(rightWb!.angularDamping()).toBeCloseTo(50.0, 1);
+      // Right wheel is stopped at 0, axle is locked while permitting yaw pivot (damping <= 1.0)
+      expect(rightWb!.angularDamping()).toBeLessThanOrEqual(1.0);
     });
 
     it('swapping drive ports to idle auxiliary ports C, D immediately halts motion and applies holding brake', () => {
@@ -169,11 +169,11 @@ describe('Adversarial Verification Suite: Milestone 1 Physics & Port Mapping', (
       expect(engine.robot.chassisBody.linearDamping()).toBeCloseTo(0.5, 1);
       expect(engine.robot.chassisBody.angularDamping()).toBeCloseTo(2.0, 1);
 
-      // Left wheel should be active (damping 0.2), right wheel braked (damping 50.0)
+      // Left wheel should be active (damping 0.2), right wheel braked on axle with yaw permitted (damping <= 1.0)
       const leftWb = engine.robot.wheelBodies.get(engine.robot.leftWheelClusterId!);
       const rightWb = engine.robot.wheelBodies.get(engine.robot.rightWheelClusterId!);
       expect(leftWb?.angularDamping()).toBeCloseTo(0.2, 1);
-      expect(rightWb?.angularDamping()).toBeCloseTo(50.0, 1);
+      expect(rightWb?.angularDamping()).toBeLessThanOrEqual(1.0);
     });
 
     it('rapidly toggling auxiliary motor C during high-speed drive never triggers onBrakeEngaged or clamps chassis', () => {

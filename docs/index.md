@@ -64,4 +64,5 @@ Creates a zero-install static bundle in `dist/`.
 * [**Advance Driving Base Guide**](guides/advance_driving_base.md): Detailed specifications of the official FLL competition robot.
 * [**SPIKE Python API Reference**](guides/spike_python.md): Python syntax, motor pair movement, gyro turns, and P-controller line following.
 * [**CAD Import Guide**](guides/cad_import.md): How to export models from BrickLink Studio and LeoCAD into the simulator.
+* [**Interactive Worksheets & Calculators**](worksheets/index.md): Hands-on motion simulators, including the [**LEGO® 4-Bar Linkage Simulator**](worksheets/four_bar_linkage.md).
 * [**Development & Multi-Agent**](development.md): How the codebase is structured for team collaboration and autonomous agents.

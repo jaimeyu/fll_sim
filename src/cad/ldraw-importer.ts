@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { PlacedPart, ConnectionLink, RobotAssemblySpec, PartBomEntry } from './types';
+import { FllPhysicsSpec, isValidPhysicsSpec } from './physics-spec';
 import { lookupPartRole, isChainPart, isFastenerPart, isPivotFastener } from './part-catalog';
 import { CadClusteringPreSolver } from './clustering-solver';
 import { LDRAW_COLOR_MAP, isKnownLegoPart } from '../view/lego-visuals';
@@ -485,7 +486,10 @@ export class LDrawImporter {
    * Unzips a BrickLink Studio (.io) binary file and parses the inner model.ldr
    * along with authentic part descriptions embedded in model2.ldr
    */
-  public static async parseStudioIo(fileBuffer: ArrayBuffer | Blob): Promise<RobotAssemblySpec> {
+  public static async parseStudioIo(
+    fileBuffer: ArrayBuffer | Blob,
+    options?: { disablePreSolver?: boolean }
+  ): Promise<RobotAssemblySpec> {
     const zip = new JSZip();
     const contents = await zip.loadAsync(fileBuffer);
 
@@ -538,12 +542,52 @@ export class LDrawImporter {
 
     const ldrText = await ldrFile.async('text');
     const parsed = LDrawImporter.parseLDrawText(ldrText, 'Studio Model');
-    const spec = CadClusteringPreSolver.solve(parsed);
+    const spec = CadClusteringPreSolver.solve(parsed, options);
+
+    // Check for embedded fll_physics.json
+    const physicsFile = contents.file('fll_physics.json');
+    if (physicsFile) {
+      try {
+        const text = await physicsFile.async('text');
+        const json = JSON.parse(text);
+        if (isValidPhysicsSpec(json)) {
+          spec.physicsSpec = json;
+        }
+      } catch (e) {
+        console.warn('Failed to parse embedded fll_physics.json:', e);
+      }
+    }
 
     // Attach complete Bill of Materials (BOM) to spec
     spec.bom = LDrawImporter.extractBomFromParts(parsed.parts, descriptions);
 
     return spec;
+  }
+
+  /**
+   * Embeds `fll_physics.json` into a BrickLink Studio (.io) zip archive,
+   * returning a downloadable Blob containing the updated archive.
+   */
+  public static async exportStudioIoWithPhysics(
+    ioBuffer: ArrayBuffer | Blob | null | undefined,
+    physicsSpec: FllPhysicsSpec,
+    fallbackLdrText?: string
+  ): Promise<Blob> {
+    const zip = new JSZip();
+    let targetZip = zip;
+    if (ioBuffer) {
+      try {
+        targetZip = await zip.loadAsync(ioBuffer);
+      } catch (e) {
+        console.warn('Failed to load existing ioBuffer, generating fresh zip archive:', e);
+        targetZip = new JSZip();
+      }
+    }
+    if (fallbackLdrText && !targetZip.file('model.ldr')) {
+      targetZip.file('model.ldr', fallbackLdrText);
+    }
+    targetZip.file('fll_physics.json', JSON.stringify(physicsSpec, null, 2));
+    return await targetZip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
   }
 }
 

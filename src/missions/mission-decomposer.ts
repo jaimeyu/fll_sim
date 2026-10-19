@@ -217,6 +217,8 @@ export function decomposeMissionAssembly(
       clusters: shiftedClusters,
       joints: compJoints,
       sensors: spec.sensors || [],
+      physicsSpec: spec.physicsSpec,
+      bom: spec.bom,
     };
 
     decomposed.push({

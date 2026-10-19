@@ -89,12 +89,16 @@ export interface PartBomEntry {
   hasAccurateMesh: boolean;
 }
 
+import type { FllPhysicsSpec } from './physics-spec';
+
 export interface RobotAssemblySpec {
   name: string;
   clusters: ClusteredCompoundBody[];
   joints: ExtractedJoint[];
   parts?: PlacedPart[];
   bom?: PartBomEntry[];
+  physicsSpec?: FllPhysicsSpec;
+  isPreSolverDisabled?: boolean;
   sensors: Array<{
     id: string;
     type: 'COLOR' | 'DISTANCE' | 'GYRO';

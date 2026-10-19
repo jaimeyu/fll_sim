@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { MissionElement } from './types';
 import { RobotAssemblySpec } from '../cad/types';
+import type { FllPhysicsSpec, FllJointDef } from '../cad/physics-spec';
 import { LEGO_COLORS, getLegoMaterial } from '../view/lego-visuals';
 import { legoAssetManager } from '../cad/lego-asset-manager';
 import { DualLockMarker } from './dual-lock-marker';
@@ -51,6 +52,8 @@ export class CustomImportedMissionElement implements MissionElement {
   private bodies: Map<string, RAPIER.RigidBody> = new Map();
   private initialBodyPoses: Map<string, { translation: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number; w: number } }> = new Map();
   private joints: RAPIER.ImpulseJoint[] = [];
+  private physicsJointMap: Map<string, { joint: RAPIER.ImpulseJoint; def: FllJointDef }> = new Map();
+  private jointInitialRelativeRot: Map<string, THREE.Quaternion> = new Map();
 
   // Visual Groups
   public readonly clusterMeshes: Map<string, THREE.Group> = new Map();
@@ -105,6 +108,12 @@ export class CustomImportedMissionElement implements MissionElement {
    * Resolves the primary base cluster ID that rests on the field mat and holds Dual Lock fasteners
    */
   public getBaseClusterId(): string {
+    if (this.spec.physicsSpec?.dualLockAnchors && this.spec.physicsSpec.dualLockAnchors.length > 0) {
+      const anchorClusterId = this.spec.physicsSpec.dualLockAnchors[0].clusterId;
+      if (this.spec.clusters.some((c) => c.clusterId === anchorClusterId)) {
+        return anchorClusterId;
+      }
+    }
     if (this.anchoredClusterId && this.spec.clusters.some((c) => c.clusterId === this.anchoredClusterId)) {
       return this.anchoredClusterId;
     }
@@ -133,6 +142,13 @@ export class CustomImportedMissionElement implements MissionElement {
       }
     }
     return lowestClusterId;
+  }
+
+  public isClusterDualLockAnchored(clusterId: string): boolean {
+    if (this.spec.physicsSpec?.dualLockAnchors && this.spec.physicsSpec.dualLockAnchors.length > 0) {
+      return this.spec.physicsSpec.dualLockAnchors.some((a) => a.clusterId === clusterId);
+    }
+    return clusterId === this.getBaseClusterId();
   }
 
   public getAnchoredClusterId(): string | null {
@@ -166,7 +182,14 @@ export class CustomImportedMissionElement implements MissionElement {
         z: dx * sinY + dz * cosY,
       };
     } else if (locked && !this.dualLockLocalOffset) {
-      if (targetClusterId) {
+      if (this.spec.physicsSpec?.dualLockAnchors?.[0]) {
+        const anchor = this.spec.physicsSpec.dualLockAnchors[0];
+        const rawX = anchor.localStudCoordinates[0];
+        const rawZ = anchor.localStudCoordinates[2];
+        const offX = Math.abs(rawX) > 2 ? rawX / 1000 : rawX;
+        const offZ = Math.abs(rawZ) > 2 ? rawZ / 1000 : rawZ;
+        this.dualLockLocalOffset = { x: offX, z: offZ };
+      } else if (targetClusterId) {
         const targetCluster = this.spec.clusters.find((c) => c.clusterId === targetClusterId);
         if (targetCluster) {
           let avgX = 0;
@@ -220,7 +243,7 @@ export class CustomImportedMissionElement implements MissionElement {
     // Only the base cluster where Dual Lock is applied is fixed to the field mat.
     // All mechanism clusters, levers, dials, and dynamic parts REMAIN DYNAMIC!
     for (const [cid, body] of this.bodies.entries()) {
-      const isBase = cid === baseClusterId;
+      const isBase = this.isClusterDualLockAnchored(cid) || cid === baseClusterId;
       const shouldBeFixed = this.isSolidRigidMode || (locked && isBase);
 
       body.setBodyType(
@@ -236,7 +259,7 @@ export class CustomImportedMissionElement implements MissionElement {
 
     // Keep cluster specs synchronized
     for (const cluster of this.spec.clusters) {
-      const isBase = cluster.clusterId === baseClusterId;
+      const isBase = this.isClusterDualLockAnchored(cluster.clusterId) || cluster.clusterId === baseClusterId;
       cluster.isFixed = this.isSolidRigidMode || (locked && isBase);
     }
 
@@ -280,10 +303,23 @@ export class CustomImportedMissionElement implements MissionElement {
     return this.spec;
   }
 
+  public getPhysicsSpec(): FllPhysicsSpec | undefined {
+    return this.spec.physicsSpec;
+  }
+
   public init(world: RAPIER.World, basePosition: { x: number; y: number; z: number }, yawDegrees = 0): void {
     this.world = world;
     this.basePos = { ...basePosition };
     this.yawDegrees = yawDegrees;
+
+    if (!this.dualLockLocalOffset && this.spec.physicsSpec?.dualLockAnchors?.[0]) {
+      const firstAnchor = this.spec.physicsSpec.dualLockAnchors[0];
+      const rawX = firstAnchor.localStudCoordinates[0];
+      const rawZ = firstAnchor.localStudCoordinates[2];
+      const offX = Math.abs(rawX) > 2 ? rawX / 1000 : rawX;
+      const offZ = Math.abs(rawZ) > 2 ? rawZ / 1000 : rawZ;
+      this.dualLockLocalOffset = { x: offX, z: offZ };
+    }
 
     this.createPhysicsAndVisuals();
     this.reset();
@@ -332,7 +368,7 @@ export class CustomImportedMissionElement implements MissionElement {
     const baseClusterId = this.getBaseClusterId();
 
     for (const cluster of this.spec.clusters) {
-      const isBase = cluster.clusterId === baseClusterId;
+      const isBase = this.isClusterDualLockAnchored(cluster.clusterId) || cluster.clusterId === baseClusterId;
       const isFixedCluster = this.isSolidRigidMode || (this.isDualLocked && isBase);
       cluster.isFixed = isFixedCluster;
       const clusterColor = clusterPalette[colorIdx % clusterPalette.length];
@@ -468,32 +504,176 @@ export class CustomImportedMissionElement implements MissionElement {
     }
 
     // Connect joints between clusters
-    for (const jointSpec of this.spec.joints) {
-      const parentBody = this.bodies.get(jointSpec.parentClusterId);
-      const childBody = this.bodies.get(jointSpec.childClusterId);
-      if (parentBody && childBody) {
-        const jointData = jointSpec.type === 'SPHERICAL'
-          ? RAPIER.JointData.spherical(
-              { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
-              { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] }
-            )
-          : RAPIER.JointData.revolute(
-              { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
-              { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
-              { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
-            );
+    this.physicsJointMap.clear();
+    this.jointInitialRelativeRot.clear();
+
+    if (this.spec.physicsSpec?.joints && this.spec.physicsSpec.joints.length > 0) {
+      for (const jointDef of this.spec.physicsSpec.joints) {
+        const parentBody = this.bodies.get(jointDef.parentClusterId);
+        const childBody = this.bodies.get(jointDef.childClusterId);
+        if (!parentBody || !childBody) continue;
+
+        const anchor = {
+          x: jointDef.anchor[0],
+          y: jointDef.anchor[1],
+          z: jointDef.anchor[2],
+        };
+        const axis = {
+          x: jointDef.axis[0],
+          y: jointDef.axis[1],
+          z: jointDef.axis[2],
+        };
+
+        let jointData: RAPIER.JointData;
+        if (jointDef.type === 'prismatic') {
+          jointData = RAPIER.JointData.prismatic(anchor, anchor, axis);
+        } else if (jointDef.type === 'spherical') {
+          jointData = RAPIER.JointData.spherical(anchor, anchor);
+        } else if (jointDef.type === 'fixed') {
+          jointData = RAPIER.JointData.fixed(
+            anchor,
+            { x: 0, y: 0, z: 0, w: 1 },
+            anchor,
+            { x: 0, y: 0, z: 0, w: 1 }
+          );
+        } else {
+          // Default: revolute
+          jointData = RAPIER.JointData.revolute(anchor, anchor, axis);
+        }
+
         const rapierJoint = this.world.createImpulseJoint(jointData, parentBody, childBody, true);
         rapierJoint.setContactsEnabled(false);
-        if (jointSpec.type === 'REVOLUTE') {
-          // Apply realistic physical axle friction and damping so mechanisms rotate smoothly without snapping or flailing
-          (rapierJoint as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 0.5);
-          (rapierJoint as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.01);
+
+        if (jointDef.type === 'revolute') {
+          const revJoint = rapierJoint as RAPIER.RevoluteImpulseJoint;
+          if (jointDef.limits) {
+            const minRad =
+              jointDef.limits.minDegrees !== undefined
+                ? (jointDef.limits.minDegrees * Math.PI) / 180
+                : -Math.PI;
+            const maxRad =
+              jointDef.limits.maxDegrees !== undefined
+                ? (jointDef.limits.maxDegrees * Math.PI) / 180
+                : Math.PI;
+            revJoint.setLimits(minRad, maxRad);
+          }
+
+          const damping =
+            jointDef.dynamics?.viscousDamping !== undefined
+              ? jointDef.dynamics.viscousDamping
+              : 0.6;
+          const holdingTorque =
+            jointDef.dynamics?.holdingTorqueNm !== undefined
+              ? jointDef.dynamics.holdingTorqueNm
+              : 0.065;
+
+          revJoint.configureMotorVelocity(0.0, damping);
+          revJoint.setMotorMaxForce(holdingTorque);
+        } else if (jointDef.type === 'prismatic') {
+          const prismJoint = rapierJoint as RAPIER.PrismaticImpulseJoint;
+          if (
+            jointDef.limits?.minMeters !== undefined &&
+            jointDef.limits?.maxMeters !== undefined
+          ) {
+            prismJoint.setLimits(jointDef.limits.minMeters, jointDef.limits.maxMeters);
+          }
+          const damping = jointDef.dynamics?.viscousDamping ?? 0.6;
+          const maxForce = jointDef.dynamics?.holdingTorqueNm ?? 5.0;
+          prismJoint.configureMotorVelocity(0.0, damping);
+          prismJoint.setMotorMaxForce(maxForce);
         }
+
         this.joints.push(rapierJoint);
+        this.physicsJointMap.set(jointDef.id, { joint: rapierJoint, def: jointDef });
+
+        // Record initial relative orientation at rest (0-degree reference)
+        const pRot = parentBody.rotation();
+        const cRot = childBody.rotation();
+        const qP = new THREE.Quaternion(pRot.x, pRot.y, pRot.z, pRot.w);
+        const qC = new THREE.Quaternion(cRot.x, cRot.y, cRot.z, cRot.w);
+        const qRel0 = qP.clone().invert().multiply(qC);
+        this.jointInitialRelativeRot.set(jointDef.id, qRel0);
+      }
+    } else {
+      // Connect heuristic joints between clusters
+      for (const jointSpec of this.spec.joints) {
+        const parentBody = this.bodies.get(jointSpec.parentClusterId);
+        const childBody = this.bodies.get(jointSpec.childClusterId);
+        if (parentBody && childBody) {
+          const jointData =
+            jointSpec.type === 'SPHERICAL'
+              ? RAPIER.JointData.spherical(
+                  { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
+                  { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] }
+                )
+              : RAPIER.JointData.revolute(
+                  { x: jointSpec.anchorParent[0], y: jointSpec.anchorParent[1], z: jointSpec.anchorParent[2] },
+                  { x: jointSpec.anchorChild[0], y: jointSpec.anchorChild[1], z: jointSpec.anchorChild[2] },
+                  { x: jointSpec.axis[0], y: jointSpec.axis[1], z: jointSpec.axis[2] }
+                );
+          const rapierJoint = this.world.createImpulseJoint(jointData, parentBody, childBody, true);
+          rapierJoint.setContactsEnabled(false);
+          if (jointSpec.type === 'REVOLUTE') {
+            (rapierJoint as RAPIER.RevoluteImpulseJoint).configureMotorVelocity(0.0, 0.5);
+            (rapierJoint as RAPIER.RevoluteImpulseJoint).setMotorMaxForce(0.01);
+          }
+          this.joints.push(rapierJoint);
+        }
       }
     }
 
+    this.applyInitialPose();
     this.recordInitialPoses();
+  }
+
+  private applyInitialPose(): void {
+    const initPose = this.spec.physicsSpec?.states?.initialPose;
+    if (!initPose || !initPose.jointPositions) return;
+
+    for (const [jointId, posValue] of Object.entries(initPose.jointPositions)) {
+      const entry = this.physicsJointMap.get(jointId);
+      if (!entry) continue;
+
+      const { def } = entry;
+      const parentBody = this.bodies.get(def.parentClusterId);
+      const childBody = this.bodies.get(def.childClusterId);
+      if (!parentBody || !childBody) continue;
+
+      const pPos = parentBody.translation();
+      const pRot = parentBody.rotation();
+      const parentP = new THREE.Vector3(pPos.x, pPos.y, pPos.z);
+      const parentQ = new THREE.Quaternion(pRot.x, pRot.y, pRot.z, pRot.w);
+
+      if (def.type === 'revolute') {
+        const anchorLocal = new THREE.Vector3(def.anchor[0], def.anchor[1], def.anchor[2]);
+        const axisLocal = new THREE.Vector3(def.axis[0], def.axis[1], def.axis[2]).normalize();
+        const angleRad = (posValue * Math.PI) / 180;
+
+        const rLocal = new THREE.Quaternion().setFromAxisAngle(axisLocal, angleRad);
+        const childQ = parentQ.clone().multiply(rLocal);
+
+        // Child position in world: parentP + parentQ * (anchorLocal - rLocal * anchorLocal)
+        const rotatedAnchor = anchorLocal.clone().applyQuaternion(rLocal);
+        const offsetLocal = anchorLocal.clone().sub(rotatedAnchor);
+        const offsetWorld = offsetLocal.clone().applyQuaternion(parentQ);
+        const childP = parentP.clone().add(offsetWorld);
+
+        childBody.setTranslation({ x: childP.x, y: childP.y, z: childP.z }, true);
+        childBody.setRotation({ x: childQ.x, y: childQ.y, z: childQ.z, w: childQ.w }, true);
+        childBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        childBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      } else if (def.type === 'prismatic') {
+        const axisLocal = new THREE.Vector3(def.axis[0], def.axis[1], def.axis[2]).normalize();
+        const offsetLocal = axisLocal.clone().multiplyScalar(posValue);
+        const offsetWorld = offsetLocal.clone().applyQuaternion(parentQ);
+        const childP = parentP.clone().add(offsetWorld);
+
+        childBody.setTranslation({ x: childP.x, y: childP.y, z: childP.z }, true);
+        childBody.setRotation({ x: parentQ.x, y: parentQ.y, z: parentQ.z, w: parentQ.w }, true);
+        childBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        childBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+    }
   }
 
   private recordInitialPoses(): void {
@@ -559,6 +739,7 @@ export class CustomImportedMissionElement implements MissionElement {
       body.setAngvel(zeroVel, true);
     }
 
+    this.applyInitialPose();
     this.hasMovedFromInitial = false;
     this.recordInitialPoses();
     this.syncVisuals();
@@ -598,11 +779,117 @@ export class CustomImportedMissionElement implements MissionElement {
     return { ...this.basePos };
   }
 
+  /**
+   * Returns current joint angle in degrees for revolute joints, relative to initial rest orientation
+   */
+  public getJointAngleDegrees(jointId: string): number | null {
+    const entry = this.physicsJointMap.get(jointId);
+    if (!entry) return null;
+
+    const { def } = entry;
+    const parentBody = this.bodies.get(def.parentClusterId);
+    const childBody = this.bodies.get(def.childClusterId);
+    if (!parentBody || !childBody) return null;
+
+    const pRot = parentBody.rotation();
+    const cRot = childBody.rotation();
+    const qP = new THREE.Quaternion(pRot.x, pRot.y, pRot.z, pRot.w);
+    const qC = new THREE.Quaternion(cRot.x, cRot.y, cRot.z, cRot.w);
+
+    const qRel = qP.clone().invert().multiply(qC);
+    const qRel0 = this.jointInitialRelativeRot.get(jointId) || new THREE.Quaternion();
+    const qDisp = qRel0.clone().invert().multiply(qRel);
+
+    const axisVec = new THREE.Vector3(def.axis[0], def.axis[1], def.axis[2]).normalize();
+
+    let w = qDisp.w;
+    let dot = new THREE.Vector3(qDisp.x, qDisp.y, qDisp.z).dot(axisVec);
+    if (w < 0) {
+      w = -w;
+      dot = -dot;
+    }
+    return (2 * Math.atan2(dot, w) * 180) / Math.PI;
+  }
+
+  /**
+   * Evaluates scored pose definitions defined in physicsSpec.states.scoredPoses
+   */
+  public evaluateScoreState(): { isScored: boolean; points: number; label: string } | null {
+    const scoredPoses = this.spec.physicsSpec?.states?.scoredPoses;
+    if (!scoredPoses || scoredPoses.length === 0) {
+      return null;
+    }
+
+    const sortedPoses = [...scoredPoses].sort((a, b) => b.points - a.points);
+
+    for (const pose of sortedPoses) {
+      const ev = pose.evaluator;
+      let isMet = false;
+
+      if (ev.type === 'joint_threshold') {
+        if (ev.jointId) {
+          const currentAngle = this.getJointAngleDegrees(ev.jointId);
+          if (currentAngle !== null) {
+            const minOk = ev.targetAngleMin === undefined || currentAngle >= ev.targetAngleMin;
+            const maxOk = ev.targetAngleMax === undefined || currentAngle <= ev.targetAngleMax;
+            isMet = minOk && maxOk;
+          }
+        }
+      } else if (ev.type === 'cluster_zone') {
+        if (ev.targetClusterId) {
+          const body = this.bodies.get(ev.targetClusterId);
+          const initPose = this.initialBodyPoses.get(ev.targetClusterId);
+          if (body && initPose) {
+            const cur = body.translation();
+            const dx = cur.x - initPose.translation.x;
+            const dy = cur.y - initPose.translation.y;
+            const dz = cur.z - initPose.translation.z;
+            isMet = Math.sqrt(dx * dx + dy * dy + dz * dz) > 0.02;
+          }
+        }
+      } else if (ev.type === 'payload_transfer') {
+        if (ev.targetClusterId) {
+          const body = this.bodies.get(ev.targetClusterId);
+          const baseClusterId = this.getBaseClusterId();
+          const baseBody = this.bodies.get(baseClusterId);
+          if (body && baseBody) {
+            const cur = body.translation();
+            const bPos = baseBody.translation();
+            const dist = Math.hypot(cur.x - bPos.x, cur.z - bPos.z);
+            isMet = dist > 0.05;
+          }
+        }
+      }
+
+      if (isMet) {
+        return {
+          isScored: true,
+          points: pose.points,
+          label: pose.label,
+        };
+      }
+    }
+
+    return {
+      isScored: false,
+      points: 0,
+      label: 'Not Scored',
+    };
+  }
+
   public isSolved(): boolean {
+    const scoreState = this.evaluateScoreState();
+    if (scoreState !== null) {
+      return scoreState.isScored;
+    }
     return this.hasMovedFromInitial;
   }
 
   public getScore(): number {
+    const scoreState = this.evaluateScoreState();
+    if (scoreState !== null) {
+      return scoreState.isScored ? scoreState.points : 0;
+    }
     return this.hasMovedFromInitial ? 100 : 0;
   }
 
@@ -610,7 +897,9 @@ export class CustomImportedMissionElement implements MissionElement {
     const baseClusterId = this.getBaseClusterId();
     const meshes: THREE.Object3D[] = [];
     for (const [cid, group] of this.clusterMeshes.entries()) {
-      const isFixed = this.isSolidRigidMode || (this.isDualLocked && cid === baseClusterId);
+      const isFixed =
+        this.isSolidRigidMode ||
+        (this.isDualLocked && (this.isClusterDualLockAnchored(cid) || cid === baseClusterId));
       if (!isFixed) {
         group.traverse((obj) => {
           if ((obj as THREE.Mesh).isMesh) {
@@ -658,9 +947,15 @@ export class CustomImportedMissionElement implements MissionElement {
     }
 
     for (const joint of this.joints) {
-      this.world.removeImpulseJoint(joint, true);
+      try {
+        this.world.removeImpulseJoint(joint, true);
+      } catch {
+        // ignore
+      }
     }
     this.joints = [];
+    this.physicsJointMap.clear();
+    this.jointInitialRelativeRot.clear();
 
     for (const body of this.bodies.values()) {
       this.world.removeRigidBody(body);
